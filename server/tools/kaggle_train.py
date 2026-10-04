@@ -120,6 +120,8 @@ def main():
         except Exception:  # noqa: BLE001
             lines = log.read_text("utf-8", "replace")
         print("----- Kaggle 日志（最后 6000 字）-----\n" + lines[-6000:], flush=True)
+        tail = lines[-3500:].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+        print(f"::notice title=Kaggle 日志末尾::{tail}", flush=True)
     tar = outdir / f"{name}.tar.gz"
     if "complete" not in last or not tar.exists():
         raise SystemExit(f"::error::Kaggle 训练失败（状态：{last}），见上面的日志")

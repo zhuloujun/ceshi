@@ -80,7 +80,7 @@ def clean_ai(text: str) -> str:
 
 
 def load_jsonl(f: Path) -> list[dict]:
-    return [json.loads(l) for l in f.read_text("utf-8").splitlines() if l.strip()] if f.exists() else []
+    return [json.loads(l) for l in f.read_text("utf-8").split("\n") if l.strip()] if f.exists() else []
 
 
 def build_rows(args, rnd):
