@@ -301,7 +301,7 @@ def clean(t: str) -> str:
 
 
 def load_jsonl(f: Path) -> list[dict]:
-    return [json.loads(l) for l in f.read_text("utf-8").splitlines() if l.strip()] if f.exists() else []
+    return [json.loads(l) for l in f.read_text("utf-8").split("\n") if l.strip()] if f.exists() else []
 
 
 def human_pool(out: Path, source: str, per_category: int) -> list[dict]:
