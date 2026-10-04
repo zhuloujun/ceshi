@@ -206,12 +206,26 @@ def _throttle(url):
 def chat_once(url, key, model, prompt, temperature, max_tokens=1200):
     _throttle(url)
     new_kimi = model.startswith("kimi-k")          # Kimi 新模型（k2.6 / k3 等）只接受 temperature = 1，且会先"思考"，要留足 token
-    body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
-                       "temperature": 1.0 if new_kimi else min(temperature, 1.0),
-                       "max_tokens": max_tokens + 5000 if new_kimi else max_tokens}).encode()
-    req = urllib.request.Request(url, body, {"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
-    with urllib.request.urlopen(req, timeout=300) as r:
-        return (json.loads(r.read())["choices"][0]["message"].get("content") or "").strip()
+    payload = {"model": model, "messages": [{"role": "user", "content": prompt}],
+               "temperature": 1.0 if new_kimi else min(temperature, 1.0),
+               "max_tokens": max_tokens + 5000 if new_kimi else max_tokens}
+    if "volces.com" in url and model.startswith("doubao-seed"):
+        # 豆包 Seed 2.x 默认先"深度思考"，思考内容占用 max_tokens，长文（论文）会被截断后丢弃（2026-10-03 只生成出 1 篇）。
+        # 关掉思考，再多留一些 token 余量。
+        payload["thinking"] = {"type": "disabled"}
+        payload["max_tokens"] = max_tokens + 2500
+    def send(p):
+        req = urllib.request.Request(url, json.dumps(p).encode(),
+                                     {"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+        with urllib.request.urlopen(req, timeout=300) as r:
+            return (json.loads(r.read())["choices"][0]["message"].get("content") or "").strip()
+    try:
+        return send(payload)
+    except urllib.error.HTTPError as e:
+        if e.code == 400 and "thinking" in payload:      # 个别模型不认 thinking 参数：去掉再试
+            payload.pop("thinking")
+            return send(payload)
+        raise
 
 
 def _get_json(url, key):
