@@ -52,9 +52,10 @@ jobs:
                 pos += len(t) + 3
             mixed = "\n\n\n".join(parts)
             j = call("/v1/detect", {"text": mixed, "wait": True}, {"Authorization": "Bearer " + tok})
-            while j.get("status") not in ("done", "error") and "job_id" in j:
-                time.sleep(5)
-                j = call(f"/v1/jobs/{j['job_id']}", headers={"Authorization": "Bearer " + tok})
+            jid = j.get("job_id") or j.get("id")
+            while j.get("status") not in ("done", "error") and jid:
+                time.sleep(10)
+                j = call(f"/v1/jobs/{jid}", headers={"Authorization": "Bearer " + tok})
             if not j.get("result"):
                 print("::warning title=混排验收未完成::" + f"文本 {len(mixed)} 字；服务返回：" + json.dumps(j, ensure_ascii=False)[:600], flush=True)
             res = j.get("result") or {}
