@@ -13,7 +13,7 @@ on:
         description: "每家模型生成多少篇"
         default: "200"
       source:
-        description: "arxiv（摘要）/ pubmed（农业、经济、医学等，含中国作者；生成整篇论文）/ pmc（只抓真人论文正文）/ translate（先写中文再译成英文）/ userstyle（一句中文指令直接写英文论文）/ genre（童话、读后感、清单、议论文等非论文体裁）"
+        description: "arxiv（摘要）/ pubmed（农业、经济、医学等，含中国作者；生成整篇论文）/ pmc（只抓真人论文正文）/ translate（先写中文再译成英文）/ userstyle（一句中文指令直接写英文论文）/ genre（童话、读后感、清单、议论文等非论文体裁）/ humangenre（只收集非论文体裁的真人英文长文）"
         default: "pubmed"
 
 permissions:
@@ -41,6 +41,7 @@ jobs:
           for v in DEEPSEEK_API_KEY KIMI_API_KEY WENXIN_API_KEY DASHSCOPE_API_KEY DOUBAO_API_KEY; do
             if [ -n "${!v}" ]; then echo "$v：已设置"; else echo "$v：未设置"; fi
           done
+          if [ "${{ github.event.inputs.source }}" = "humangenre" ]; then python -u server/tools/collect_human_en.py; exit 0; fi
           python -u server/tools/gen_english_ai.py --n-titles "${{ github.event.inputs.n_titles || '200' }}" --source "${{ github.event.inputs.source || 'pubmed' }}" --time-budget-min 270
       - name: 提交
         run: |
