@@ -22,6 +22,7 @@ on:
       - "!server/tools/train_english_modal.py"
       - "!server/tools/data/gen_en/**"
       - "!server/tools/data/eval_en_user_docs.jsonl"
+      - "!server/tools/data/eval_zh_user_docs.jsonl"
       - "!server/tools/compare_experiment.py"
       - "!server/tools/kaggle_train.py"
       - "!server/tools/train_chinese.py"

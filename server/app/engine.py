@@ -451,6 +451,12 @@ class Engine:
         #    依据：单段得分会因分段位置大幅波动（同一段引言，带不带上一行"Keywords"能差出 14% 与 96%），
         #    而整篇的中位数很稳定——没参与训练的 110 篇真人论文全文（多为中国作者）中位数最高 0.38，
         #    226 篇国产模型写的论文最低 0.95。
+        # "整篇判断"只带上本身也像 AI 的段落：所在作品整体像 AI，但这一段自己的整篇分类器得分很低（< DOC_CARRY_FLOOR），
+        # 多半是插进来的真人文字（2026-10：AI 论文中间插入的 Walden 片段，自己的得分只有 5%），不应跟着计入。
+        def own_ok(i, *keys):
+            vals = [results[i].get(k) for k in keys if results[i].get(k) is not None]
+            return not vals or max(vals) >= config.DOC_CARRY_FLOOR
+
         paper_ai = set()
         if en_paper:
             for (blk, reg), idxs in groups.items():
@@ -468,7 +474,8 @@ class Engine:
                         break
                 if med is not None and med >= config.EN_PAPER_DOC_THRESHOLD:
                     paper_ai.update(i for i in idxs if smoothed.get(i) is not None
-                                    and smoothed[i] < float(prof[i][0].get("threshold", 0.5)))
+                                    and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
+                                    and own_ok(i, "classifier_en2", "classifier_en4"))
                     work_ai.difference_update(idxs)
 
         # 5) 中文作品的整篇判断：MPU 中文分类器各段得分的加权中位数达到 ZH_DOC_THRESHOLD 时，本篇未过阈值的段落
@@ -487,9 +494,18 @@ class Engine:
                 if acc >= half:
                     med = p_
                     break
+            # 国产大模型中文分类器（更准、真人整篇最高只有 0.08）明确判为人写时，不用 MPU 的整篇判断
+            # （2026-10：真人《一个小故事》MPU 72–91%，第二分类器只有 4–5%）
+            z2 = [(results[i]["classifier_zh2"], len(segs_by_idx[i].text)) for i in idxs
+                  if results[i].get("classifier_zh2") is not None]
+            z2_med = _wmedian(z2) if len(z2) >= 2 else None
+            if z2_med is not None and z2_med < config.ZH2_HUMAN_VETO:
+                continue
             if med is not None and med >= config.ZH_DOC_THRESHOLD:
                 zh_doc_ai.update(i for i in idxs if smoothed.get(i) is not None
-                                 and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and i not in work_ai)
+                                 and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and i not in work_ai
+                                 and own_ok(i, "classifier") and (results[i].get("classifier_zh2") is None
+                                                                   or results[i]["classifier_zh2"] >= config.ZH2_HUMAN_VETO))
         work_ai |= zh_doc_ai
         # 6) 反向整篇判断：中文作品整体像人写（中文分类器整篇加权中位数 < 0.5），其中个别段落只因语言模型信号偏高
         #    （名篇被部分背过、文风工整）而过线、分类器本身也判为人写（< 0.5）时，不计入，标"接近阈值"。
@@ -526,7 +542,8 @@ class Engine:
             if med is not None and med >= config.ZH2_DOC_THRESHOLD:
                 zh2_groups.add((blk, reg))
                 zh2_ai.update(i for i in idxs if smoothed.get(i) is not None
-                              and smoothed[i] < float(prof[i][0].get("threshold", 0.5)))
+                              and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
+                              and own_ok(i, "classifier_zh2"))
         # 6.6) 英文非论文作品（故事、散文、读后感、清单……）的整篇判断：英文整篇分类器各段得分的加权中位数（两段取较低）
         #      达到 EN3_DOC_THRESHOLD 时，本篇未过阈值的段落计为"中度疑似（整篇判断）"。英文论文另有论文整篇判断。
         if not en_paper:
@@ -545,7 +562,9 @@ class Engine:
                 joint = (med4 is not None and med >= config.EN3_JOINT_THRESHOLD and med4 >= config.EN4_JOINT_THRESHOLD)
                 if med >= config.EN3_DOC_THRESHOLD or joint:
                     en3_hit = {i for i in idxs if smoothed.get(i) is not None
-                               and smoothed[i] < float(prof[i][0].get("threshold", 0.5))}
+                               and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
+                               and own_ok(i, "classifier_en4" if results[i].get("classifier_en4") is not None
+                                          else "classifier_en3")}
                     zh2_ai |= en3_hit
                     en3_ai.update(en3_hit)
         work_ai -= zh2_ai

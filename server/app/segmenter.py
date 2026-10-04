@@ -6,7 +6,7 @@ from . import config
 
 _SENT_END = re.compile(r"(?<=[。！？!?；;])(?![”’」』\"'])|(?<=[。！？!?；;][”’」』\"'])")
 _REF_HEAD = re.compile(
-    r"^\s*(?:[一二三四五六七八九十\d]+[、.．\s]*)?(参考文献|参考书目|引用文献|征引文献|主要参考文献|References|Bibliography|Works Cited)\s*[:：]?\s*$",
+    r"^\s*(?:[一二三四五六七八九十\d]+[、.．\s]*)?(参考文献|参考书目|引用文献|征引文献|主要参考文献|References|Bibliography|Works Cited)\s*([（(][^）)]{1,30}[）)])?\s*[:：]?\s*$",
     re.IGNORECASE,
 )
 # 参考文献之后又出现这些标题时，恢复计入（例如"附录""致谢"不计，"后记"不计；这里只处理常见情形）
@@ -18,6 +18,10 @@ _REF_ENTRY = re.compile(r"^\s*(\[\d+\]|［\d+］|\(\d+\)|\d+[.、]\s)|\b(19|20)\
 
 def _looks_ref(t: str) -> bool:
     t = t.strip()
+    if (len(t) >= 200 and not re.match(r"^\s*(\[\d+\]|［\d+］|\(\d+\)|\d+[.、]\s)", t)
+            and not re.search(r"doi[:.]|https?://|\bet al\.|\bpp?\.\s*\d|\[[JMCDR]\]", t, re.I)
+            and len(re.findall(r"[。！？!?]|[a-z]\.\s+[A-Z]", t)) >= 3):
+        return False          # 多句长段正文，即使含年份（"One summer, along about 1904, …"）也不是参考文献条目
     return bool(_REF_ENTRY.search(t[:160])) or bool(re.search(r"\bet al\.|\bJ\.|Press\b|出版社|学报", t))
 
 
@@ -94,7 +98,7 @@ def is_english_title(line: str) -> bool:
     """英文作品标题：单独一行、3–16 个词、不以句号结尾、实词大多首字母大写（Title Case），
     不是编号小节（"2. Methods"）或 "Stage 1: …" 这类分节标签。"""
     s = line.strip().strip("《》\"'")
-    if not s or len(s) > 110 or _CJK.search(s) or re.search(r"[.!?;:,]$", s) or ";" in s or _BOX.search(s):
+    if not s or len(s) > 110 or _CJK.search(s) or re.search(r"[.!?;:,]$", s) or ";" in s or "|" in s or _BOX.search(s):
         return False
     if re.match(r"^\d+(\.\d+)*[.)、]?\s", s) or _EN_TITLE_SKIP.match(s):
         return False
@@ -107,6 +111,10 @@ def is_english_title(line: str) -> bool:
 
 def is_title(line: str) -> bool:
     s = line.strip()
+    if s and re.match(r"^(——|—|--|－－)", s):
+        return False                                  # 署名 / 出处行（"——辛波斯卡"）
+    if s and _WORK_LABEL.match(s) and len(s) <= 90:
+        return True
     if s and len(s) <= 110 and is_english_title(s):
         return True
     if s and 6 <= len(s) <= 24 and re.fullmatch(r"[\u4e00-\u9fff]{3,11}[,，、\s][\u4e00-\u9fff]{3,11}", s):
@@ -132,10 +140,16 @@ _SECTION_NUM = re.compile(r"^(\d+(\.\d+)*[.、．]?\s*\S|[IVX]{1,5}[.、]\s*\S|[
 _SECTION_NAMES = re.compile(
     r"^(#{1,6}\s*)?(abstract|introduction|background|literature review|related work|theoretical framework|method(s|ology)?|"
     r"data( and methods?)?|results?|findings|analysis|discussion|conclusions?|limitations|future work|keywords?|"
-    r"acknowledge?ments?|appendix|摘\s*要|关键词|引\s*言|绪\s*论|前\s*言|文献综述|研究方法|研究设计|结\s*论|结\s*语|讨\s*论|致\s*谢|附\s*录)"
+    r"acknowledge?ments?|appendix|materials?( and methods?)?|figures?( and tables?)?|tables?( and figures?)?|"
+    r"conflicts? of interests?|competing interests?|funding|data availability|author contributions?|supplementary|ethics|"
+    r"摘\s*要|关键词|引\s*言|绪\s*论|前\s*言|文献综述|研究方法|研究设计|结\s*论|结\s*语|讨\s*论|致\s*谢|附\s*录)"
     r"\b.{0,50}$", re.I)
-_ABSTRACT_HEAD = re.compile(r"^(摘\s*要|内容摘要|内容提要|abstract)\s*([:：]|$|\s)", re.I)
-_KEYWORDS_LINE = re.compile(r"^(关键词|关键字|key\s*words?)\s*[:：]", re.I)
+_ABSTRACT_HEAD = re.compile(r"^((摘\s*要|内容摘要|内容提要|abstract)\s*([:：]|$|\s)|[【\[〔]\s*(摘\s*要|内容摘要|内容提要|abstract)\s*[】\]〕])", re.I)
+_KEYWORDS_LINE = re.compile(r"^((关键词|关键字|key\s*words?)\s*[:：]|[【\[〔]\s*(关键词|关键字|key\s*words?)\s*[】\]〕])", re.I)
+# 文集里"论文 1: ……""Paper 2: ……""第 3 篇 ……"这类作品标题
+_WORK_LABEL = re.compile(r"^(论文|文章|作品|篇目|范文|paper|article|essay|work|story)\s*\d+\s*[:：.、．]\s*\S|^第\s*[一二三四五六七八九十百\d]+\s*篇", re.I)
+# 不是标题的短行：署名 / 出处（"——辛波斯卡"）、日期（"10月28日 天气晴"）、"作者：""Genre: Fairy tale" 这类标签
+_NOT_TITLE = re.compile(r"^(——|—|--|－－|~|～)|^\d{1,4}\s*[年月]\s*\d{0,2}\s*日?|^[A-Za-z][A-Za-z ]{0,20}:\s|^.{1,8}[：:]\s*\S", re.I)
 _RULE_LINE = re.compile(r"^[-—_*=~·\s]{3,}$")
 _BOX = re.compile(r"[\u2500-\u257f\u2580-\u259f]")
 
@@ -152,6 +166,27 @@ def is_section_heading(line: str) -> bool:
     if not s or len(s) > 60 or s.startswith("《"):
         return False
     return bool(_SECTION_NUM.match(s) or _SECTION_NAMES.match(s))
+
+
+def _short_title_like(s: str) -> bool:
+    """像一个独立标题的短行（中文 2–20 个字、英文 1–10 个词），不是章节名、日期、署名或"作者：……"这类标签。"""
+    s = s.strip()
+    if not re.match(r"^[A-Za-z\u4e00-\u9fff《「“\"]", s or " "):
+        return False                                  # "(UC IPM)""[12]" 这类引注不是标题
+    if re.fullmatch(r"(the\s+)?end\b.*|body|全文完|完|（完）|\(完\)|未完待续|to be continued", s, re.I) or re.search(r"[：:]$", s):
+        return False
+    if (not s or _NOT_TITLE.match(s) or is_section_heading(s) or _SECTION_NAMES.match(s) or _KEYWORDS_LINE.match(s)
+            or _ABSTRACT_HEAD.match(s) or _REF_HEAD.match(s) or _EN_TITLE_SKIP.match(s)):
+        return False
+    if _CJK.search(s):
+        core = re.sub(r"[《》·：:\s]", "", s)
+        return 2 <= len(core) <= 20 and len(s) <= 26 and len(_CJK.findall(core)) >= 0.8 * len(core) \
+            and not re.search(r"[。！？!?，,、；;]", s)
+    words = re.findall(r"[A-Za-z][A-Za-z'’\-]*", s)
+    if not 1 <= len(words) <= 10 or len(s) > 70 or re.search(r"[.!?;:,]$", s):
+        return False
+    content = [w for w in words if w.lower() not in _EN_SMALL]
+    return bool(content) and sum(w[0].isupper() for w in content) >= 0.8 * len(content)
 
 
 def _is_head_line(l: str) -> bool:
@@ -254,7 +289,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
     in_refs = False
     buf, buf_start = "", 0
     pos = 0
-    block = 0
+    block = max_block = 0
     pending_break = False
     new_block_pending = False
     # 论文题目：下一行就是"摘要 / Abstract"的短行（中文长题目没有书名号、超过 16 字也能认出来）
@@ -262,7 +297,8 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
     nonempty = [l for l in lines_all if l]
     paper_titles = {a for a, b in zip(nonempty, nonempty[1:])
                     if _ABSTRACT_HEAD.match(b) and 4 <= len(a) <= 160 and not _ABSTRACT_HEAD.match(a)
-                    and not _SECTION_NAMES.match(a) and not re.search(r"[。！？!?；;，,]$", a)}
+                    and not _SECTION_NAMES.match(a) and not re.search(r"[。！？!?；;，,]$", a)
+                    and not re.match(r"^.{1,8}[：:]\s*\S", a)}      # "作者：……""所属领域：……"是标签，不是题目
     # 中文短标题（"老农的回忆"）：上一行以句末标点结束、本行 2–16 个汉字且无标点、下一行是正文长句
     for prev, a, b in zip(nonempty, nonempty[1:], nonempty[2:]):
         if (re.fullmatch(r"[《]?[\u4e00-\u9fff]{2,16}[》]?", a) and re.search(r"[。！？!?”」…]$", prev)
@@ -278,8 +314,28 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                 and not _EN_TITLE_SKIP.match(a)):
             paper_titles.add(a)
 
+    # 前后都是空行、上一段以句末标点结束、下一行是正文的短行（"Walden""The Journey""國語文學史""妈妈的爱"）：
+    # 多篇作品拼在一个文档里时，这是最常见的新作品标题。论文内部同样格式的小标题另行处理（见下面 blk_numsec）。
+    iso_titles = set()
+    for i, a in enumerate(lines_all):
+        if not a or i == 0 or lines_all[i - 1] or not _short_title_like(a):
+            continue
+        prev = next((l for l in reversed(lines_all[:i]) if l), "")
+        nxt = next((l for l in lines_all[i + 1:] if l), "")
+        if not prev or not re.search(r"[。！？!?.”」』…\"'）)]$", prev):
+            continue
+        if _CJK.search(nxt):
+            ok = len(nxt) >= 15 and re.search(r"[。！？，；]", nxt)
+        else:
+            ok = len(nxt) >= 40 and len(nxt.split()) >= 6
+        if ok:
+            iso_titles.add(a)
+
     work_heads: set = set()          # 文集里带编号的作品标题（"1. 天坛：圆丘上的沉默""4. Hawaii"）
     blk_paper, blk_numbered = False, False
+    blk_numsec = 0                   # 本篇里出现过几个带编号的章节标题（"3 A worked example""2. 方法"）
+    blk_concluded = False            # 本篇论文已经出现"结论 / Conclusion"小节
+    sec_last: dict = {}              # 每篇论文最后一个章节编号：中间插进别的作品后，"9 Conclusion"回到原来那篇
 
     def flush(kind_override=None):
         nonlocal buf
@@ -289,7 +345,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         reg = detect_register(buf)
         tgt = target_chars(reg)
         first = buf.strip().splitlines()[0].strip()
-        title = first if (first in paper_titles or first in work_heads
+        title = first if (first in paper_titles or first in work_heads or first in iso_titles
                           or (is_title(first) and not is_section_heading(first))) else ""
         if reg == "zh_poetry" or len(buf) <= tgt * 1.5:
             pieces = [buf]
@@ -329,7 +385,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             buf = "\n".join(lines) + "\n" if lines else ""
             flush("reference")
             in_refs = False
-            block += 1
+            block = max_block = max_block + 1
             new_block_pending = True
             blk_paper, blk_numbered = False, False
             pending_break = False
@@ -350,13 +406,31 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         section = is_section_heading(stripped)
         title = stripped in paper_titles or (is_title(stripped) and not section)
         block_before = block
+        # 前后空行隔开的短标题：普通文章里就是新作品；论文里只有在论文本身用编号小标题（"8 Missing information …"）、
+        # 而这一行不带编号、也不是"Introduction / 结论"这类章节名时，才是插进来的另一篇作品（"Walden"）
+        iso_new = stripped in iso_titles and not section
+        if iso_new and blk_paper and blk_concluded:
+            pass                                  # 论文已经写到"结论"：之后空行隔开的短标题是下一篇作品（"The Journey"）
+        elif iso_new and blk_paper:
+            # 论文里同格式的小标题是章节；只有文字换了（英文论文中间出现中文标题"國語文學史"，或反过来）才是插进来的另一篇
+            prev_text = buf if buf.strip() else (segments[-1].text if segments else "")
+            cur_zh = len(_CJK.findall(prev_text)) * 2 > len(_LATIN.findall(prev_text))
+            iso_new = bool(_CJK.search(stripped)) != cur_zh
         # 论文内部不带编号的英文小标题（"Risk Factors and Prevention"）是章节，不是新作品
-        if title and blk_paper and stripped not in paper_titles and not _CJK.search(stripped):
+        if (title and blk_paper and stripped not in paper_titles and not _CJK.search(stripped) and not iso_new
+                and not _WORK_LABEL.match(stripped)):
             title, section = False, True
+        if iso_new:
+            title = True
         # 文集里带编号的作品标题：文体与上一篇不同（中英切换），或当前这篇不是论文、且它自己的标题也带编号
-        top = (bool(re.match(r"^\d+\s*[.、．]\s*\S", stripped)) and not re.match(r"^\d+\.\d", stripped)
-               and len(stripped) <= 90 and not _SECTION_NAMES.match(re.sub(r"^\d+\s*[.、．]\s*", "", stripped)))
-        if top and not title and new_block_pending:
+        # "001  把夜色缝好的小裁缝"：补零的三位编号 + 空格，也是文集里的作品编号
+        top = ((bool(re.match(r"^\d+\s*[.、．]\s*\S", stripped)) or bool(re.match(r"^0\d{1,2}\s+\S", stripped)))
+               and not re.match(r"^\d+\.\d", stripped)
+               and len(stripped) <= 90 and not _SECTION_NAMES.match(re.sub(r"^\d+\s*[.、．]?\s*", "", stripped)))
+        if top and not title and re.match(r"^0\d{1,2}\s+\S", stripped) and not blk_paper:
+            section, title = False, True          # 补零编号（"002  父亲留下的那张取件单"）几乎只用于作品编号，章节不这样写
+            work_heads.add(stripped)
+        elif top and not title and new_block_pending:
             section, title = False, True          # 参考文献之后紧跟的编号标题，就是下一篇的题目
             work_heads.add(stripped)
         elif top and not title and (buf.strip() or segments):
@@ -366,12 +440,21 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             if h_reg != cur or (not blk_paper and blk_numbered):
                 section, title = False, True
                 work_heads.add(stripped)
-        if buf.strip():
+        m_num = re.match(r"^(\d+)(?:\.\d+)*[.、．]?\s*\S", stripped) if (section and not title) else None
+        back_to = None
+        if m_num and not blk_paper and int(m_num.group(1)) >= 2:
+            n_sec = int(m_num.group(1))
+            if sec_last.get(block) != n_sec - 1:
+                back_to = next((b for b in sorted(sec_last, reverse=True) if b != block and sec_last[b] == n_sec - 1), None)
+        if back_to is not None:
+            flush()
+            block = back_to
+        elif buf.strip():
             reg = detect_register(buf)
             if title and not (buf.strip() and is_title(buf.strip().splitlines()[-1])):
                 # 新作品开始（连续两行标题视为同一个标题块）
                 flush()
-                block += 1
+                block = max_block = max_block + 1
             elif len(stripped) >= 30 and len(buf.strip()) >= 30 and detect_register(stripped) != reg:
                 # 文体切换（如现代文里插入一段文言引文、中文里夹一段英文）时另起一段
                 flush()
@@ -379,10 +462,20 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                 # 章节标题相当于一次段落分隔：窗口够长就另起一段，否则与下一节合并（仍属同一篇作品）
                 flush()
         elif title and segments and not new_block_pending:
-            block += 1
+            block = max_block = max_block + 1
         was_pending, new_block_pending = new_block_pending, False
         if block != block_before or was_pending or (not segments and not buf.strip()):
             blk_paper, blk_numbered = False, bool(title and top)
+            blk_numsec = 0
+            blk_concluded = False
+        if section and re.search(r"(conclusions?|concluding remarks|结\s*论|结\s*语)", stripped, re.I) and len(stripped) <= 60:
+            blk_concluded = True
+        if back_to is not None:
+            blk_paper, blk_numsec = True, 2
+        if section and _SECTION_NUM.match(stripped):
+            blk_numsec += 1
+            if m_num or re.match(r"^\d+", stripped):
+                sec_last[block] = int(re.match(r"^(\d+)", stripped).group(1)) if re.match(r"^\d+", stripped) else sec_last.get(block)
         if _ABSTRACT_HEAD.match(stripped) or _KEYWORDS_LINE.match(stripped):
             blk_paper = True
         pending_break = False
