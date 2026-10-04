@@ -21,7 +21,7 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parent / "data" / "gen_en" / "genre_human.jsonl"
 SOURCES = [  # (数据集, 配置, 字段, 名称, 篇数, 最少词数)
     ("abisee/cnn_dailymail", "3.0.0", "article", "news", 450, 450),
-    ("euclaise/writingprompts", None, "story", "story", 450, 450),
+    ("euclaise/writingprompts", None, "story", "story", 450, 350),
     ("stanfordnlp/imdb", None, "text", "review", 250, 350),
     ("qwedsacf/ivypanda-essays", None, "TEXT", "essay", 450, 450),
     ("sedthh/gutenberg_english", None, "TEXT", "classic", 350, 0),
@@ -54,13 +54,18 @@ def rows(dataset, config, field, want, min_words, rnd):
     # 跳过最前面 3000 行，避开可能与评估重叠的开头部分
     offsets = list(range(3000 if n_rows > 6000 else 0, max(1, n_rows - 20), 37 * 20))
     rnd.shuffle(offsets)
-    out, seen, probed = [], set(), False
+    out, seen, probed, errs = [], set(), False, 0
     for off in offsets[:150]:
         try:
             rs = _get(f"https://datasets-server.huggingface.co/rows?dataset={q}&config={urllib.parse.quote(cfg)}"
-                      f"&split={split}&offset={off}&length=20")["rows"]
+                      f"&split={urllib.parse.quote(split)}&offset={off}&length=20")["rows"]
         except Exception as e:  # noqa: BLE001
-            print(f"  {dataset} {off}: {e}", flush=True)
+            errs += 1
+            if errs <= 2:
+                body = e.read()[:300] if hasattr(e, "read") else b""
+                print(f"::warning title={dataset} 读取失败::{cfg}/{split} offset {off}: {e} {body!r}", flush=True)
+            if errs >= 15 and not out:
+                break
             continue
         for r in rs:
             row = r["row"]
@@ -101,10 +106,13 @@ def rows(dataset, config, field, want, min_words, rnd):
 def main():
     rnd = random.Random(23)
     have = [json.loads(l) for l in OUT.read_text("utf-8").split("\n") if l.strip()] if OUT.exists() else []
-    done = {h["source"] for h in have}
+    cnt = {}
+    for h in have:
+        cnt[h["source"]] = cnt.get(h["source"], 0) + 1
     for ds, cfg, field, name, want, min_words in SOURCES:
-        if name in done:
+        if cnt.get(name, 0) >= want * 0.8:
             continue
+        have = [h for h in have if h["source"] != name]       # 不够数的来源整批重新收集
         try:
             docs = rows(ds, cfg, field, want, min_words, rnd)
         except Exception as e:  # noqa: BLE001
