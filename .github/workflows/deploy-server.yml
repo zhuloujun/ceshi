@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - "server/**"
+      - "!server/tools/**"          # 训练 / 数据生成脚本和数据的改动不需要重新部署（省 Modal 费用）
       - ".github/workflows/deploy-server.yml"
   workflow_dispatch:
 
