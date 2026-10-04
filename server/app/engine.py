@@ -569,7 +569,8 @@ class Engine:
                 vals4 = [(results[i]["classifier_en4"], len(segs_by_idx[i].text)) for i in idxs
                          if results[i].get("classifier_en4") is not None]
                 med4 = (min(v for v, _ in vals4) if len(vals4) == 2 else _wmedian(vals4)) if len(vals4) >= 2 else None
-                joint = (med4 is not None and med >= config.EN3_JOINT_THRESHOLD and med4 >= config.EN4_JOINT_THRESHOLD)
+                joint = med4 is not None and ((med >= config.EN3_JOINT_THRESHOLD and med4 >= config.EN4_JOINT_THRESHOLD)
+                                              or (med >= config.EN3_JOINT2_THRESHOLD and med4 >= config.EN4_JOINT2_THRESHOLD))
                 if med >= config.EN3_DOC_THRESHOLD or joint:
                     en3_hit = {i for i in idxs if smoothed.get(i) is not None
                                and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
