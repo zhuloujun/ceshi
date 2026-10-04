@@ -35,7 +35,22 @@ async function renderAuto(){
     const regs = Object.entries(d.by_register).map(([k,v])=>`${REG_NAMES_ALL[k]||k}（AI ${v.ai} · 人写 ${v.human}）`).join('、') || '暂无';
     const last = Object.entries(d.last).map(([k,v])=>`${REG_NAMES_ALL[k]||k}：${{scheduled:'等待中',running:'校准中',done:'已完成',error:'出错',cleared:'已恢复默认'}[v.status]||v.status}${v.user_samples && v.user_samples.n_ai ? `（你的 AI 段落识别出 ${(v.user_samples.ai_caught_rate*100).toFixed(0)}%）` : ''}`).join('；');
     $('autoStatus').textContent = `${localStorage.getItem(ADMIN_KEY) ? '已在本浏览器开启' : '本浏览器未开启（登录时勾选“记住”即可开启）'} · 服务器上的标注共 ${d.total} 段：${regs}` + (last ? ` · 最近自动校准：${last}` : '');
-  }catch(e){}
+    const busy = Object.values(d.last).some(v=>v.status === 'scheduled' || v.status === 'running');
+    if(busy) pollAuto();
+    return busy;
+  }catch(e){ return false; }
+}
+// 只在"自动校准进行中"时、页面在前台时才定时刷新，最多 10 分钟。
+// （以前是只要管理页开着就每 15 秒请求一次服务器，服务器因此一直不关机，每小时约 0.47 美元。）
+let pollTimer = null, pollUntil = 0;
+function pollAuto(){
+  if(!pollUntil) pollUntil = Date.now() + 10 * 60 * 1000;
+  if(pollTimer || Date.now() > pollUntil) return;
+  pollTimer = setTimeout(()=>{
+    pollTimer = null;
+    if(!token || document.hidden || Date.now() > pollUntil){ pollUntil = 0; return; }
+    renderAuto().then(busy=>{ if(!busy) pollUntil = 0; });
+  }, 20000);
 }
 async function syncAllLabels(quiet){
   let m = {};
@@ -47,7 +62,7 @@ async function syncAllLabels(quiet){
     msg($('autoMsg'), `已同步 ${items.length} 段标注到服务器，约 ${Math.round(d.delay_sec)} 秒后自动重新校准。`, true);
   }catch(e){ msg($('autoMsg'), e.message, false); }
 }
-$('syncLabels').addEventListener('click', ()=>syncAllLabels(false).then(renderAuto));
+$('syncLabels').addEventListener('click', ()=>{ pollUntil = 0; syncAllLabels(false).then(renderAuto); });
 $('clearServerLabels').addEventListener('click', async ()=>{
   if(!confirm('清空服务器上保存的全部标注？（浏览器里的标注和已启用的校准不受影响）')) return;
   try{ const d = await call('/admin/api/labels', { method:'DELETE' }); msg($('autoMsg'), d.message, true); renderAuto(); }
@@ -58,7 +73,6 @@ $('logoutBtn').addEventListener('click', ()=>{
   token = ''; $('sheet').classList.add('locked');
   msg($('loginMsg'), '已退出，本浏览器不再记住管理员身份（标注只保存在本浏览器）。', true);
 });
-setInterval(()=>{ if(token) renderAuto(); }, 15000);
 
 $('loginBtn').addEventListener('click', async ()=>{
   token = $('adminToken').value;
