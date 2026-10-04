@@ -11,6 +11,9 @@ on:
       n_titles:
         description: "每家模型生成多少篇"
         default: "120"
+      humanize:
+        description: "生成“去 AI 味”改写版（对抗训练数据）：填 1"
+        default: ""
 
 permissions:
   contents: write
@@ -34,6 +37,7 @@ jobs:
           DOUBAO_API_KEY: ${{ secrets.DOUBAO_API_KEY || secrets.ARK_API_KEY }}
           DOUBAO_MODEL: ${{ secrets.DOUBAO_MODEL }}
           ONLY_PROVIDERS: ${{ github.event.inputs.providers }}
+          HUMANIZE: ${{ github.event.inputs.humanize }}
         run: |
           for v in DEEPSEEK_API_KEY KIMI_API_KEY WENXIN_API_KEY DASHSCOPE_API_KEY DOUBAO_API_KEY; do
             if [ -n "${!v}" ]; then echo "::notice title=$v::已设置"; else echo "::notice title=$v::未设置"; fi
