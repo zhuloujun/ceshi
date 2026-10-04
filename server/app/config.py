@@ -46,6 +46,14 @@ EN3_CLASSIFIER_ID = os.getenv("EN3_CLASSIFIER_ID", "english-classifier-v7")
 # 依据（english-classifier-v7，2026-10-04）：397 篇真人英文长文（CNN 新闻 150、Reddit 写作社区故事 150、IMDB 长影评 97）
 # 整篇中位数最高 0.855、99 分位 0.82，没有一篇 ≥ 0.9；文心清单 0.95、文心童话 0.93、千问 / 豆包故事 0.89–0.95。
 EN3_DOC_THRESHOLD = float(os.getenv("EN3_DOC_THRESHOLD", "0.92") or 0.92)
+# 第二个英文整篇分类器（english-classifier-v9：训练时加入 1765 篇非论文真人英文——新闻、故事、影评、学生论文、古腾堡经典散文）。
+# 单独用于整篇判断不够可靠（真人 CNN 新闻最高也到 0.956），但与 v7 联合时很干净：
+#   "v7 整篇 ≥ EN3_JOINT_THRESHOLD 且 v9 整篇 ≥ EN4_JOINT_THRESHOLD" → 394 篇真人英文长文 0 篇命中，用户的 17 篇 AI 文档全部命中
+#   （包括豆包田园散文《Of Fields and Seasons》：v7 0.857 / v9 0.956；最接近的真人：v7 0.851 / v9 0.947）。
+EN4_CLASSIFIER_MODEL = os.getenv("EN4_CLASSIFIER_MODEL", "")
+EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v9")
+EN3_JOINT_THRESHOLD = float(os.getenv("EN3_JOINT_THRESHOLD", "0.85") or 0.85)
+EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.952") or 0.952)
 ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v2")
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")

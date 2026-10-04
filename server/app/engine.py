@@ -127,6 +127,7 @@ class Engine:
         self.cls_en2 = (Classifier(config.EN2_CLASSIFIER_MODEL, 320) if config.EN2_CLASSIFIER_MODEL else None)
         self.cls_zh2 = (Classifier(config.ZH2_CLASSIFIER_MODEL, 384) if config.ZH2_CLASSIFIER_MODEL else None)
         self.cls_en3 = (Classifier(config.EN3_CLASSIFIER_MODEL, 320) if config.EN3_CLASSIFIER_MODEL else None)
+        self.cls_en4 = (Classifier(config.EN4_CLASSIFIER_MODEL, 320) if config.EN4_CLASSIFIER_MODEL else None)
         self.cls_poetry = (Classifier(config.POETRY_CLASSIFIER_MODEL, 128) if config.POETRY_CLASSIFIER_MODEL else None)
         self.cls_classical = (Classifier(config.CLASSICAL_CLASSIFIER_MODEL, 256) if config.CLASSICAL_CLASSIFIER_MODEL else None)
         self.loading = True
@@ -175,7 +176,7 @@ class Engine:
     def load_all(self):
         try:
             for name, det in (("语言模型", self.lm), ("中文分类器", self.cls), ("英文分类器", self.cls_en),
-                              ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("英文整篇分类器", self.cls_en3),
+                              ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("英文整篇分类器", self.cls_en3), ("英文整篇分类器 2", self.cls_en4),
                               ("诗词分类器", self.cls_poetry), ("文言分类器", self.cls_classical)):
                 if det is None:
                     continue
@@ -208,6 +209,7 @@ class Engine:
             "classifier_en2": st(self.cls_en2, config.EN2_CLASSIFIER_ID),
             "classifier_zh2": st(self.cls_zh2, config.ZH2_CLASSIFIER_ID),
             "classifier_en3": st(self.cls_en3, config.EN3_CLASSIFIER_ID),
+            "classifier_en4": st(self.cls_en4, config.EN4_CLASSIFIER_ID),
             "classifier_poetry": st(self.cls_poetry, config.POETRY_CLASSIFIER_ID),
             "classifier_classical": st(self.cls_classical, config.CLASSICAL_CLASSIFIER_ID),
             "calibration": {"calibrated": bool(self.cal.get("calibrated")), "source": self.cal_source,
@@ -362,6 +364,10 @@ class Engine:
             idx = [k for k, r in enumerate(sc_regs) if r == "en"]
             for k, p in zip(idx, self.cls_en3.predict([sc_texts[k] for k in idx]) if idx else []):
                 results[scored[k].index]["classifier_en3"] = p
+        if self.cls_en4 and self.cls_en4.ready:
+            idx = [k for k, r in enumerate(sc_regs) if r == "en"]
+            for k, p in zip(idx, self.cls_en4.predict([sc_texts[k] for k in idx]) if idx else []):
+                results[scored[k].index]["classifier_en4"] = p
         # 语言模型较慢：快速模式下抽样
         if self.lm and self.lm.ready:
             done = 0
@@ -532,7 +538,12 @@ class Engine:
                 if len(vals) < 2 or sum(n for _, n in vals) < 800:
                     continue
                 med = min(v for v, _ in vals) if len(vals) == 2 else _wmedian(vals)
-                if med >= config.EN3_DOC_THRESHOLD:
+                # 联合规则：v7 略低于单独阈值时，再看 v9（加入非论文真人英文训练）是否也判为整篇 AI
+                vals4 = [(results[i]["classifier_en4"], len(segs_by_idx[i].text)) for i in idxs
+                         if results[i].get("classifier_en4") is not None]
+                med4 = (min(v for v, _ in vals4) if len(vals4) == 2 else _wmedian(vals4)) if len(vals4) >= 2 else None
+                joint = (med4 is not None and med >= config.EN3_JOINT_THRESHOLD and med4 >= config.EN4_JOINT_THRESHOLD)
+                if med >= config.EN3_DOC_THRESHOLD or joint:
                     en3_hit = {i for i in idxs if smoothed.get(i) is not None
                                and smoothed[i] < float(prof[i][0].get("threshold", 0.5))}
                     zh2_ai |= en3_hit
@@ -742,6 +753,7 @@ class Engine:
                     "classifier_en2": bool(self.cls_en2 and self.cls_en2.ready),
                     "classifier_zh2": bool(self.cls_zh2 and self.cls_zh2.ready),
                     "classifier_en3": bool(self.cls_en3 and self.cls_en3.ready),
+                    "classifier_en4": bool(self.cls_en4 and self.cls_en4.ready),
                     "classifier_poetry": bool(self.cls_poetry and self.cls_poetry.ready),
                     "classifier_classical": bool(self.cls_classical and self.cls_classical.ready),
                 },
