@@ -4,7 +4,7 @@
 网址：https://zhuloujun--ai-text-checker-web.modal.run
 
 计费说明：Modal 每月送 $30 免费额度（需绑定付款方式；未绑定时为 $1），只在容器运行时计费。
-没人访问时容器会在 scaledown_window（10 分钟）后自动关闭，不再计费；
+没人访问时容器会在 scaledown_window（3 分钟）后自动关闭，不再计费；
 下次访问会自动启动，约需 1–2 分钟加载模型（加载完成前提交的检测会排队等待）。
 """
 from pathlib import Path
@@ -36,7 +36,7 @@ HAS_ZH2 = (ZH2_LOCAL / "config.json").exists()
 EN3_LOCAL = Path(__file__).resolve().parent / "english-doc-classifier"
 EN3_DIR = "/models/english-doc-classifier"
 HAS_EN3 = (EN3_LOCAL / "config.json").exists()
-CPU_CORES = 8
+CPU_CORES = 4
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -89,7 +89,7 @@ calib_volume = modal.Volume.from_name(CALIB_VOLUME_NAME, create_if_missing=True)
     timeout=3600,
     min_containers=0,             # 没人用时不保留容器，不计费
     max_containers=1,             # 只用一个容器：任务队列、用量统计都在内存里
-    scaledown_window=600,         # 最后一次访问 10 分钟后关闭
+    scaledown_window=180,         # 最后一次访问 3 分钟后关闭（省钱：空转也计费）
     volumes={"/data": calib_volume},
     secrets=[modal.Secret.from_name("ai-text-checker")],   # 含 ADMIN_TOKEN
 )
