@@ -81,13 +81,19 @@ async function proxy(request, env, url) {
   const init = { method: request.method, headers, redirect: 'manual' };
   if (request.method !== 'GET' && request.method !== 'HEAD') init.body = request.body;
 
+  // 打开首页时，如果完整版（Modal）暂时不可用（例如本月用量达到上限被暂停、服务出错），
+  // 自动改用轻量版（浏览器本地检测，不花钱），而不是给用户看一个报错页面。
+  const isHome = request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html');
+  const toLite = () => Response.redirect(url.origin + '/lite/', 302);
   let resp;
   try {
     resp = await fetch(target, init);
   } catch (e) {
+    if (isHome) return toLite();
     return json({ error: 'backend_unreachable',
       message: '检测服务暂时连不上，可能正在启动（闲置后首次访问需要 1–3 分钟），请稍后再试。' }, 502);
   }
+  if (isHome && resp.status >= 400) return toLite();
   const out = new Response(resp.body, resp);
   // 后端返回的跳转地址改回当前域名，避免把用户带到 modal.run
   const loc = out.headers.get('Location');
