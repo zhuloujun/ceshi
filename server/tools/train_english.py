@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import evaluate as ev  # noqa: E402
 
 GEN_DIR = ev.DATA_DIR / "gen_en"
-HUMAN_FILES = {"arxiv_human", "pubmed_human", "pmc_human"}
+HUMAN_FILES = {"arxiv_human", "pubmed_human", "pmc_human", "genre_human"}
 
 
 def split_of(key: str) -> str:
@@ -93,6 +93,11 @@ def build_rows(args, rnd):
     for h in load_jsonl(GEN_DIR / "pmc_human.jsonl"):      # 真人论文正文（引言、方法、结果、讨论），每篇取 4 个窗口
         text = re.sub(r"\s+([.,;:])", r"\1", h["text"])    # 去掉引用标注后留下的"空格 + 句号"，免得成了"真人"的标志
         raw.append((text, 0, "pmc-human-cn" if h.get("cn") else "pmc-human", split_of(h["title"]), 6))
+    # 非论文体裁的真人长文（新闻、故事、影评、学生论文、经典散文；tools/collect_human_en.py 收集）——
+    # 与 AI 一方的童话、散文、读后感（ge_*.jsonl）对应；没有它，模型会把真人新闻、故事也判成 AI（v8 的教训）
+    for h in load_jsonl(GEN_DIR / "genre_human.jsonl"):
+        if "genre_human" not in args.skip_prefix:
+            raw.append((h["text"], 0, f"genre-human-{h['source']}", split_of(h["title"]), args.genre_human_windows))
     gen_models = []
     for f in sorted(GEN_DIR.glob("*.jsonl")):
         if f.stem in HUMAN_FILES or any(f.stem.startswith(x) for x in args.skip_prefix):
@@ -134,6 +139,7 @@ def main():
     ap.add_argument("--max-len", type=int, default=320)
     ap.add_argument("--n-mage-human", type=int, default=6000, help="MAGE 人写取多少段（各领域均衡）")
     ap.add_argument("--n-mage-ai", type=int, default=2500, help="MAGE AI 取多少段")
+    ap.add_argument("--genre-human-windows", type=int, default=3, help="每篇非论文真人长文取几段")
     ap.add_argument("--skip-prefix", nargs="*", default=[], help="不使用这些前缀的生成数据（如 tr_），用于对比实验")
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--time-budget-min", type=float, default=270)
