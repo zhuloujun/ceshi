@@ -23,3 +23,5 @@ jobs:
           modal container list 2>&1 | head -10
           { echo '```'; modal app history ai-text-checker 2>&1 | head -15; modal container list 2>&1 | head -10; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           curl -s -m 60 "https://zhuloujun--ai-text-checker-web.modal.run/health" | python3 -c "import json,sys;d=json.load(sys.stdin);print('::notice title=health::'+json.dumps({k:d.get(k) for k in ('loading','classifier_en','classifier_en2','classifier_classical')}|{k:d.get('calibration',{}).get(k) for k in ('profiles','thresholds','user_profiles','source')},ensure_ascii=False))" || true
+          modal app list 2>&1 | head -30 | tr '\n' ' ' | sed 's/^/::notice title=modal app list::/'; echo
+          modal container list 2>&1 | head -20 | tr '\n' ' ' | sed 's/^/::notice title=modal container list::/'; echo
