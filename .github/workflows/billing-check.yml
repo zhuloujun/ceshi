@@ -1,0 +1,51 @@
+# 查看 Modal 每天、每个应用的费用和当前正在运行的容器（只能手动运行；不会唤醒网站后端）
+name: Modal 费用查询
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "从哪天开始（UTC）"
+        default: "2026-09-20"
+
+jobs:
+  billing:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pip install "modal==1.5.5"
+      - name: 查询
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          modal app list 2>&1 | tr '\n' ' ' | sed 's/^/::notice title=应用列表::/'; echo
+          modal container list 2>&1 | tr '\n' ' ' | sed 's/^/::notice title=正在运行的容器::/'; echo
+          modal billing report --start "${{ github.event.inputs.start }}" -r d --show-resources --json > daily.json 2> err.txt || cat err.txt
+          modal billing report --start "${{ github.event.inputs.start }}" -r h --json > hourly.json 2>> err.txt || true
+          python3 - <<'PY'
+          import json, collections
+          try:
+              d = json.load(open("daily.json"))
+          except Exception as e:
+              print("::error title=读取失败::" + str(e) + open("err.txt").read()[:2000]); raise SystemExit
+          rows = d if isinstance(d, list) else d.get("data", d.get("items", []))
+          print("::notice title=原始样例::" + json.dumps(rows[:3], ensure_ascii=False, default=str)[:3000])
+          by = collections.defaultdict(float)
+          for r in rows:
+              day = str(r.get("interval_start") or r.get("interval") or r.get("start"))[:10]
+              key = f"{day} {r.get('description') or r.get('object_id') or r.get('app_name') or ''} {r.get('resource') or ''}"
+              by[key] += float(r.get("cost") or 0)
+          lines = [f"{k}: ${v:.2f}" for k, v in sorted(by.items()) if v >= 0.01]
+          for i in range(0, len(lines), 40):
+              print("::notice title=每天费用（按应用/资源）::" + " | ".join(lines[i:i + 40]))
+          try:
+              h = json.load(open("hourly.json"))
+              h = h if isinstance(h, list) else h.get("data", [])
+              hb = collections.defaultdict(float)
+              for r in h:
+                  hb[str(r.get("interval_start") or r.get("interval"))[:13]] += float(r.get("cost") or 0)
+              recent = sorted(hb.items())[-72:]
+              print("::notice title=最近 72 小时每小时费用::" + " ".join(f"{k[5:]}={v:.2f}" for k, v in recent))
+          except Exception as e:
+              print("::warning::" + str(e))
+          PY
