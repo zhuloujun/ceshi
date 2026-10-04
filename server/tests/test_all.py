@@ -909,6 +909,7 @@ def test_chinese_second_classifier_whole_document(client, monkeypatch):
     para = "到敦煌的时候，正是正午。太阳白晃晃地悬在头顶，戈壁上的空气被晒得发颤，远远看去，像有什么东西在燃烧。" * 4
     doc = "敦煌\n" + para + "\n\n" + para.replace("敦煌", "鸣沙山") + "\n\n" + para.replace("正午", "黄昏")
     h = {"Authorization": "Bearer " + issue(client)}
+    monkeypatch.setattr(config, "DOC_CARRY_FLOOR", 0.0)
     monkeypatch.setattr(config, "ZH2_DOC_THRESHOLD", 0.0)
     res = client.post("/v1/detect", json={"text": doc, "wait": True}, headers=h).json()["result"]
     zh = [s for s in res["segments"] if s["register"] == "zh" and s["kind"] == "body"]
@@ -932,6 +933,7 @@ def test_english_whole_document_classifier(client, monkeypatch):
             "The city talks; the country sings, and the larks go up like small prayers into the morning sky. ") * 6
     doc = "Of Fields and Seasons\n" + para + "\n\n" + para.replace("country", "valley") + "\n\n" + para.replace("city", "town")
     h = {"Authorization": "Bearer " + issue(client)}
+    monkeypatch.setattr(config, "DOC_CARRY_FLOOR", 0.0)
     monkeypatch.setattr(config, "EN3_DOC_THRESHOLD", 0.0)
     res = client.post("/v1/detect", json={"text": doc, "wait": True}, headers=h).json()["result"]
     en = [s for s in res["segments"] if s["register"] == "en" and s["kind"] == "body"]
@@ -951,3 +953,36 @@ def test_english_whole_document_classifier(client, monkeypatch):
     monkeypatch.setattr(config, "EN4_JOINT_THRESHOLD", 1.01)
     res = client.post("/v1/detect", json={"text": doc + "...", "wait": True}, headers=h).json()["result"]
     assert not any(s["label"] == "中度疑似（整篇判断）" for s in res["segments"])
+
+
+
+def test_segmentation_mixed_collection_2026_10():
+    """一个文档里混排多篇作品（2026-10 用户测试 104.docx 暴露的问题）：
+    署名行"——某某"不是标题；【摘要】能认出论文题目；空行隔开的短标题是新作品；论文中间插入的另一篇作品单独成篇、
+    论文后面的"9 Conclusion"回到原来那篇；参考文献后面含年份的长段正文不算参考文献。"""
+    from app.segmenter import segment_text
+    zh_p = "她每天早上沿着河边走到车站，看见卖花的老人把一束束花摆在台阶上，阳光照在水面上，一闪一闪的。"
+    en_p = ("The morning was quiet, and the road ran down between the hedges toward the river. "
+            "I walked slowly, for there was nothing that required me to hurry, and the larks were up. ")
+    doc = "\n".join([
+        "小故事", "他们彼此深信，是一阵风让他们相遇。", "——某位诗人", zh_p * 3, "",
+        "基于多源数据融合的城市交通流量预测方法研究", "【摘要】" + "本文提出一种融合多源数据的预测方法，实验表明该方法有效。" * 4,
+        "【关键词】交通预测；多源数据", "1. 引言", "随着城市化进程加快，交通拥堵问题日益突出。" * 8, "",
+        "Field Notes on Irrigation", "Abstract: " + "This paper develops a transparent scheduling rule. " * 6,
+        "Keywords: irrigation; scheduling", "",
+        "2 Method", "We estimate the soil water balance for each day. " * 12, "",
+        "3 Results", "The rule changes the timing of irrigation decisions. " * 12, "",
+        "A Walk by the River", "", en_p * 5, "",
+        "4 Conclusion", "The procedure should be adopted as a testable rule. " * 10,
+        "References", "[1] Allen, R. G. (1998). Crop evapotranspiration. FAO Paper 56.", "",
+        "The Lake in August", "",
+        "One summer, along about 1904, my father rented a camp by a lake. " + en_p * 4,
+    ])
+    segs = [s for s in segment_text(doc) if s.text.strip()]
+    titles = {s.title: s.block for s in segs if s.title}
+    assert "——某位诗人" not in titles
+    assert "小故事" in titles
+    assert "基于多源数据融合的城市交通流量预测方法研究" in titles
+    method = next(s for s in segs if "2 Method" in s.text)
+    lake = next(s for s in segs if "rented a camp" in s.text)
+    assert lake.counted and lake.block != method.block

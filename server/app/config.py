@@ -53,7 +53,11 @@ EN3_DOC_THRESHOLD = float(os.getenv("EN3_DOC_THRESHOLD", "0.92") or 0.92)
 EN4_CLASSIFIER_MODEL = os.getenv("EN4_CLASSIFIER_MODEL", "")
 EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v9")
 EN3_JOINT_THRESHOLD = float(os.getenv("EN3_JOINT_THRESHOLD", "0.85") or 0.85)
-EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.952") or 0.952)
+EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.953") or 0.953)
+# 整篇判断只带上自己的整篇分类器得分 ≥ 这个值的段落（插在 AI 文章中间的真人段落不跟着计入）
+DOC_CARRY_FLOOR = float(os.getenv("DOC_CARRY_FLOOR", "0.5") or 0.5)
+# 国产大模型中文分类器整篇中位数低于这个值（明确像人写）时，不用 MPU 中文分类器的整篇判断
+ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
 ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v2")
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
