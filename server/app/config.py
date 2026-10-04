@@ -51,14 +51,21 @@ EN3_DOC_THRESHOLD = float(os.getenv("EN3_DOC_THRESHOLD", "0.92") or 0.92)
 #   "v7 整篇 ≥ EN3_JOINT_THRESHOLD 且 v9 整篇 ≥ EN4_JOINT_THRESHOLD" → 394 篇真人英文长文 0 篇命中，用户的 17 篇 AI 文档全部命中
 #   （包括豆包田园散文《Of Fields and Seasons》：v7 0.857 / v9 0.956；最接近的真人：v7 0.851 / v9 0.947）。
 EN4_CLASSIFIER_MODEL = os.getenv("EN4_CLASSIFIER_MODEL", "")
-EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v9")
+EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v10")
+# v10（2026-10-04）：在 v9 基础上加入 253 篇"去 AI 味"改写的英文（DeepSeek / 千问 / 豆包 / Kimi / 文心先写、再按"降 AI 率"
+# 指令改写），专门针对用户用 ChatGPT / Gemini 写的"规避检测"文章。验证（397 篇真人英文长文 + 21 篇用户 AI 文档）：
+#   v7 ≥ 0.85 且 v10 ≥ 0.95 → 真人 0 篇，用户 AI 19 篇；另一档 v7 ≥ 0.75 且 v10 ≥ 0.955 → 真人 0 篇，再多认出 The Seam in the Night
 EN3_JOINT_THRESHOLD = float(os.getenv("EN3_JOINT_THRESHOLD", "0.85") or 0.85)
-EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.953") or 0.953)
+EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.95") or 0.95)
+EN3_JOINT2_THRESHOLD = float(os.getenv("EN3_JOINT2_THRESHOLD", "0.75") or 0.75)
+EN4_JOINT2_THRESHOLD = float(os.getenv("EN4_JOINT2_THRESHOLD", "0.955") or 0.955)
 # 整篇判断只带上自己的整篇分类器得分 ≥ 这个值的段落（插在 AI 文章中间的真人段落不跟着计入）
 DOC_CARRY_FLOOR = float(os.getenv("DOC_CARRY_FLOOR", "0.5") or 0.5)
 # 国产大模型中文分类器整篇中位数低于这个值（明确像人写）时，不用 MPU 中文分类器的整篇判断
 ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
-ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v2")
+# v3（2026-10-04）：加入 287 篇"去 AI 味"改写的中文（五家国产模型先写再按"降 AI 率"指令改写，或一步要求"写得不像 AI"）。
+# 没参与训练的 ChatGPT / Gemini"规避检测"中文文章 6 篇里 5 篇整篇 ≥ 0.92；没参与训练的真人文档整篇最高 0.05（v2 为 0.08）。
+ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v3")
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
 POETRY_CLASSIFIER_ID = os.getenv("POETRY_CLASSIFIER_ID", "poetry-classifier-v1")   # 校准参数按这个名字匹配模型

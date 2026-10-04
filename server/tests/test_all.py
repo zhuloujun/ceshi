@@ -941,6 +941,7 @@ def test_english_whole_document_classifier(client, monkeypatch):
     assert all(s["label"] == "中度疑似（整篇判断）" for s in en), [s["label"] for s in en]
     monkeypatch.setattr(config, "EN3_DOC_THRESHOLD", 1.01)
     monkeypatch.setattr(config, "EN3_JOINT_THRESHOLD", 1.01)
+    monkeypatch.setattr(config, "EN3_JOINT2_THRESHOLD", 1.01)
     res = client.post("/v1/detect", json={"text": doc + ".", "wait": True}, headers=h).json()["result"]
     assert not any(s["label"] == "中度疑似（整篇判断）" for s in res["segments"])
     # 联合规则：单独阈值没过，但两个英文整篇分类器都达到联合阈值 → 仍按整篇判断计入；任一个没过 → 不计入
