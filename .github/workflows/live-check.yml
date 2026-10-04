@@ -52,9 +52,11 @@ jobs:
                 pos += len(t) + 3
             mixed = "\n\n\n".join(parts)
             j = call("/v1/detect", {"text": mixed, "wait": True}, {"Authorization": "Bearer " + tok})
-            while j.get("status") not in ("done", "error"):
+            while j.get("status") not in ("done", "error") and "job_id" in j:
                 time.sleep(5)
                 j = call(f"/v1/jobs/{j['job_id']}", headers={"Authorization": "Bearer " + tok})
+            if not j.get("result"):
+                print("::warning title=混排验收未完成::" + f"文本 {len(mixed)} 字；服务返回：" + json.dumps(j, ensure_ascii=False)[:600], flush=True)
             res = j.get("result") or {}
             per, cur = {}, 0
             for g in res.get("segments", []):
@@ -84,7 +86,7 @@ jobs:
             for (doc, y), paras in docs.items():
               for sep in ("\n\n", "\n"):
                 j = call("/v1/detect", {"text": sep.join(paras), "wait": True}, {"Authorization": "Bearer " + tok})
-                while j.get("status") not in ("done", "error"):
+                while j.get("status") not in ("done", "error") and "job_id" in j:
                     time.sleep(5)
                     j = call(f"/v1/jobs/{j['job_id']}", headers={"Authorization": "Bearer " + tok})
                 res = j.get("result") or {}
@@ -98,6 +100,7 @@ jobs:
                     problems.append(doc + "：" + " | ".join(
                         f"{g.get('label') or g.get('kind')} p{round((g.get('prob') or g.get('ref_prob') or 0) * 100)} "
                         f"cls{round((g.get('raw') or {}).get('classifier', -1) * 100)} en2{round((g.get('raw') or {}).get('classifier_en2', -1) * 100)} "
+                        f"zh2{round((g.get('raw') or {}).get('classifier_zh2', -1) * 100)} en4{round((g.get('raw') or {}).get('classifier_en4', -1) * 100)} "
                         f"ppl{round(2.718 ** (g.get('raw') or {}).get('ppl', 0), 1)} bu{round((g.get('raw') or {}).get('lp_burstiness') or 0, 2)} n{g.get('chars')} 「{g['text'][:12].replace(chr(10), ' ')}」"
                         for g in res.get("segments", [])))
                 if doc.startswith("Scallion"):

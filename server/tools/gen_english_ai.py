@@ -440,6 +440,28 @@ GENRE_TOPICS = ["小狐狸与月亮", "勇敢的小兔子", "会说话的大树"
                 "The Old Stone Bridge", "Of Snow", "稻田与白鹭", "On Returning Home"]
 
 
+# "去 AI 味"改写（2026-10：用户用 ChatGPT / Gemini 专门写的"规避 AI 检测"文章——句子长短交错、处处加限定、
+# 明确标注"假设算例"、不用套话——中英文都几乎全部漏检）。对抗训练：先按普通指令写，再让模型自己"降 AI 率"改写；
+# 另有一部分一步到位，直接要求"写得不像 AI"。这是 Turnitin / GPTZero 等平台近年专门加的"改写 / 绕过工具"检测思路。
+HUMANIZE_EN = [
+    "Rewrite the following text so that it reads as if a careful human author wrote it by hand and passes AI detectors "
+    "such as Turnitin and GPTZero: vary sentence length (some very short), avoid stock phrases like 'Moreover', "
+    "'Furthermore', 'In conclusion', 'It is worth noting', 'delve', avoid tidy lists of three, add concrete specifics and "
+    "honest qualifications, keep the title, headings and overall structure. Output only the rewritten text.\n\n{text}",
+    "Please humanize this text. Make it sound natural and personal, less polished and less symmetrical, the way a real "
+    "researcher or writer would draft it. Keep the meaning. No Markdown. Output only the result.\n\n{text}",
+    "降低下面这篇英文文章的AI率：用更自然、更像真人的英文改写，调整句式和用词，打破过于整齐的段落和排比，"
+    "但保持原意和结构。只输出改写后的英文全文。\n\n{text}",
+]
+HUMANIZE_ONESHOT_EN = [
+    "用英文写一篇关于{t}的论文，包含摘要、关键词、分节正文、结论和参考文献。要求读起来完全不像AI写的：不用套话，句子长短不一，"
+    "论证里明确说明假设和适用范围，算例标注为假设，不夸大结论。",
+    "Write an English essay about {t} that no AI detector would flag: plain, specific, uneven rhythm, no clichés, "
+    "no summary paragraph at the end.",
+    "用英文写一篇关于{t}的短篇故事或散文，要求像真人作家手写的，避免AI常见的写法，不要每段都很整齐，不要在结尾总结道理。",
+]
+
+
 def genre_topics(rnd):
     ts = GENRE_TOPICS * 3
     rnd.shuffle(ts)
@@ -490,7 +512,12 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
     rnd = random.Random(f"{name}-{out_f.name}")
     done = {r["title"] + "|" + r.get("ver", "") for r in load_jsonl(out_f)}
     n_new = 0
-    topics, styles = (genre_topics(rnd), GENRE_STYLE) if out_f.name.startswith("ge_") else (user_style_topics(rnd), USER_STYLE)
+    humanize = out_f.name.startswith("hu_")
+    if humanize:                                   # 论文和非论文体裁交替
+        topics = [x for pair in zip(user_style_topics(rnd), genre_topics(rnd)) for x in pair]
+        styles = [x for pair in zip(USER_STYLE * 2, GENRE_STYLE) for x in pair]
+    else:
+        topics, styles = (genre_topics(rnd), GENRE_STYLE) if out_f.name.startswith("ge_") else (user_style_topics(rnd), USER_STYLE)
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
@@ -502,10 +529,16 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         tpl = styles[(i + i // len(styles)) % len(styles)]
         prompt = tpl.format(t=t, t_en=t) if "{t_en}" not in tpl else (
             f"Write a short academic paper in English on the topic \"{t}\" (translate the topic). Strictly follow the standard paper format.")
+        kind = "user_style"
+        if humanize and rnd.random() < 0.3:
+            prompt, kind = rnd.choice(HUMANIZE_ONESHOT_EN).format(t=t), "humanize_oneshot"
         text = chat(url, key, model, prompt, rnd.choice([0.7, 0.8, 0.95]), 3500)
+        if humanize and text and kind == "user_style" and len(text) > 800:
+            text = chat(url, key, model, rnd.choice(HUMANIZE_EN).format(text=clean(text)[:9000]), 0.9, 4000)
+            kind = "humanize_rewrite"
         if text and len(text) > 800:
             with lock, out_f.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps({"title": t, "kind": "user_style", "model": name, "ver": model, "text": clean(text)},
+                fh.write(json.dumps({"title": t, "kind": kind, "model": name, "ver": model, "text": clean(text)},
                                     ensure_ascii=False) + "\n")
             n_new += 1
         if i % 20 == 0:
@@ -548,7 +581,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -557,7 +590,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -575,9 +608,10 @@ def main():
             print(f"未设置 {env}，跳过 {name}", flush=True)
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
-                       "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
+                       "humanize": f"hu_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre"):
+        if args.source in ("userstyle", "genre", "humanize"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":

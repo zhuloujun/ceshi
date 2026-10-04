@@ -52,6 +52,22 @@ GENRES = [
 ]
 
 
+# "去 AI 味"改写（对抗训练数据，见 gen_english_ai.HUMANIZE_EN 的说明）：输出到 ai_<家>hum.jsonl
+HUMANIZE_ZH = [
+    "下面是一篇文章。请把它改写成读起来完全像真人亲手写的样子，以降低知网、维普、Turnitin 等 AIGC 检测的 AI 率："
+    "不要用“首先、其次、此外、总之、值得注意的是、综上所述”之类的套话和排比；句子长短交错，有的句子很短；"
+    "少用华丽修辞，多写具体细节和限定条件；保留原来的标题、小标题和结构。只输出改写后的全文。\n\n{text}",
+    "请重写这篇文章：语气平实，像一位认真的作者自己写的，没有 AI 腔；论述中说明前提和适用范围；不要用 Markdown 符号。只输出正文。\n\n{text}",
+    "把下面的文字降重并降低 AI 率：调整句式和用词，打乱过于整齐的段落结构和对仗，但不要改变意思。只输出改写结果。\n\n{text}",
+]
+HUMANIZE_ONESHOT_ZH = [
+    "写一篇关于{t}的中文论文，包含摘要、关键词、分节正文、结论和参考文献。要求读起来完全不像 AI 写的：不用套话，"
+    "句子长短不一，算例明确标注为假设，说明方法的适用边界，不夸大结论。",
+    "以《{t}》为题写一篇散文，要求像真人作家手写的，避免 AI 常见的排比、对仗和“那一刻我才明白”式的感悟，结尾不要总结道理。",
+    "写一篇关于{t}的文章，要能通过 AIGC 检测（AI 率低于 5%），写得自然、具体、有个人经历的细节。",
+]
+
+
 def clean(t: str) -> str:
     t = re.sub(r"^\s*#+\s*", "", t, flags=re.M).replace("**", "")
     lines = [l for l in t.splitlines() if not re.fullmatch(r"\s*[-=*_|]{3,}\s*", l)]
@@ -66,7 +82,8 @@ def run(name, key, endpoints, n, t0, budget, lock):
     eps = g.working_endpoints(name, key, endpoints, limit=3)
     if not eps:
         return
-    out_f = OUT / f"ai_{name}.jsonl"
+    humanize = os.getenv("HUMANIZE") == "1"
+    out_f = OUT / (f"ai_{name}hum.jsonl" if humanize else f"ai_{name}.jsonl")
     done = {r["title"] + "|" + r["ver"] + "|" + r["genre"] for r in load(out_f)}
     rnd = random.Random(f"zh-{name}")
     jobs = [(gen, t, tpl) for gen, topics, tpls in GENRES for t in topics for tpl in tpls]
@@ -78,7 +95,13 @@ def run(name, key, endpoints, n, t0, budget, lock):
         url, model = eps[i % len(eps)]
         if f"{t}|{model}|{gen}" in done:
             continue
-        text = g.chat(url, key, model, tpl.format(t=t), rnd.choice([0.7, 0.8, 0.95]), 3000)
+        prompt = tpl.format(t=t)
+        if humanize and rnd.random() < 0.3:
+            prompt = rnd.choice(HUMANIZE_ONESHOT_ZH).format(t=t)
+            tpl = "oneshot:" + prompt[:30]
+        text = g.chat(url, key, model, prompt, rnd.choice([0.7, 0.8, 0.95]), 3000)
+        if humanize and text and not tpl.startswith("oneshot:") and len(re.findall(r"[一-鿿]", text)) > 500:
+            text = g.chat(url, key, model, rnd.choice(HUMANIZE_ZH).format(text=clean(text)[:6000]), 0.9, 3500)
         if text and len(re.findall(r"[一-鿿]", text)) > 500:
             with lock, out_f.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps({"title": t, "genre": gen, "model": name, "ver": model, "prompt": tpl,
