@@ -21,7 +21,10 @@ jobs:
           modal app list 2>&1 | tr '\n' ' ' | sed 's/^/::notice title=应用列表::/'; echo
           modal container list 2>&1 | tr '\n' ' ' | sed 's/^/::notice title=正在运行的容器::/'; echo
           modal billing report --start "${{ github.event.inputs.start }}" -r d --show-resources --json > daily.json 2> err.txt || cat err.txt
-          modal billing report --start "${{ github.event.inputs.start }}" -r h --json > hourly.json 2>> err.txt || true
+          modal billing report --start "$(date -u -d '3 days ago' +%F)" -r h --json > hourly.json 2> err2.txt || true
+          head -c 1500 err2.txt | tr '\n' ' ' | sed 's/^/::notice title=hourly err::/'; echo; head -c 300 hourly.json | tr '\n' ' ' | sed 's/^/::notice title=hourly head::/'; echo
+          timeout 40 modal app logs ai-text-checker > logs.txt 2>&1 || true
+          grep -E "GET|POST" logs.txt | tail -60 | tr '\n' ' ' | sed 's/^/::notice title=最近请求::/'; echo
           python3 - <<'PY'
           import json, collections
           try:
