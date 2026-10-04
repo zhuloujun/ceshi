@@ -69,15 +69,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
     ap.add_argument("--n", type=int, default=150)
+    ap.add_argument("--model2", default="", help="第二个分类器：两个都打分，报告“两个都高才判”的联合规则")
     a = ap.parse_args()
     from app.segmenter import normalize_english, segment_text
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(a.model)
-    model = AutoModelForSequenceClassification.from_pretrained(a.model).float().eval()
     torch.set_num_threads(4)
+    models = []
+    for path in [a.model] + ([a.model2] if a.model2 else []):
+        models.append((AutoTokenizer.from_pretrained(path),
+                       AutoModelForSequenceClassification.from_pretrained(path).float().eval()))
 
-    def score(texts):
+    def score(texts, mi=0):
+        tok, model = models[mi]
         out = []
         with torch.inference_mode():
             for i in range(0, len(texts), 16):
@@ -85,11 +89,13 @@ def main():
                 out += torch.softmax(model(**enc).logits.float(), -1)[:, 1].tolist()
         return out
 
-    def doc_median(text):
+    pairs = {"human": [], "user": {}}
+
+    def doc_median(text, mi=0):
         segs = [s for s in segment_text(text) if s.counted and s.register == "en"]
         if len(segs) < 2:
             return None, []
-        ps = score([normalize_english(" ".join(s.text.split())) for s in segs])
+        ps = score([normalize_english(" ".join(s.text.split())) for s in segs], mi)
         vals = sorted(zip(ps, [len(s.text) for s in segs]))
         if len(vals) == 2:
             return min(ps), ps
@@ -108,7 +114,14 @@ def main():
         except Exception as e:  # noqa: BLE001
             print(f"::warning title={name} 下载失败::{e}", flush=True)
             continue
-        meds = [m for m, _ in (doc_median(t) for t in docs) if m is not None]
+        meds = []
+        for t in docs:
+            m, _ = doc_median(t)
+            if m is None:
+                continue
+            meds.append(m)
+            if len(models) > 1:
+                pairs["human"].append((name, round(m, 4), round(doc_median(t, 1)[0], 4)))
         res["human"][name] = sorted(round(m, 4) for m in meds)
         print(f"::notice title=真人英文 {name}::{len(meds)} 篇；整篇中位数最高 {max(meds) if meds else None:.3f}，"
               f"≥0.5 的 {sum(m >= 0.5 for m in meds)} 篇，≥0.8 的 {sum(m >= 0.8 for m in meds)} 篇，≥0.9 的 {sum(m >= 0.9 for m in meds)} 篇", flush=True)
@@ -119,12 +132,27 @@ def main():
             by.setdefault((r["doc"], r["y"]), []).append(r["text"])
     for (doc, y), paras in by.items():
         m, ps = doc_median("\n\n".join(paras))
+        if len(models) > 1 and m is not None:
+            pairs["user"][f"{doc}（{'AI' if y else '真人'}）"] = (round(m, 4), round(doc_median("\n\n".join(paras), 1)[0], 4))
         res["user"][f"{doc}（{'AI' if y else '真人'}）"] = {"median": None if m is None else round(m, 3), "segs": [round(p, 2) for p in ps]}
     allh = [m for v in res["human"].values() for m in v]
     res["human_max"] = max(allh) if allh else None
     print("::notice title=真人英文整篇最高::" + json.dumps({"max": res["human_max"], "n": len(allh),
           "p99": sorted(allh)[int(len(allh) * 0.99) - 1] if allh else None}, ensure_ascii=False), flush=True)
     print("::notice title=用户文档整篇::" + json.dumps({k: v["median"] for k, v in res["user"].items()}, ensure_ascii=False)[:3800], flush=True)
+    if len(models) > 1:
+        hp = pairs["human"]
+        top = sorted(hp, key=lambda x: -min(x[1], x[2]))[:12]
+        print("::notice title=联合打分：真人最像 AI 的 12 篇（来源, 模型1, 模型2）::" + json.dumps(top, ensure_ascii=False), flush=True)
+        print("::notice title=联合打分：用户文档（模型1, 模型2）::" + json.dumps(pairs["user"], ensure_ascii=False)[:3800], flush=True)
+        grid = []
+        for t1 in (0.75, 0.8, 0.83, 0.85):
+            for t2 in (0.9, 0.93, 0.95, 0.955):
+                fp = sum(1 for _, x, z in hp if x >= t1 and z >= t2)
+                ai = [k for k, (x, z) in pairs["user"].items() if "（AI）" in k and x >= t1 and z >= t2]
+                grid.append(f"{t1}/{t2}: 真人 {fp}/{len(hp)}，用户 AI {len(ai)}/{sum('（AI）' in k for k in pairs['user'])}")
+        print("::notice title=联合规则（模型1≥a 且 模型2≥b）::" + " ； ".join(grid), flush=True)
+        res["pairs"] = pairs
     (DATA / "en_doc_check.json").write_text(json.dumps(res, ensure_ascii=False, indent=0), "utf-8")
 
 

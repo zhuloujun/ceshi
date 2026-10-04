@@ -10,6 +10,9 @@ on:
       n:
         description: "每个真人来源取多少篇"
         default: "150"
+      tag2:
+        description: "第二个分类器 Release 名（可留空；填了就报告两个模型的联合规则）"
+        default: ""
 
 permissions:
   contents: write
@@ -30,7 +33,12 @@ jobs:
         run: |
           gh release download "${{ github.event.inputs.tag }}" -p english-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
           mkdir -p /tmp/x && tar xzf /tmp/english-classifier.tar.gz -C /tmp/x
-          cd server && python -u tools/en_doc_check.py --model /tmp/x/english-classifier --n "${{ github.event.inputs.n }}"
+          M2=""
+          if [ -n "${{ github.event.inputs.tag2 }}" ]; then
+            gh release download "${{ github.event.inputs.tag2 }}" -p english-classifier.tar.gz -D /tmp/y -R "${{ github.repository }}"
+            mkdir -p /tmp/y/x && tar xzf /tmp/y/english-classifier.tar.gz -C /tmp/y/x && M2="--model2 /tmp/y/x/english-classifier"
+          fi
+          cd server && python -u tools/en_doc_check.py --model /tmp/x/english-classifier --n "${{ github.event.inputs.n }}" $M2
       - name: 提交
         if: always()
         run: |
