@@ -147,8 +147,8 @@ async function handleFile(file){
     } else if(ext === 'docx'){
       const buf = await file.arrayBuffer();
       currentArrayBuffer = buf; // 供后续字体/隐藏文字/表格分析使用
-      const result = await mammoth.extractRawText({ arrayBuffer: buf });
-      text = result.value;
+      try{ text = await docxPlainText(buf); }        // 保留段内手动换行（mammoth 会丢掉）
+      catch(e){ text = (await mammoth.extractRawText({ arrayBuffer: buf })).value; }
     } else if(ext === 'pdf'){
       const buf = await file.arrayBuffer();
       currentArrayBuffer = buf;
@@ -1134,3 +1134,27 @@ exportBtn.addEventListener('click', ()=>{
   a.click();
   URL.revokeObjectURL(url);
 });
+
+
+/* .docx 正文提取：段落之间空一行、段内手动换行（<w:br/>）保留——mammoth.extractRawText 会把它们丢掉 */
+async function docxPlainText(arrayBuffer){
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const f = zip.file('word/document.xml');
+  if(!f) throw new Error('未找到 word/document.xml');
+  const xml = await f.async('string');
+  const dec = (t)=>t.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'")
+                   .replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&');
+  const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:t\s*\/>|<w:tab\/>|<w:br\b[^>]*\/>|<w:cr\/>|<\/w:p>|<w:p\b[^>]*\/>/g;
+  let out = '', m;
+  while((m = re.exec(xml))){
+    const tok = m[0];
+    if(m[1] !== undefined) out += dec(m[1]);
+    else if(tok.startsWith('<w:tab')) out += '\t';
+    else if(tok.startsWith('<w:br') || tok.startsWith('<w:cr')) out += '\n';
+    else if(tok === '</w:p>' || tok.startsWith('<w:p')) out += '\n\n';
+  }
+  out = out.replace(/[ \t]+\n/g, '\n').replace(/\n{5,}/g, '\n\n\n\n').trim();
+  if(!out) throw new Error('empty');
+  return out;
+}
+

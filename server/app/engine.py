@@ -455,7 +455,17 @@ class Engine:
         # 多半是插进来的真人文字（2026-10：AI 论文中间插入的 Walden 片段，自己的得分只有 5%），不应跟着计入。
         def own_ok(i, *keys):
             vals = [results[i].get(k) for k in keys if results[i].get(k) is not None]
-            return not vals or max(vals) >= config.DOC_CARRY_FLOOR
+            return (not vals or max(vals) >= config.DOC_CARRY_FLOOR) and i not in en_verse
+
+        # 英文诗 / 分行散文诗（Whitman、泰戈尔《The Journey》）：多数行很短、按行断开。整篇分类器是用散文训练的，
+        # 对分行的诗不可靠（泰戈尔《吉檀迦利》两个整篇分类器都打到 0.88–0.95），这类段落只按自己的得分判断，不参与整篇判断。
+        en_verse = set()
+        for s_ in segs:
+            if s_.register != "en":
+                continue
+            lines = [l.strip() for l in s_.text.splitlines() if l.strip()][1:] or [""]
+            if len(lines) >= 4 and sorted(len(l) for l in lines)[len(lines) // 2] <= 80:
+                en_verse.add(s_.index)
 
         paper_ai = set()
         if en_paper:

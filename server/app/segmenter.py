@@ -415,7 +415,10 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             # 论文里同格式的小标题是章节；只有文字换了（英文论文中间出现中文标题"國語文學史"，或反过来）才是插进来的另一篇
             prev_text = buf if buf.strip() else (segments[-1].text if segments else "")
             cur_zh = len(_CJK.findall(prev_text)) * 2 > len(_LATIN.findall(prev_text))
-            iso_new = bool(_CJK.search(stripped)) != cur_zh
+            # 论文本身用编号小标题（已出现 ≥ 2 个"3 A worked example"这样的编号章节），而这一行不带编号、也不是
+            # 章节名：是插进来的另一篇作品（"Walden"）。论文里的小节通常也带编号（"2.1"），不带编号的极少单独成行。
+            numbered_paper = blk_numsec >= 2 and not _SECTION_NUM.match(stripped) and not _SECTION_NAMES.match(stripped)
+            iso_new = bool(_CJK.search(stripped)) != cur_zh or numbered_paper
         # 论文内部不带编号的英文小标题（"Risk Factors and Prevention"）是章节，不是新作品
         if (title and blk_paper and stripped not in paper_titles and not _CJK.search(stripped) and not iso_new
                 and not _WORK_LABEL.match(stripped)):

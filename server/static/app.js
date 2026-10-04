@@ -133,7 +133,8 @@ async function handleFile(file, opts){
     } else if(ext === 'docx'){
       const buf = await file.arrayBuffer();
       currentArrayBuffer = buf;
-      text = (await mammoth.extractRawText({ arrayBuffer: buf })).value;
+      try{ text = await docxPlainText(buf); }
+      catch(e){ text = (await mammoth.extractRawText({ arrayBuffer: buf })).value; }
     } else if(ext === 'pdf'){
       const buf = await file.arrayBuffer();
       currentArrayBuffer = buf;
@@ -711,6 +712,32 @@ function analyzePunctuation(text){
         desc:'部分学科（如理工科）要求用"．"作句号，但全文应统一。' });
 
   return items;
+}
+
+/* ---------------- .docx 正文提取 ----------------
+   不用 mammoth.extractRawText：它会丢掉段落内的手动换行（Shift+Enter，<w:br/>），
+   诗句被连成一行（"songs;and"）、逐句换行的段落句子粘在一起（"philosophy.The"），
+   标题和上一篇的最后一段也会粘成一段，导致分篇错误（2026-10 用户测试 104.docx）。
+   这里直接读 document.xml：段落之间空一行，段内换行保留为换行，制表符保留。 */
+async function docxPlainText(arrayBuffer){
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const f = zip.file('word/document.xml');
+  if(!f) throw new Error('未找到 word/document.xml');
+  const xml = await f.async('string');
+  const dec = (t)=>t.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'")
+                   .replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&');
+  const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:t\s*\/>|<w:tab\/>|<w:br\b[^>]*\/>|<w:cr\/>|<\/w:p>|<w:p\b[^>]*\/>/g;
+  let out = '', m;
+  while((m = re.exec(xml))){
+    const tok = m[0];
+    if(m[1] !== undefined) out += dec(m[1]);
+    else if(tok.startsWith('<w:tab')) out += '\t';
+    else if(tok.startsWith('<w:br') || tok.startsWith('<w:cr')) out += '\n';
+    else if(tok === '</w:p>' || tok.startsWith('<w:p')) out += '\n\n';
+  }
+  out = out.replace(/[ \t]+\n/g, '\n').replace(/\n{5,}/g, '\n\n\n\n').trim();
+  if(!out) throw new Error('empty');
+  return out;
 }
 
 /* ---------------- .docx 深度格式分析 ---------------- */
