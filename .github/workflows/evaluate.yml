@@ -23,6 +23,14 @@ on:
       - "!server/tools/data/gen_en/**"
       - "!server/tools/data/eval_en_user_docs.jsonl"
       - "!server/tools/compare_experiment.py"
+      - "!server/tools/kaggle_train.py"
+      - "!server/tools/train_chinese.py"
+      - "!server/tools/train_chinese_modal.py"
+      - "!server/tools/gen_chinese_ai.py"
+      - "!server/tools/zh_doc_check.py"
+      - "!server/tools/en_doc_check.py"
+      - "!server/tools/data/gen_zh/**"
+      - "!server/tools/data/*_doc_check.json"
       - ".github/workflows/evaluate.yml"
   workflow_dispatch:
     inputs:
