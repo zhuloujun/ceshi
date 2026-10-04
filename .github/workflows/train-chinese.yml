@@ -7,6 +7,9 @@ on:
       args:
         description: "传给 train_chinese.py 的额外参数（可留空）"
         default: ""
+      backend:
+        description: "在哪里训练：kaggle（免费 GPU，默认）或 modal（付费额度）"
+        default: "kaggle"
       tag:
         description: "发布到哪个 Release"
         default: "chinese-classifier-v1"
@@ -24,20 +27,27 @@ env:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install "modal==1.5.5"
-      - name: 在 Modal GPU 上训练
+      - run: pip install "modal==1.5.5" "kaggle>=2.0"
+      - name: 在 GPU 上训练（Kaggle 免费 / Modal）
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
         run: |
           ls server/tools/data/gen_zh || { echo "::error::还没有生成中文数据"; exit 1; }
-          modal run server/tools/train_chinese_modal.py --args "${{ github.event.inputs.args }}"
+          if [ "${{ github.event.inputs.backend || 'kaggle' }}" = "modal" ]; then
+            modal run server/tools/train_chinese_modal.py --args "${{ github.event.inputs.args }}"
+          else
+            python -u server/tools/kaggle_train.py --lang zh --sha "$GITHUB_SHA" --args "${{ github.event.inputs.args }}"
+          fi
           mkdir -p /tmp/x && tar xzf chinese-classifier.tar.gz -C /tmp/x
           python3 - <<'PY'
           import json
