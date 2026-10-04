@@ -22,21 +22,81 @@ OUT = Path(__file__).resolve().parent / "data" / "gen_en" / "genre_human.jsonl"
 SOURCES = [  # (数据集, 配置, 字段, 名称, 篇数, 最少词数)
     ("abisee/cnn_dailymail", "3.0.0", "article", "news", 450, 450),
     ("euclaise/writingprompts", None, "story", "story", 450, 350),
-    ("stanfordnlp/imdb", None, "text", "review", 250, 350),
+    ("stanfordnlp/imdb", None, "text", "review", 250, 300),
     ("qwedsacf/ivypanda-essays", None, "TEXT", "essay", 450, 450),
-    ("sedthh/gutenberg_english", None, "TEXT", "classic", 350, 0),
+    ("gutendex", None, None, "classic", 350, 0),
 ]
+# 古腾堡（公版）经典散文 / 随笔 / 自然与乡村题材——与豆包写的"田园散文"文风最接近
+GUTENDEX_TOPICS = ["essays", "country life", "nature", "natural history", "seasons", "description and travel", "farm life"]
 
 
-def _get(url):
-    for i in range(3):
+def gutenberg_docs(want, rnd):
+    books, seen = [], set()
+    for topic in GUTENDEX_TOPICS:
+        for page in (1, 2):
+            try:
+                d = _get(f"https://gutendex.com/books/?languages=en&topic={urllib.parse.quote(topic)}&page={page}")
+            except Exception as e:  # noqa: BLE001
+                print(f"::warning title=gutendex {topic}::{e}", flush=True)
+                break
+            for b in d.get("results", []):
+                if b["id"] in seen:
+                    continue
+                years = [a.get("death_year") or 0 for a in b.get("authors", [])]
+                if years and max(years) > 1960:        # 只要早已进入公版的作者
+                    continue
+                url = next((u for k, u in b.get("formats", {}).items() if k.startswith("text/plain") and not u.endswith(".zip")), None)
+                if url:
+                    seen.add(b["id"])
+                    books.append((b["title"], url))
+            if not d.get("next"):
+                break
+    rnd.shuffle(books)
+    print(f"::notice title=gutendex::找到 {len(books)} 本", flush=True)
+    out = []
+    for title, url in books:
         try:
-            with urllib.request.urlopen(url, timeout=90) as r:
-                return json.loads(r.read())
-        except Exception:  # noqa: BLE001
-            if i == 2:
+            t = _get(url, raw=True).decode("utf-8", "replace").replace("\r", "")
+        except Exception as e:  # noqa: BLE001
+            print(f"  {title}: {e}", flush=True)
+            continue
+        m = re.search(r"\*\*\* ?START OF.*?\*\*\*(.*)\*\*\* ?END OF", t, re.S)
+        t = m.group(1) if m else t
+        paras = [" ".join(p.split()) for p in re.split(r"\n\s*\n", t)]
+        paras = [p for p in paras if len(p.split()) >= 40 and not re.search(r"gutenberg|chapter [ivxl\d]+\b|^\[|illustration", p, re.I)]
+        if len(paras) < 30:
+            continue
+        for _ in range(4):                                     # 每本书取 4 个约 900 词的片段
+            st = rnd.randint(len(paras) // 10, max(len(paras) // 10, len(paras) - 15))
+            buf, n = [], 0
+            for p in paras[st:]:
+                buf.append(p)
+                n += len(p.split())
+                if n >= 900:
+                    break
+            if n >= 600:
+                out.append("\n\n".join(buf))
+        if len(out) >= want:
+            break
+    return out[:want]
+
+
+def _get(url, raw=False):
+    for i in range(4):
+        try:
+            time.sleep(1.0)                                   # 放慢，避免 429 Too Many Requests
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (research data collection)"})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = r.read()
+                return data if raw else json.loads(data)
+        except urllib.error.HTTPError as e:
+            if i == 3:
                 raise
-            time.sleep(3)
+            time.sleep(30 if e.code == 429 else 5)
+        except Exception:  # noqa: BLE001
+            if i == 3:
+                raise
+            time.sleep(5)
 
 
 def rows(dataset, config, field, want, min_words, rnd):
@@ -114,7 +174,7 @@ def main():
             continue
         have = [h for h in have if h["source"] != name]       # 不够数的来源整批重新收集
         try:
-            docs = rows(ds, cfg, field, want, min_words, rnd)
+            docs = gutenberg_docs(want, rnd) if ds == "gutendex" else rows(ds, cfg, field, want, min_words, rnd)
         except Exception as e:  # noqa: BLE001
             print(f"::warning title=真人英文 {name} 下载失败::{ds} {e}", flush=True)
             continue
