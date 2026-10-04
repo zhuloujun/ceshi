@@ -44,6 +44,11 @@ export default {
     //   /lite/...  → 轻量版（浏览器本地检测）
     //   其他路径    → 原样转发给完整版（Modal 上的检测服务）
     if (env.BACKEND_URL) {
+      // 旧版管理页会每 15 秒查询一次标注状态，让 Modal 服务器一直不关机（每小时约 0.47 美元）。
+      // 新版管理页带 ?v=2；不带的旧请求直接在这里挡掉，不转发给 Modal。
+      if (url.pathname === '/admin/api/labels' && request.method === 'GET' && url.searchParams.get('v') !== '2') {
+        return json({ error: 'stale_page', message: '管理页版本过旧，请刷新页面。' }, 410);
+      }
       if (url.pathname === '/lite') return Response.redirect(url.origin + '/lite/', 301);
       if (url.pathname.startsWith('/lite/')) return serveLite(request, url.pathname.slice('/lite'.length));
       return proxy(request, env, url);

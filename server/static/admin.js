@@ -31,7 +31,7 @@ async function doLogin(silent){
 const REG_NAMES_ALL = { zh:'现代汉语', zh_classical:'文言', zh_poetry:'诗词', en:'英文' };
 async function renderAuto(){
   try{
-    const d = await call('/admin/api/labels');
+    const d = await call('/admin/api/labels?v=2');
     const regs = Object.entries(d.by_register).map(([k,v])=>`${REG_NAMES_ALL[k]||k}（AI ${v.ai} · 人写 ${v.human}）`).join('、') || '暂无';
     const last = Object.entries(d.last).map(([k,v])=>`${REG_NAMES_ALL[k]||k}：${{scheduled:'等待中',running:'校准中',done:'已完成',error:'出错',cleared:'已恢复默认'}[v.status]||v.status}${v.user_samples && v.user_samples.n_ai ? `（你的 AI 段落识别出 ${(v.user_samples.ai_caught_rate*100).toFixed(0)}%）` : ''}`).join('；');
     $('autoStatus').textContent = `${localStorage.getItem(ADMIN_KEY) ? '已在本浏览器开启' : '本浏览器未开启（登录时勾选“记住”即可开启）'} · 服务器上的标注共 ${d.total} 段：${regs}` + (last ? ` · 最近自动校准：${last}` : '');
