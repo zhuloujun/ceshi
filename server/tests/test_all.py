@@ -14,7 +14,7 @@ if not MD:
 os.environ.update({
     "OBSERVER_MODEL": f"{MD}/observer", "PERFORMER_MODEL": f"{MD}/performer", "CLASSIFIER_MODEL": f"{MD}/cls",
     "EN_CLASSIFIER_MODEL": f"{MD}/desklib_en", "POETRY_CLASSIFIER_MODEL": f"{MD}/desklib_en/../cls",
-    "EN2_CLASSIFIER_MODEL": f"{MD}/cls", "ZH2_CLASSIFIER_MODEL": f"{MD}/cls", "EN3_CLASSIFIER_MODEL": f"{MD}/cls",
+    "EN2_CLASSIFIER_MODEL": f"{MD}/cls", "ZH2_CLASSIFIER_MODEL": f"{MD}/cls", "EN3_CLASSIFIER_MODEL": f"{MD}/cls", "EN4_CLASSIFIER_MODEL": f"{MD}/cls",
     "ADMIN_TOKEN": "test-admin-pw", "LM_MAX_TOKENS": "128", "CALIBRATION_FILE": "/nonexistent/cal.json",
     "MAX_TEXT_CHARS": "300000",
     "USER_CALIBRATION_FILE": f"/tmp/test_user_calibration_{os.getpid()}.json",
@@ -333,7 +333,7 @@ def test_detect_sync(client):
     assert j["status"] == "done"
     s = j["result"]["summary"]
     assert s["methods"] == {"fastdetect": True, "binoculars": True, "classifier": True, "classifier_en": True,
-                            "classifier_en2": True, "classifier_zh2": True, "classifier_en3": True, "classifier_poetry": True,
+                            "classifier_en2": True, "classifier_zh2": True, "classifier_en3": True, "classifier_en4": True, "classifier_poetry": True,
                             "classifier_classical": bool(os.environ.get("CLASSICAL_CLASSIFIER_MODEL"))}
     assert 0 <= s["ai_rate"] <= 1 and s["counted_chars"] > 0
     seg = j["result"]["segments"][0]
@@ -938,5 +938,16 @@ def test_english_whole_document_classifier(client, monkeypatch):
     assert len(en) >= 2 and all("classifier_en3" in s["raw"] for s in en)
     assert all(s["label"] == "中度疑似（整篇判断）" for s in en), [s["label"] for s in en]
     monkeypatch.setattr(config, "EN3_DOC_THRESHOLD", 1.01)
+    monkeypatch.setattr(config, "EN3_JOINT_THRESHOLD", 1.01)
     res = client.post("/v1/detect", json={"text": doc + ".", "wait": True}, headers=h).json()["result"]
+    assert not any(s["label"] == "中度疑似（整篇判断）" for s in res["segments"])
+    # 联合规则：单独阈值没过，但两个英文整篇分类器都达到联合阈值 → 仍按整篇判断计入；任一个没过 → 不计入
+    monkeypatch.setattr(config, "EN3_JOINT_THRESHOLD", 0.0)
+    monkeypatch.setattr(config, "EN4_JOINT_THRESHOLD", 0.0)
+    res = client.post("/v1/detect", json={"text": doc + "..", "wait": True}, headers=h).json()["result"]
+    en = [s for s in res["segments"] if s["register"] == "en" and s["kind"] == "body"]
+    assert all("classifier_en4" in s["raw"] for s in en)
+    assert all(s["label"] == "中度疑似（整篇判断）" for s in en), [s["label"] for s in en]
+    monkeypatch.setattr(config, "EN4_JOINT_THRESHOLD", 1.01)
+    res = client.post("/v1/detect", json={"text": doc + "...", "wait": True}, headers=h).json()["result"]
     assert not any(s["label"] == "中度疑似（整篇判断）" for s in res["segments"])
