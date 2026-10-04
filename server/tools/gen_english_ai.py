@@ -420,6 +420,10 @@ GENRE_STYLE = [
     "Write a short English essay about {t}.",
     "用英文写一篇田园风格的抒情散文，题目是{t}，模仿古典英国散文家的笔调。",
     "帮我用英文写一篇文学赏析文章，评论{t}，要有标题、摘要和参考文献。",
+    # 2026-10：豆包写的英文田园散文《Of Fields and Seasons》漏检（整篇 0.856，与真人新闻最高分持平）——补充抒情 / 写景 / 哲思散文
+    "Write a reflective English essay titled \"{t}\", in the manner of a classic pastoral essayist.",
+    "用英文写一篇写景抒情散文《{t}》，分几个小节，每节一个小标题。",
+    "Compose a lyrical prose piece in English about {t}, around 800 words, rich in imagery.",
 ]
 GENRE_TOPICS = ["小狐狸与月亮", "勇敢的小兔子", "会说话的大树", "星星和小女孩", "迷路的小熊", "海边的灯塔", "小龙的第一次飞行",
                 "风筝和风", "老爷爷的花园", "冬天里的小麻雀", "培养孩子自主学习习惯", "家庭垃圾分类", "提高睡眠质量",
@@ -427,7 +431,13 @@ GENRE_TOPICS = ["小狐狸与月亮", "勇敢的小兔子", "会说话的大树"
                 "坚持的意义", "友谊的价值", "保护环境", "科技改变生活", "传统文化的传承", "失败是成功之母", "感恩父母",
                 "读书的意义", "青春与梦想", "团队合作", "诚信", "乡村的变化", "家乡的春节", "一次难忘的旅行",
                 "小王子", "老人与海", "西游记", "红楼梦", "傲慢与偏见", "活着", "海底两万里", "夏洛的网",
-                "田野与四季", "乡间的清晨", "老人和他的狗", "夏威夷的海", "唐吉诃德", "三个火枪手", "故乡的河", "秋天的果园"]
+                "田野与四季", "乡间的清晨", "老人和他的狗", "夏威夷的海", "唐吉诃德", "三个火枪手", "故乡的河", "秋天的果园",
+                # 抒情 / 写景 / 哲思散文题材
+                "麦田里的夏天", "Of Rivers and Memory", "冬日的炉火", "山间小路", "On Solitude", "雨后的村庄", "On Walking",
+                "Of Gardens", "收割的季节", "On the Passing of Time", "月光下的湖", "Of Morning Light", "老磨坊", "The Hedgerow",
+                "Of Rain and Quiet", "春天的第一场雨", "On Idleness", "The Orchard in Winter", "牧羊人的黄昏", "Of Small Things",
+                "海边的小镇", "On Books and Firelight", "The Country Churchyard", "Of Harvest and Rest", "林间的鸟鸣", "On Friendship",
+                "The Old Stone Bridge", "Of Snow", "稻田与白鹭", "On Returning Home"]
 
 
 def genre_topics(rnd):
