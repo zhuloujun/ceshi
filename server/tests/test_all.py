@@ -986,3 +986,41 @@ def test_segmentation_mixed_collection_2026_10():
     method = next(s for s in segs if "2 Method" in s.text)
     lake = next(s for s in segs if "rented a camp" in s.text)
     assert lake.counted and lake.block != method.block
+
+
+def test_segmentation_inserted_work_in_numbered_paper_and_verse():
+    """编号论文中间插进来的、不带编号的短标题作品（"Walden"）单独成篇，论文后面的 "9 Conclusion" 回到原来那篇；
+    英文分行诗（泰戈尔《The Journey》）保留换行后能认出是诗。"""
+    from app.segmenter import segment_text
+    para = "The rule changes the timing of irrigation decisions and the record of each field visit. " * 9
+    walk = ("For many years I was self-appointed inspector of snow storms and rain storms, and did my duty "
+            "faithfully, keeping the forest paths open and the ravines bridged at all seasons. ") * 4
+    doc = "\n\n".join(["Field Notes on Irrigation", "Abstract: " + "This paper develops a transparent rule. " * 6,
+                       "Keywords: irrigation; scheduling", "1 The decision", para, "2 Evidence", para,
+                       "3 A worked example", para, "Walden", walk, "4 Conclusion", para])
+    segs = segment_text(doc)
+    paper = segs[0].block
+    walden = next(s for s in segs if s.text.startswith("Walden"))
+    concl = next(s for s in segs if s.text.startswith("4 Conclusion"))
+    assert walden.block != paper and walden.title == "Walden"
+    assert concl.block == paper
+
+
+def test_english_verse_not_carried_by_whole_document_rule(client, monkeypatch):
+    from app import config
+    import app.main as m
+    cal = dict(m.engine.cal)
+    profs = dict(cal.get("profiles") or {})
+    profs["en"] = {"threshold": 0.999, "lr": None, "calibrated": True}
+    monkeypatch.setattr(m.engine, "cal", dict(cal, profiles=profs))
+    monkeypatch.setattr(config, "DOC_CARRY_FLOOR", 0.0)
+    monkeypatch.setattr(config, "EN3_DOC_THRESHOLD", 0.0)
+    verse = "\n".join(["The morning sea of silence broke into ripples of bird songs;",
+                       "and the flowers were all merry by the roadside;",
+                       "and the wealth of gold was scattered through the rift of the clouds",
+                       "while we busily went on our way and paid no heed."] * 4)
+    doc = "The Journey\n" + verse + "\n\n" + verse.replace("morning", "evening") + "\n\n" + verse.replace("gold", "light")
+    h = {"Authorization": "Bearer " + issue(client)}
+    res = client.post("/v1/detect", json={"text": doc, "wait": True}, headers=h).json()["result"]
+    en = [s for s in res["segments"] if s["register"] == "en" and s["kind"] == "body"]
+    assert en and not any(s["label"] == "中度疑似（整篇判断）" for s in en), [s["label"] for s in en]
