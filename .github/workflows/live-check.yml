@@ -19,10 +19,19 @@ jobs:
           import json, os, time, urllib.request
           BASE = "https://zhuloujun--ai-text-checker-web.modal.run"
           def call(path, body=None, headers=None, method=None):
-              req = urllib.request.Request(BASE + path, json.dumps(body).encode() if body is not None else None,
-                                           {"Content-Type": "application/json", **(headers or {})}, method=method)
-              with urllib.request.urlopen(req, timeout=900) as r:
-                  return json.loads(r.read())
+              last = None
+              for attempt in range(4):              # 冷启动 / 网关偶发 502、超时：重试，不让整个验收中断
+                  try:
+                      req = urllib.request.Request(BASE + path, json.dumps(body).encode() if body is not None else None,
+                                                   {"Content-Type": "application/json", **(headers or {})}, method=method)
+                      with urllib.request.urlopen(req, timeout=900) as r:
+                          return json.loads(r.read())
+                  except Exception as e:
+                      last = e
+                      detail = e.read()[:300] if hasattr(e, "read") else b""
+                      print(f"::warning title=请求失败（第 {attempt + 1} 次）::{path} {e} {detail!r}", flush=True)
+                      time.sleep(20)
+              return {"status": "error", "error": str(last)}
           key = call("/admin/api/keys", {"name": "live-check", "days": 1}, {"X-Admin-Token": os.environ["ADMIN_TOKEN"]})
           tok = key.get("key") or key.get("api_key") or key.get("token")
           rows = [json.loads(l) for f in ("server/tools/data/eval_en_user_docs.jsonl", "server/tools/data/eval_zh_user_docs.jsonl")
