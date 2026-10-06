@@ -26,6 +26,8 @@ on:
       - "!server/tools/compare_experiment.py"
       - "!server/tools/kaggle_train.py"
       - "!server/tools/zh_model_compare.py"
+      - "!server/tools/gen_classical_ai.py"
+      - "!server/tools/data/gen_cl/**"
       - "!server/tools/collect_human_en.py"
       - "!server/tools/train_chinese.py"
       - "!server/tools/train_chinese_modal.py"
