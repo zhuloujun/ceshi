@@ -3,13 +3,7 @@
 name: 训练文言检测模型
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "server/tools/train_classical.py"
-      - "server/tools/data/ai_classical_*.txt"
-      - "server/tools/data/ai_user_classical_*.txt"
-      - ".github/workflows/train-classical.yml"
+  # 只能手动运行（以前改动训练脚本就会自动训练并覆盖线上模型的 Release）
   workflow_dispatch:
 
 permissions:
