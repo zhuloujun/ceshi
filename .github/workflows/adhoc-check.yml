@@ -1,0 +1,59 @@
+# 临时验收：把用户发来的测试文档（压缩后通过触发参数传入，不提交进仓库——其中常有受版权保护的作品）送到线上服务检测，
+# 打印每篇作品的 AI 率和每段的关键得分（只打印每段开头几个字，不打印原文）。只能手动运行。
+name: 临时验收（用户测试文档）
+
+on:
+  workflow_dispatch:
+    inputs:
+      payload:
+        description: "base64(xz(JSON 列表 [{name, text}]))"
+        required: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: 检测
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
+          PAYLOAD: ${{ github.event.inputs.payload }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, lzma, os, time, urllib.request
+          BASE = "https://zhuloujun--ai-text-checker-web.modal.run"
+          def call(path, body=None, headers=None):
+              for attempt in range(4):
+                  try:
+                      req = urllib.request.Request(BASE + path, json.dumps(body).encode() if body is not None else None,
+                                                   {"Content-Type": "application/json", **(headers or {})})
+                      with urllib.request.urlopen(req, timeout=900) as r:
+                          return json.loads(r.read())
+                  except Exception as e:
+                      print(f"::warning title=请求失败::{path} {e}", flush=True)
+                      time.sleep(20)
+              return {}
+          docs = json.loads(lzma.decompress(base64.b64decode(os.environ["PAYLOAD"])).decode("utf-8"))
+          key = call("/admin/api/keys", {"name": "adhoc-check", "days": 1}, {"X-Admin-Token": os.environ["ADMIN_TOKEN"]})
+          tok = key.get("key") or key.get("api_key") or key.get("token")
+          H = {"Authorization": "Bearer " + tok}
+          for d in docs:
+              j = call("/v1/detect", {"text": d["text"], "wait": True}, H)
+              jid = j.get("job_id") or j.get("id")
+              while j.get("status") not in ("done", "error") and jid:
+                  time.sleep(10)
+                  j = call(f"/v1/jobs/{jid}", headers=H)
+              res = j.get("result") or {}
+              s = res.get("summary") or {}
+              works = " ； ".join(f"{w['title'][:24]} {'—' if w.get('ai_rate') is None else round(w['ai_rate'] * 100)}%"
+                                 for w in res.get("works", []))
+              print(f"::warning title={d['name']} 分篇::AI 率 {s.get('ai_rate')} · {works}"[:4000], flush=True)
+              segs = []
+              for g in res.get("segments", []):
+                  r = g.get("raw") or {}
+                  f = lambda k: "" if r.get(k) is None else f" {k.replace('classifier_', '').replace('classifier', 'cls')}{round(r[k] * 100)}"
+                  segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}] {g.get('label') or g.get('kind')} p{round((g.get('prob') or 0) * 100)}"
+                              f"{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}")
+              for i in range(0, len(segs), 30):
+                  print(f"::notice title={d['name']} 分段 {i // 30 + 1}::" + " | ".join(segs[i:i + 30]), flush=True)
+          PY
