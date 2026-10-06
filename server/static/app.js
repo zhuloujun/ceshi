@@ -380,6 +380,7 @@ function renderResult(res){
       seg.style && seg.style.template_phrases.length ? `套话：${seg.style.template_phrases.join('、')}` : ''
     ].filter(Boolean).join(' · ');
     const kindTag = seg.kind === 'reference' ? '<span class="para-tag">参考文献 · 不计入</span>'
+      : seg.kind === 'frontmatter' ? '<span class="para-tag">题目 / 作者信息 · 不计入</span>'
       : seg.kind === 'quotation' ? `<span class="para-tag">引文为主 · 不计入（${escapeHtml(seg.notes.join('；'))}）${seg.ref_prob!=null ? ' · 参考值 '+pct(seg.ref_prob) : ''}</span>`
       : seg.kind === 'reference_only' ? `<span class="para-tag">仅供参考 · 不计入${seg.ref_prob!=null ? ' · 参考值 '+pct(seg.ref_prob) : ''}</span>`
       : (seg.notes && seg.notes.length) ? `<span class="para-tag">${escapeHtml(seg.notes.join('；'))}</span>` : '';
@@ -479,7 +480,58 @@ function applyFilter(){
 $('onlyFlagged').addEventListener('change', applyFilter);
 
 /* ---------------- 导出 ---------------- */
-exportBtn.addEventListener('click', ()=>{
+const METHOD_LINE = () => `方法：Fast-DetectGPT、Binoculars（Qwen2.5 打分）、MPU 中文分类器 + 国产大模型中文分类器、desklib 英文分类器 + 国产大模型英文分类器（按段落文体选用）；模式：${lastResult.summary.mode === 'fast' ? '快速（抽样）' : '完整'}`;
+function segIndicators(seg){
+  const r = seg.raw || {};
+  return [
+    r.classifier!=null ? `${sigName('classifier', seg)} ${pct(r.classifier)}` : '',
+    r.classifier_zh2!=null ? `国产大模型中文分类器 ${pct(r.classifier_zh2)}` : '',
+    r.classifier_en2!=null ? `国产大模型英文分类器 ${pct(r.classifier_en2)}` : '',
+    r.classifier_en3!=null ? `英文整篇分类器 ${pct(r.classifier_en3)}` : '',
+    r.classifier_en4!=null ? `英文整篇分类器 2 ${pct(r.classifier_en4)}` : '',
+    r.fastdetect!=null ? `Fast-DetectGPT 曲率 ${r.fastdetect.toFixed(3)}` : '',
+    r.binoculars!=null ? `Binoculars ${r.binoculars.toFixed(3)}` : '',
+    r.ppl!=null ? `困惑度 ${Math.exp(r.ppl).toFixed(1)}` : '',
+    r.lp_burstiness!=null ? `困惑度波动 ${r.lp_burstiness.toFixed(3)}` : '',
+    seg.style ? `句长变异 ${seg.style.sentence_len_cv}` : '',
+    (seg.notes && seg.notes.length) ? `备注：${seg.notes.join('；')}` : '',
+    seg.memorized ? '疑似名篇原文（不采信语言模型信号）' : '',
+    seg.short ? '篇幅短' : ''
+  ].filter(Boolean).join(' · ');
+}
+function download(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+// PDF 报告：把结果交给服务器排版（嵌入中文字体，任何阅读器都能正常显示）
+exportBtn.addEventListener('click', async ()=>{
+  if(!lastResult) return;
+  const old = exportBtn.textContent;
+  exportBtn.disabled = true; exportBtn.textContent = '正在生成 PDF…';
+  try{
+    const payload = {
+      source: currentSource, generated_at: new Date().toLocaleString('zh-CN'), method: METHOD_LINE(), works_note: WORKS_NOTE,
+      result: { summary: lastResult.summary, works: lastResult.works || [],
+                segments: lastResult.segments.map(seg=>({ index: seg.index, kind: seg.kind, register: seg.register, chars: seg.chars,
+                  prob: seg.prob, ref_prob: seg.ref_prob, level: seg.level, label: seg.label, near_threshold: seg.near_threshold,
+                  text: seg.text, indicators: segIndicators(seg) })) },
+      format_items: (lastFormatItems || []).map(r=>({ group: r.group, name: r.name, count: r.count, sev: r.sev, extra: r.extra || '',
+        html: r.html ? r.html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim() : '',
+        samples: (r.samples||[]).slice(0,2).map(s=>typeof s === 'string' ? s : `${s.before}【${s.hit}】${s.after}`) }))
+    };
+    const r = await fetch('/v1/report/pdf', { method:'POST', headers:{ 'Content-Type':'application/json', ...authHeaders() }, body: JSON.stringify(payload) });
+    if(!r.ok){ let m = `HTTP ${r.status}`; try{ m = (await r.json()).message || m; }catch(e){} throw new Error(m); }
+    download(await r.blob(), `审读报告_${new Date().toISOString().slice(0,10)}.pdf`);
+  }catch(err){
+    showError('生成 PDF 失败：' + err.message + '。可以先用“导出 .txt”。');
+  }finally{
+    exportBtn.disabled = false; exportBtn.textContent = old;
+  }
+});
+// 纯文本报告（便于复制粘贴）
+$('exportTxtBtn').addEventListener('click', ()=>{
   if(!lastResult) return;
   const s = lastResult.summary;
   let out = `审读 · AI 文本检测报告\n生成时间：${new Date().toLocaleString('zh-CN')}\n来源：${currentSource}\n`;
@@ -499,7 +551,7 @@ exportBtn.addEventListener('click', ()=>{
   }
   out += `\n${'='.repeat(60)}\n分段结果\n${'='.repeat(60)}\n`;
   lastResult.segments.forEach(seg=>{
- const tag = seg.kind === 'reference' ? '参考文献，不计入' : seg.kind === 'quotation' ? '引文为主，不计入' : seg.kind === 'reference_only' ? '仅供参考，不计入' : (seg.label || (seg.near_threshold ? '接近阈值（未计入）' : '未达阈值'));
+ const tag = seg.kind === 'reference' ? '参考文献，不计入' : seg.kind === 'frontmatter' ? '题目 / 作者信息，不计入' : seg.kind === 'quotation' ? '引文为主，不计入' : seg.kind === 'reference_only' ? '仅供参考，不计入' : (seg.label || (seg.near_threshold ? '接近阈值（未计入）' : '未达阈值'));
     const probStr = seg.prob!=null ? pct(seg.prob) : seg.ref_prob!=null ? `${pct(seg.ref_prob)}（参考值，不计入）` : '—';
     out += `\n[第 ${seg.index+1} 段 | ${REG_NAME[seg.register] || '现代汉语'} | AI 概率 ${probStr} | ${tag} | ${seg.chars} 字]\n`;
     const sg = seg.signals || {}, r = seg.raw || {};
@@ -524,11 +576,7 @@ exportBtn.addEventListener('click', ()=>{
     out += `${seg.text}\n`;
   });
   out += formatItemsToText(lastFormatItems);
-  const blob = new Blob([out], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `审读报告_${new Date().toISOString().slice(0,10)}.txt`; a.click();
-  URL.revokeObjectURL(url);
+  download(new Blob([out], { type: 'text/plain;charset=utf-8' }), `审读报告_${new Date().toISOString().slice(0,10)}.txt`);
 });
 
 /* ============================================================

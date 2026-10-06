@@ -30,7 +30,8 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Body
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -188,6 +189,22 @@ async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bo
 async def detect(body: DetectIn, authorization: str | None = Header(None), x_api_key: str | None = Header(None)):
     key = require_key(authorization, x_api_key)
     return await _submit_detect(body.text, body.mode, body.exclude_references, body.flag_quotations, body.wait, key)
+
+
+@app.post("/v1/report/pdf")
+async def report_pdf(body: dict = Body(...), authorization: str | None = Header(None), x_api_key: str | None = Header(None)):
+    """把网页上的检测结果（连同浏览器里算好的格式检查）排版成 PDF 报告。不调用任何模型。"""
+    require_key(authorization, x_api_key)
+    from urllib.parse import quote
+    from .report_pdf import build
+    try:
+        pdf = await asyncio.to_thread(build, body)
+    except Exception as e:  # noqa: BLE001
+        logging.exception("report pdf failed")
+        err(500, "pdf_failed", f"生成 PDF 失败：{e}")
+    name = f"审读报告_{time.strftime('%Y-%m-%d')}.pdf"
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f"attachment; filename=report.pdf; filename*=UTF-8''{quote(name)}"})
 
 
 @app.post("/v1/detect/file")

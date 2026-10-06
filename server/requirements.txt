@@ -8,3 +8,4 @@ numpy>=1.26
 huggingface_hub>=0.24
 sentencepiece>=0.2
 protobuf>=4
+reportlab>=4.0
