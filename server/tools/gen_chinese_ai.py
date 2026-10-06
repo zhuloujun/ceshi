@@ -120,7 +120,7 @@ HUMAN_SOURCES = [  # (数据集, 配置, 文本字段（None = 自动取最长�
     ("Hello-SimpleAI/HC3-Chinese", "all", "human_answers", "hc3", 800, 300),
     # 2026-10：真人的"翻译腔"和"知识介绍"文字——译本前言《关于成长小说与人性的枷锁》、《老人与海》译文、
     # 译过来的散文诗《孤独的树》被判成 AI：训练数据里缺少这两类真人中文
-    ("pleisto/wikipedia-cn-20230720-filtered", None, "completion", "wiki", 500, 500),
+    ("wikimedia/wikipedia", "20231101.zh", "text", "wiki", 500, 500),
     ("Helsinki-NLP/news_commentary", "en-zh", None, "newscomm", 450, 500),     # 经济学家评论文章的专业中译（逐句，按顺序拼回文章）
 ]
 
