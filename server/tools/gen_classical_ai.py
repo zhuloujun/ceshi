@@ -52,19 +52,28 @@ STYLE_TAIL = ["", "", "只输出作品本身，不要解释。", "要求像古�
               "写得自然一点，不要堆砌辞藻，像真人写的。"]
 
 
+_TAIL = re.compile(r"^(这(篇|首|副|三副|几副|组|长联|两副|些)|此(文|赋|联|篇|作)以|本(文|赋|联|篇|作)|希望|以上|注解|\*?注[：:*]|> |[-•] |\*|全联|——\s*(全联|共)|共[一二三四五六七八九十百\d]+字|[（(]注)")
+
+
 def clean(text: str, genre: str) -> str:
     """只保留作品本身：去掉 Markdown、题目行、"注释 / 赏析 / 解析"等说明文字。"""
     t = text.replace("**", "").replace("#", "")
     t = re.split(r"\n\s*(注释|注[:：]|【注|赏析|解析|说明|创作说明|简析|译文|白话|翻译|格律|平仄|韵脚|这首|此诗|此词|本词|本诗|以上)", t)[0]
-    lines = [l.strip() for l in t.splitlines()]
+    lines = [l.strip() for l in t.split("\n")]
     out = []
     for l in lines:
+        if out and _TAIL.match(l):
+            break             # 作品后面的"注解 / 说明 / 逐联解析"（模型常用"- ""> ""• "列点或"这篇……"开头）
+        if re.fullmatch(r"[—\-]*\s*完?\s*[—\-]*", l) or re.fullmatch(r"\[[^\]]{1,12}\]", l):
+            continue          # "——完——"、"[您的名字]"之类
+
         if not l or re.fullmatch(r"[-=*_~·\s]{3,}", l):
             continue
         if not out and (re.fullmatch(r"[《〈]?[^，。！？、；]{1,24}[》〉]?", l) or re.match(r"^(题目|标题|词牌|作者)[:：]", l)):
             continue          # 开头的题目行 / 词牌行
         if re.match(r"^(好的|当然|以下是|这是|为您|下面)", l):
             continue
+        l = re.split(r"(?<=[。！？])[^。！？]*(希望(这|它|能|您|你)|满足您)", l)[0]
         out.append(l)
     return "\n".join(out).strip()
 
