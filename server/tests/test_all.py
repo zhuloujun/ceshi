@@ -1025,3 +1025,27 @@ def test_english_verse_not_carried_by_whole_document_rule(client, monkeypatch):
     res = client.post("/v1/detect", json={"text": doc, "wait": True}, headers=h).json()["result"]
     en = [s for s in res["segments"] if s["register"] == "en" and s["kind"] == "body"]
     assert en and not any(s["label"] == "中度疑似（整篇判断）" for s in en), [s["label"] for s in en]
+
+
+def test_english_story_after_paper_still_gets_whole_document_rule(client, monkeypatch):
+    """同一文件里先有一篇英文论文、后面是英文故事：故事仍按非论文的整篇判断（以前整个文件被认作论文，故事漏检）。"""
+    from app import config
+    import app.main as m
+    cal = dict(m.engine.cal)
+    profs = dict(cal.get("profiles") or {})
+    profs["en"] = {"threshold": 0.999, "lr": None, "calibrated": True}
+    profs["en_paper"] = {"threshold": 0.999, "lr": None, "calibrated": True}
+    monkeypatch.setattr(m.engine, "cal", dict(cal, profiles=profs))
+    monkeypatch.setattr(config, "DOC_CARRY_FLOOR", 0.0)
+    monkeypatch.setattr(config, "EN3_DOC_THRESHOLD", 0.0)
+    monkeypatch.setattr(config, "EN_PAPER_DOC_THRESHOLD", 1.01)
+    sec = "We estimate the soil water balance for each day and compare the decision with the fixed schedule. " * 8
+    paper = "\n\n".join(["Field Notes on Irrigation", "Abstract: " + sec, "1 Introduction", sec, "2 Methods", sec,
+                         "3 Results", sec, "4 Conclusion", sec, "References", "[1] Allen, R. G. (1998). Crop evapotranspiration."])
+    para = ("Let me speak of the country, for I have lived in it, and it has taught me more than any book. "
+            "The city talks; the country sings, and the larks go up like small prayers into the morning sky. ") * 6
+    story = "Of Fields and Seasons\n\n" + para + "\n\n" + para.replace("country", "valley") + "\n\n" + para.replace("city", "town")
+    h = {"Authorization": "Bearer " + issue(client)}
+    res = client.post("/v1/detect", json={"text": paper + "\n\n\n" + story, "wait": True}, headers=h).json()["result"]
+    st = [s for s in res["segments"] if "larks" in s["text"]]
+    assert st and all(s["label"] == "中度疑似（整篇判断）" for s in st), [s["label"] for s in st]

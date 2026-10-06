@@ -395,12 +395,19 @@ class Engine:
         scored_ids = {s.index for s in scored}
         prof = {}
         has_short = bool((cal.get("profiles") or {}).get("zh_short"))
-        en_paper = is_english_paper(text) and bool((cal.get("profiles") or {}).get("en_paper"))
+        # 是不是英文论文按"每篇作品"判断，而不是整个文件：文集里论文和故事、散文混排时（2026-10 用户的 104.docx），
+        # 以前整个文件被认作论文，故事和散文就用不上非论文的整篇判断，豆包散文、ChatGPT 童话都漏检
+        blk_text: dict = {}
+        for s_ in segs:
+            blk_text.setdefault(s_.block, []).append(s_.text)
+        paper_blocks = ({b for b, t in blk_text.items() if is_english_paper("\n".join(t))}
+                        if (cal.get("profiles") or {}).get("en_paper") else set())
+        en_paper = bool(paper_blocks)
         for s in segs:
             reg = s.register
             if reg == "zh" and has_short and len(score_text(s)) < config.SHORT_SEGMENT_CHARS:
                 reg = "zh_short"
-            if reg == "en" and en_paper:
+            if reg == "en" and s.block in paper_blocks:
                 reg = "en_paper"
             prof[s.index] = scoring.profile_for(cal, reg)
         memo = {s.index for s in scored if memorized(results[s.index])}
@@ -470,7 +477,7 @@ class Engine:
         paper_ai = set()
         if en_paper:
             for (blk, reg), idxs in groups.items():
-                if reg != "en":
+                if reg != "en" or blk not in paper_blocks:
                     continue
                 vals = sorted((results[i]["classifier_en2"], len(segs_by_idx[i].text)) for i in idxs
                               if results[i].get("classifier_en2") is not None)
@@ -570,9 +577,9 @@ class Engine:
                               and own_ok(i, "classifier_zh2"))
         # 6.6) 英文非论文作品（故事、散文、读后感、清单……）的整篇判断：英文整篇分类器各段得分的加权中位数（两段取较低）
         #      达到 EN3_DOC_THRESHOLD 时，本篇未过阈值的段落计为"中度疑似（整篇判断）"。英文论文另有论文整篇判断。
-        if not en_paper:
+        if True:
             for (blk, reg), idxs in groups.items():
-                if reg != "en":
+                if reg != "en" or blk in paper_blocks:
                     continue
                 vals = [(results[i]["classifier_en3"], len(segs_by_idx[i].text)) for i in idxs
                         if results[i].get("classifier_en3") is not None]
