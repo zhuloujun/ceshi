@@ -1,0 +1,37 @@
+# 对比几个版本的中文第二分类器：用户测试文档（压缩后通过触发参数传入，不提交进仓库）+ 仓库里的验收文档，
+# 按网站同一套分段规则，逐篇给出每个模型的整篇加权中位数。只用 GitHub 的免费 CPU，不唤醒 Modal。只能手动运行。
+name: 中文模型对比
+
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: "要对比的 Release（逗号分隔）"
+        default: "chinese-classifier-v3,chinese-classifier-v4"
+      payload:
+        description: "base64(xz(JSON 列表 [{name, text}]))，可留空"
+        default: ""
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu && pip install "transformers>=4.45,<5" sentencepiece safetensors protobuf
+      - name: 下载模型
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for t in $(echo "${{ github.event.inputs.tags }}" | tr ',' ' '); do
+            gh release download "$t" -p chinese-classifier.tar.gz -D /tmp/$t -R "${{ github.repository }}"
+            mkdir -p /tmp/m/$t && tar xzf /tmp/$t/chinese-classifier.tar.gz -C /tmp/m/$t
+          done
+      - name: 打分
+        env:
+          PAYLOAD: ${{ github.event.inputs.payload }}
+          TAGS: ${{ github.event.inputs.tags }}
+        run: cd server && python -u tools/zh_model_compare.py
