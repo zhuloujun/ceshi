@@ -57,18 +57,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release download poetry-classifier-v1 -p poetry-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
+          # 版本以内置校准里记录的为准（见 config._calibrated_classifier）
+          T=$(grep -oE '"poetry-classifier-v[0-9]+"' server/app/default_calibration.json | head -1 | tr -d '"'); T=${T:-poetry-classifier-v1}
+          if gh release download "$T" -p poetry-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
             tar xzf /tmp/poetry-classifier.tar.gz -C server/
             ls server/poetry-classifier
           else
-            echo "::warning::没有找到诗词分类器（Release poetry-classifier-v1），诗词将改用通用中文分类器。"
+            echo "::warning::没有找到诗词分类器（Release $T），诗词将改用通用中文分类器。"
           fi
       - name: 取出文言分类器（只在内置校准已按它拟合时使用，否则文言校准会因模型不一致被丢弃）
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if grep -q '"classical-classifier-v3"' server/app/default_calibration.json; then
-            gh release download classical-classifier-v3 -p classical-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
+          T=$(grep -oE '"classical-classifier-v[0-9]+"' server/app/default_calibration.json | head -1 | tr -d '"')
+          if [ -n "$T" ]; then
+            gh release download "$T" -p classical-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
             tar xzf /tmp/classical-classifier.tar.gz -C server/
             ls server/classical-classifier
           else
