@@ -40,7 +40,7 @@
 - **MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）**（173 AI / 150 人写）：AUROC 0.8486；检出率 63.6%；误判率 12.7%
   - 各来源检出率：pubmed_gpt4_para 35%，cnn_gpt4_para 63%，imdb_gpt4_para 77%，dialogsum_gpt4_para 81%，repo-ai-english 87%
   - 各来源误判率：pubmed_human 0%，imdb_human 0%，pubmed_human_para 0%，cnn_human 24%，dialogsum_human_para 39%，cnn_human_para 10%，imdb_human_para 18%，dialogsum_human 8%
-  - 各特征 AUROC：fastdetect 0.5799，binoculars 0.4234，logit_classifier 0.8832，fastdetect_norm 0.5805，lrr 0.6235，log_rank 0.3531，entropy 0.3639，top10 0.6535，lp_burstiness 0.5053，style_cv 0.3114，style_phrases 0.5934，logit_classifier_en2 0.7491
+  - 各特征 AUROC：fastdetect 0.5799，binoculars 0.4234，logit_classifier 0.8832，fastdetect_norm 0.5805，lrr 0.6236，log_rank 0.3531，entropy 0.3639，top10 0.6535，lp_burstiness 0.5053，style_cv 0.3114，style_phrases 0.5934，logit_classifier_en2 0.7491
 - **国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准【对照：不用英文第二分类器】**（318 AI / 305 人写）：AUROC 0.9434；检出率 81.1%；误判率 1.6%
   - 各来源误判率：arxiv-human 0%，pmc-human 0%，pubmed-human 3%
   - 各特征 AUROC：fastdetect 0.6834，binoculars 0.316，logit_classifier 0.9453，fastdetect_norm 0.6835，lrr 0.6059，log_rank 0.3407，entropy 0.3735，top10 0.6491，lp_burstiness 0.5647，style_cv 0.5286，style_phrases 0.5787，logit_classifier_en2 0.9905
@@ -54,7 +54,7 @@
 - **MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）【对照：不用英文第二分类器】**（173 AI / 150 人写）：AUROC 0.8856；检出率 67.6%；误判率 11.3%
   - 各来源检出率：pubmed_gpt4_para 78%，cnn_gpt4_para 56%，imdb_gpt4_para 71%，dialogsum_gpt4_para 74%，repo-ai-english 57%
   - 各来源误判率：pubmed_human 11%，imdb_human 0%，pubmed_human_para 0%，cnn_human 6%，dialogsum_human_para 39%，cnn_human_para 14%，imdb_human_para 12%，dialogsum_human 0%
-  - 各特征 AUROC：fastdetect 0.5799，binoculars 0.4234，logit_classifier 0.8832，fastdetect_norm 0.5805，lrr 0.6235，log_rank 0.3531，entropy 0.3639，top10 0.6535，lp_burstiness 0.5053，style_cv 0.3114，style_phrases 0.5934，logit_classifier_en2 0.7491
+  - 各特征 AUROC：fastdetect 0.5799，binoculars 0.4234，logit_classifier 0.8832，fastdetect_norm 0.5805，lrr 0.6236，log_rank 0.3531，entropy 0.3639，top10 0.6535，lp_burstiness 0.5053，style_cv 0.3114，style_phrases 0.5934，logit_classifier_en2 0.7491
 
 ## 英文学术论文
 - 数据：arXiv / PubMed / PMC 真人学术英文（含中国作者）+ DeepSeek / 文心一言 / Kimi 写的英文论文
