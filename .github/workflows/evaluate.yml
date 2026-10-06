@@ -43,6 +43,12 @@ on:
         description: "全部重新打分（含现代汉语长段、英文、文言，约 2–3 小时）"
         type: boolean
         default: false
+      poetry_tag:
+        description: "用哪一版诗词分类器拟合校准（留空 = 当前校准里的版本）"
+        default: ""
+      classical_tag:
+        description: "用哪一版文言分类器拟合校准（留空 = 当前校准里的版本）"
+        default: ""
 
 permissions:
   contents: write
@@ -73,6 +79,9 @@ jobs:
         run: |
           if [ "${{ github.event.inputs.include_zh }}" = "true" ]; then
             echo 'parts=["cal1","cal2","test","csl","cal1s","cal2s","tests","en_cal1","en_cal2","en_ood","en_para","cl_cal","cl_test","po_cal","po_test","po_story","po_classic","cl_user","po_user","en_user","en_gen_fit","en_gen_test"]' >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.inputs.poetry_tag }}${{ github.event.inputs.classical_tag }}" ]; then
+            # 换诗词 / 文言分类器：英文照常重打，诗词与文言全部重打
+            echo 'parts=["en_cal1","en_cal2","en_ood","en_para","en_user","en_gen_fit","en_gen_test","cl_cal","cl_test","cl_user","po_cal","po_test","po_story","po_classic","po_user"]' >> "$GITHUB_OUTPUT"
           else
             echo "parts=$PUSH_PARTS" >> "$GITHUB_OUTPUT"
           fi
@@ -124,7 +133,9 @@ jobs:
           git clone --depth 1 https://github.com/VelikayaScarlet/ChangAn /tmp/changan
           git clone --depth 1 --filter=blob:none --sparse https://github.com/chinese-poetry/chinese-poetry /tmp/cpoetry
           (cd /tmp/cpoetry && git sparse-checkout set --no-cone "/全唐诗/唐诗三百首.json" "/宋词/宋词三百首.json")
-          gh release download poetry-classifier-v1 -p poetry-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
+          T="${{ github.event.inputs.poetry_tag }}"; [ -z "$T" ] && T=$(grep -oE '"poetry-classifier-v[0-9]+"' server/app/default_calibration.json | head -1 | tr -d '"'); T=${T:-poetry-classifier-v1}
+          echo "POETRY_CLASSIFIER_ID=$T" >> "$GITHUB_ENV"
+          gh release download "$T" -p poetry-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
           tar xzf /tmp/poetry-classifier.tar.gz -C /tmp
           ls /tmp/poetry-classifier
           echo "POETRY_CLASSIFIER_MODEL=/tmp/poetry-classifier" >> "$GITHUB_ENV"
@@ -145,7 +156,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release download classical-classifier-v3 -p classical-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
+          T="${{ github.event.inputs.classical_tag }}"; [ -z "$T" ] && T=$(grep -oE '"classical-classifier-v[0-9]+"' server/app/default_calibration.json | head -1 | tr -d '"'); T=${T:-classical-classifier-v3}
+          echo "CLASSICAL_CLASSIFIER_ID=$T" >> "$GITHUB_ENV"
+          if gh release download "$T" -p classical-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
             tar xzf /tmp/classical-classifier.tar.gz -C /tmp
             echo "CLASSICAL_CLASSIFIER_MODEL=/tmp/classical-classifier" >> "$GITHUB_ENV"
           fi
@@ -200,6 +213,12 @@ jobs:
           EN_CLASSIFIER_MODEL: desklib/ai-text-detector-v1.01
           POETRY_CLASSIFIER_MODEL: /tmp/poetry-classifier
         run: |
+          # 校准里记录的诗词 / 文言分类器版本：用本次打分所用的版本（工作流输入，留空则沿用当前校准里的版本）
+          T="${{ github.event.inputs.poetry_tag }}"; [ -z "$T" ] && T=$(grep -oE '"poetry-classifier-v[0-9]+"' app/default_calibration.json | head -1 | tr -d '"')
+          [ -n "$T" ] && export POETRY_CLASSIFIER_ID=$T
+          T="${{ github.event.inputs.classical_tag }}"; [ -z "$T" ] && T=$(grep -oE '"classical-classifier-v[0-9]+"' app/default_calibration.json | head -1 | tr -d '"')
+          [ -n "$T" ] && export CLASSICAL_CLASSIFIER_ID=$T
+          echo "诗词分类器 $POETRY_CLASSIFIER_ID · 文言分类器 $CLASSICAL_CLASSIFIER_ID"
           mkdir -p tools/scores && cp /tmp/dl/*.json tools/scores/ && ls -la tools/scores
           # 文言各份的打分里带有通用分类器第二意见（classifier_mpu）时，说明是用文言分类器打的分
           if python3 -c "import json,sys; r=json.load(open('tools/scores/cl_cal.json')); sys.exit(0 if r and 'classifier_mpu' in r[0]['s'] else 1)"; then

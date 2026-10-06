@@ -68,14 +68,26 @@ ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
 ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v3")
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
-POETRY_CLASSIFIER_ID = os.getenv("POETRY_CLASSIFIER_ID", "poetry-classifier-v1")   # 校准参数按这个名字匹配模型
+def _calibrated_classifier(profile: str, prefix: str, default: str) -> str:
+    """诗词 / 文言分类器用哪一版，以内置校准里记录的为准：评估工作流用候选版本重新拟合校准并提交后，部署和检测都自动换成它，
+    模型与校准参数永远一致（以前要同时手动改几处版本号，漏改一处就会用错校准）。"""
+    try:
+        c = json.loads((Path(__file__).resolve().parent / "default_calibration.json").read_text("utf-8"))
+        v = (((c.get("profiles") or {}).get(profile) or {}).get("models") or {}).get("classifier") or ""
+        return v if v.startswith(prefix) else default
+    except Exception:  # noqa: BLE001
+        return default
+
+
+POETRY_CLASSIFIER_ID = os.getenv("POETRY_CLASSIFIER_ID") or _calibrated_classifier("zh_poetry", "poetry-classifier-", "poetry-classifier-v1")
 POETRY_CLASSIFIER_URL = os.getenv(
     "POETRY_CLASSIFIER_URL",
     "https://github.com/zhuloujun/ceshi/releases/download/poetry-classifier-v1/poetry-classifier.tar.gz")
 
 # 文言专用分类器（tools/train_classical.py 用古籍人写 vs DeepSeek / Kimi / 文心一言等生成的文言微调，发布在本仓库 Release）。
 CLASSICAL_CLASSIFIER_MODEL = os.getenv("CLASSICAL_CLASSIFIER_MODEL", "")
-CLASSICAL_CLASSIFIER_ID = os.getenv("CLASSICAL_CLASSIFIER_ID", "classical-classifier-v3")
+CLASSICAL_CLASSIFIER_ID = (os.getenv("CLASSICAL_CLASSIFIER_ID")
+                           or _calibrated_classifier("zh_classical", "classical-classifier-", "classical-classifier-v3"))
 
 ENABLE_LM = _bool("ENABLE_LM", True)
 ENABLE_CLASSIFIER = _bool("ENABLE_CLASSIFIER", True)
