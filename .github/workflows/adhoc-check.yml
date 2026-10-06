@@ -54,6 +54,17 @@ jobs:
                   f = lambda k: "" if r.get(k) is None else f" {k.replace('classifier_', '').replace('classifier', 'cls')}{round(r[k] * 100)}"
                   segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}] {g.get('label') or g.get('kind')} p{round((g.get('prob') or 0) * 100)}"
                               f"{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}")
+              try:                      # 顺便检查 PDF 报告能否生成、是否嵌入了中文字体
+                  body = {"source": d["name"], "method": "方法", "result": {"summary": s, "works": res.get("works", []),
+                          "segments": res.get("segments", [])}, "format_items": []}
+                  req = urllib.request.Request(BASE + "/v1/report/pdf", json.dumps(body).encode(),
+                                               {"Content-Type": "application/json", **H})
+                  with urllib.request.urlopen(req, timeout=300) as r:
+                      pdf = r.read()
+                  print(f"::warning title={d['name']} PDF 报告::{len(pdf)} 字节 · 开头 {pdf[:5]!r} · "
+                        f"嵌入中文字体 {'是' if b'FontFile2' in pdf else '否（用的是不嵌入的宋体）'}", flush=True)
+              except Exception as e:
+                  print(f"::warning title={d['name']} PDF 报告失败::{e}", flush=True)
               for i in range(0, len(segs), 30):
                   print(f"::notice title={d['name']} 分段 {i // 30 + 1}::" + " | ".join(segs[i:i + 30]), flush=True)
           PY
