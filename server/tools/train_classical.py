@@ -44,6 +44,22 @@ def ai_rows():
              for i, t in enumerate(repo)]
     for r in ev.user_ai_rows("classical"):
         rows.append({**r, "split": "test" if r["split"] == "test" else "train"})
+    # 五家国产模型按普通用户指令写的文言文、赋、骈文（tools/data/gen_cl，gen_classical_ai.py 生成）：
+    # 按网站的文体判断分到文言的那部分；按题目 + 体裁哈希每 5 篇留 1 篇作评估
+    import hashlib
+    import json as _json
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from app.segmenter import detect_register
+    for f in sorted((ev.DATA_DIR / "gen_cl").glob("ai_*.jsonl")):
+        for line in f.read_text("utf-8").split("\n"):
+            if not line.strip():
+                continue
+            r = _json.loads(line)
+            if detect_register(r["text"]) != "zh_classical":
+                continue
+            key = f"{r['title']}|{r['genre']}"
+            rows.append({"text": r["text"], "y": 1, "model": f"gen-{f.stem[3:]}",
+                         "split": "test" if int(hashlib.md5(key.encode("utf-8")).hexdigest(), 16) % 5 == 0 else "train"})
     return rows
 
 

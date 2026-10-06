@@ -39,6 +39,24 @@ if LANG == "zh":
     sh("git", "clone", "-q", "--depth", "1", "https://github.com/NLP2CT/NLPCC-2025-Task1", "/tmp/nlpcc")
     cmd = ["tools/train_chinese.py", "--nlpcc", "/tmp/nlpcc/data", "--out", "/tmp/chinese-classifier"]
     name = "chinese-classifier"
+elif LANG == "poetry":
+    sh(sys.executable, "-m", "pip", "install", "-q", "opencc-python-reimplemented", "openpyxl")
+    sh("git", "clone", "-q", "--depth", "1", "https://github.com/VelikayaScarlet/ChangAn", "/tmp/changan")
+    sh("git", "clone", "-q", "--depth", "1", "--filter=blob:none", "--sparse", "https://github.com/chinese-poetry/chinese-poetry", "/tmp/cpoetry")
+    sh("git", "-C", "/tmp/cpoetry", "sparse-checkout", "set", "--no-cone", "/全唐诗/唐诗三百首.json", "/宋词/宋词三百首.json",
+       "/全唐诗/poet.tang.*.json", "/宋词/ci.song.*.json")
+    cmd = ["tools/train_poetry2.py", "--changan", "/tmp/changan", "--cpoetry", "/tmp/cpoetry", "--out", "/tmp/poetry-classifier"]
+    name = "poetry-classifier"
+elif LANG == "classical":
+    sh(sys.executable, "-m", "pip", "install", "-q", "openpyxl")
+    books = subprocess.run([sys.executable, "-c", "from train_classical import TRAIN_BOOKS, LONG_CHECK_BOOKS; "
+                            "from evaluate import CLASSICAL_TEST_BOOKS, SPLIT_BOOKS; "
+                            "print(chr(10).join(sorted(set(TRAIN_BOOKS + CLASSICAL_TEST_BOOKS + LONG_CHECK_BOOKS + list(SPLIT_BOOKS)))))"],
+                           cwd="/tmp/ceshi/server/tools", capture_output=True, text=True, check=True).stdout.split()
+    sh("git", "clone", "-q", "--depth", "1", "--filter=blob:none", "--sparse", "https://github.com/NiuTrans/Classical-Modern", "/tmp/classical")
+    sh("git", "-C", "/tmp/classical", "sparse-checkout", "set", "--no-cone", *[f"/古文原文/{{b}}/" for b in books])
+    cmd = ["tools/train_classical.py", "--classical-dir", "/tmp/classical", "--out", "/tmp/classical-classifier", "--epochs", "4"]
+    name = "classical-classifier"
 else:
     from huggingface_hub import hf_hub_download
     hf_hub_download("yaful/MAGE", "valid.csv", repo_type="dataset", local_dir="/tmp/mage")
@@ -61,7 +79,7 @@ def kaggle(*args, check=True):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--lang", choices=["zh", "en"], required=True)
+    ap.add_argument("--lang", choices=["zh", "en", "poetry", "classical"], required=True)
     ap.add_argument("--sha", required=True)
     ap.add_argument("--repo", default=os.getenv("GITHUB_REPOSITORY", "zhuloujun/ceshi"))
     ap.add_argument("--args", default="")
@@ -79,7 +97,8 @@ def main():
         raise SystemExit("没有 Kaggle 用户名：请在 GitHub Secrets 里设置 KAGGLE_USERNAME")
     slug = f"ceshi-train-{a.lang}"
     ref = f"{user}/{slug}"
-    name = "chinese-classifier" if a.lang == "zh" else "english-classifier"
+    name = {"zh": "chinese-classifier", "en": "english-classifier", "poetry": "poetry-classifier",
+            "classical": "classical-classifier"}[a.lang]
 
     d = Path(tempfile.mkdtemp())
     (d / "train.py").write_text(KERNEL.format(repo=a.repo, sha=a.sha, lang=a.lang, args=a.args.split()), "utf-8")

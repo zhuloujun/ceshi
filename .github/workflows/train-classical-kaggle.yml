@@ -1,0 +1,51 @@
+# 在 Kaggle 免费 GPU 上训练古典体裁分类器（诗词 / 文言），发布到指定 Release（不会覆盖线上正在用的版本）。只能手动运行。
+name: 训练古典体裁检测模型（Kaggle）
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "poetry（诗词）或 classical（文言）"
+        default: "poetry"
+      tag:
+        description: "发布到哪个 Release（如 poetry-classifier-v3 / classical-classifier-v4）"
+        required: true
+      args:
+        description: "传给训练脚本的额外参数（可留空）"
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: train-classical-kaggle-${{ github.event.inputs.kind }}
+  cancel-in-progress: true
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "kaggle>=2.0"
+      - name: 在 Kaggle GPU 上训练
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+        run: |
+          python -u server/tools/kaggle_train.py --lang "${{ github.event.inputs.kind }}" --sha "$GITHUB_SHA" --args "${{ github.event.inputs.args }}"
+          N="${{ github.event.inputs.kind }}-classifier"
+          mkdir -p /tmp/x && tar xzf $N.tar.gz -C /tmp/x
+          python3 -c "import json,sys;r=json.load(open('/tmp/x/'+sys.argv[1]+'/training_result.json'));print('::notice title=训练结果::'+json.dumps(r,ensure_ascii=False)[:6000])" $N
+      - name: 发布到 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          N="${{ github.event.inputs.kind }}-classifier"
+          T="${{ github.event.inputs.tag }}"
+          gh release view "$T" >/dev/null 2>&1 || gh release create "$T" --title "$T" --notes "Kaggle 训练（server/tools/kaggle_train.py --lang ${{ github.event.inputs.kind }}）"
+          gh release upload "$T" $N.tar.gz --clobber

@@ -51,6 +51,27 @@ def load_classic(cpoetry_dir, n, rnd):
     return [{"text": t, "y": 0, "model": "tang-song"} for t in pool[:n]], evals
 
 
+def gen_cl_rows(register):
+    """tools/data/gen_cl/ai_*.jsonl（gen_classical_ai.py 生成的五家国产模型古典体裁作品）：按网站自己的文体判断
+    （detect_register）分给诗词 / 文言分类器；按题目 + 体裁的哈希每 5 篇留 1 篇作评估，评估篇目从不参与训练。"""
+    import hashlib
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from app.segmenter import detect_register
+    rows = []
+    for f in sorted((ev.DATA_DIR / "gen_cl").glob("ai_*.jsonl")):
+        for line in f.read_text("utf-8").split("\n"):
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            t = r["text"].strip()
+            if detect_register(t) != register:
+                continue
+            key = f"{r['title']}|{r['genre']}"
+            split = "test" if int(hashlib.md5(key.encode("utf-8")).hexdigest(), 16) % 5 == 0 else "train"
+            rows.append({"text": t, "y": 1, "model": f"gen-{f.stem[3:]}", "genre": r["genre"], "split": split})
+    return rows
+
+
 def auroc(pos, neg):
     if not pos or not neg:
         return None
@@ -75,6 +96,7 @@ def main():
     ap.add_argument("--cpoetry", required=True, help="chinese-poetry 仓库目录（全唐诗、宋词）")
     ap.add_argument("--n-classic", type=int, default=2500)
     ap.add_argument("--user-share", type=float, default=0.15, help="国产新模型样本（过采样后）占 AI 训练样本的比例")
+    ap.add_argument("--gen-share", type=float, default=0.35, help="gen_cl 国产模型古典体裁样本（过采样后）占 ChangAn AI 训练样本的比例")
     ap.add_argument("--out", required=True)
     ap.add_argument("--base", default="hfl/chinese-roberta-wwm-ext")
     ap.add_argument("--epochs", type=float, default=2.0)
@@ -111,7 +133,14 @@ def main():
     user = [dict(r, y=1) for r in ev.user_ai_rows("poem")]
     user_train = [r for r in user if r["split"] == "fit"]
     user_test = [r for r in user if r["split"] == "test"]
-    base = train_h + classic_train + train_a + user_train
+    # v3 新增：五家国产模型按普通用户指令写的诗、词、对联（tools/data/gen_cl），过采样到约占 AI 训练样本的 gen_share
+    gen = gen_cl_rows("zh_poetry")
+    gen_train = [r for r in gen if r["split"] == "train"]
+    gen_test = [r for r in gen if r["split"] == "test"]
+    if gen_train:
+        reps_g = max(1, round(args.gen_share * len(train_a) / len(gen_train)))
+        gen_train = gen_train * reps_g
+    base = train_h + classic_train + train_a + user_train + gen_train
     rnd.shuffle(base)
     dev = base[: min(max(200, len(base) // 20), len(base) // 5)]
     train = base[len(dev):]
@@ -198,6 +227,11 @@ def main():
     pc = predict(classic_eval)
     pu = predict(user_test)
     ps = predict(story)
+    pg = predict(gen_test)
+    by_gen = {}
+    for p, r in zip(pg, gen_test):
+        by_gen.setdefault(r["model"], []).append(p)
+        by_gen.setdefault("体裁-" + r["genre"], []).append(p)
     by = {}
     for p, r in zip(pa, test_a):
         by.setdefault(r["model"], []).append(p)
@@ -209,14 +243,18 @@ def main():
            "user_models_vs_changan_human_auroc": round(auroc(pu, ph), 4) if pu else None,
            "user_models_vs_tang_song_300_auroc": round(auroc(pu, pc), 4) if pu else None,
            "story_poems_vs_tang_song_300_auroc": round(auroc(ps, pc), 4),
+           "gen_cl_vs_changan_human_auroc": round(auroc(pg, ph), 4) if pg else None,
+           "gen_cl_vs_tang_song_300_auroc": round(auroc(pg, pc), 4) if pg else None,
            "reference_threshold": round(thr, 4),
            "at_threshold": {"changan_ai_caught": rate(pa), "user_models_caught": rate(pu), "story_caught": rate(ps),
-                            "tang_song_300_flagged": rate(pc)},
+                            "tang_song_300_flagged": rate(pc), "gen_cl_caught": rate(pg),
+                            "gen_cl_caught_by": {k: rate(v) for k, v in sorted(by_gen.items())}},
+           "n_gen_cl_train_unique": len({r["text"] for r in gen_train}), "n_gen_cl_test": len(gen_test),
            "n_train": len(train), "n_test_human": len(ph), "n_test_ai": len(pa),
            "base": args.base, "epochs": args.epochs, "lr": args.lr, "steps": step,
            "minutes": round((time.time() - t0) / 60, 1)}
     print(json.dumps(res, ensure_ascii=False, indent=1), flush=True)
-    print("::notice title=诗词分类器 v2 评估（没见过的作者、名篇与模型）::" + json.dumps(res, ensure_ascii=False), flush=True)
+    print("::notice title=诗词分类器评估（没见过的作者、名篇与模型）::" + json.dumps(res, ensure_ascii=False), flush=True)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -224,7 +262,7 @@ def main():
     tok.save_pretrained(out)
     (out / "training_result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), "utf-8")
     (out / "README.md").write_text(
-        "# 诗词 AI 检测分类器 v2\n\n由 tools/train_poetry2.py 在 ChangAn（ACL 2026，MIT）上微调 "
+        "# 诗词 AI 检测分类器\n\n由 tools/train_poetry2.py 在 ChangAn（ACL 2026，MIT）上微调 "
         f"{args.base} 得到，标签 0 = 人写、1 = AI。\n\n评估结果：\n\n```json\n"
         + json.dumps(res, ensure_ascii=False, indent=1) + "\n```\n", "utf-8")
 

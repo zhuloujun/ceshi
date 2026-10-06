@@ -4,12 +4,7 @@
 name: 训练诗词检测模型
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "server/tools/train_poetry.py"
-      - "server/tools/changan.py"
-      - ".github/workflows/train-poetry.yml"
+  # 只能手动运行（以前改动训练脚本就会自动训练并覆盖线上模型的 Release）
   workflow_dispatch:
 
 permissions:
