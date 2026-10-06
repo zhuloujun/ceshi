@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       providers:
-        description: "只用这几家（逗号分隔，如 doubao,qwen；留空 = 全部）"
+        description: "只用这几家（逗号分隔，如 doubao,qwen；留空 = 全部；human = 只收集真人数据；classical:deepseek,qwen = 生成古典诗词文言）"
         default: ""
       n_titles:
         description: "每家模型生成多少篇"
@@ -42,12 +42,13 @@ jobs:
           for v in DEEPSEEK_API_KEY KIMI_API_KEY WENXIN_API_KEY DASHSCOPE_API_KEY DOUBAO_API_KEY; do
             if [ -n "${!v}" ]; then echo "::notice title=$v::已设置"; else echo "::notice title=$v::未设置"; fi
           done
+          case "$ONLY_PROVIDERS" in classical:*) python -u server/tools/gen_classical_ai.py --n "${{ github.event.inputs.n_titles || '160' }}" --time-budget-min 270; exit 0;; esac
           python -u server/tools/gen_chinese_ai.py --n-titles "${{ github.event.inputs.n_titles || '120' }}" --time-budget-min 270 ${{ (github.event.inputs.providers && github.event.inputs.providers != 'human') && '--skip-human' || '' }}
       - name: 提交
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/tools/data/gen_zh
+          git add server/tools/data/gen_zh server/tools/data/gen_cl || true; git add server/tools/data/gen_zh
           git commit -m "Add generated Chinese AI training data [skip ci]" || exit 0
           git pull --rebase origin main && git push origin HEAD:main
