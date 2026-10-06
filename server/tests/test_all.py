@@ -1049,3 +1049,16 @@ def test_english_story_after_paper_still_gets_whole_document_rule(client, monkey
     res = client.post("/v1/detect", json={"text": paper + "\n\n\n" + story, "wait": True}, headers=h).json()["result"]
     st = [s for s in res["segments"] if "larks" in s["text"]]
     assert st and all(s["label"] == "中度疑似（整篇判断）" for s in st), [s["label"] for s in st]
+
+
+def test_report_pdf(client):
+    """导出 PDF 报告：服务器把检测结果排版成 PDF。"""
+    h = {"Authorization": "Bearer " + issue(client)}
+    res = client.post("/v1/detect", json={"text": MODERN * 3, "wait": True}, headers=h).json()["result"]
+    payload = {"source": "测试.docx", "generated_at": "2026/10/6", "method": "方法：……", "works_note": "说明",
+               "result": {"summary": res["summary"], "works": res.get("works", []),
+                          "segments": [dict(s, indicators="MPU 中文分类器 95%") for s in res["segments"]]},
+               "format_items": [{"group": "标点规范", "name": "标点重复", "count": 1, "sev": "warn", "samples": ["，，"]}]}
+    r = client.post("/v1/report/pdf", json=payload, headers=h)
+    assert r.status_code == 200, r.text[:300]
+    assert r.headers["content-type"].startswith("application/pdf") and r.content[:4] == b"%PDF" and len(r.content) > 2000

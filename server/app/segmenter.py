@@ -32,7 +32,9 @@ def _ends_references(line: str, prev_lines: list) -> bool:
     s = line.strip()
     if not s or _REF_HEAD.match(s):
         return False
-    if is_section_heading(s):
+    # 章节标题才说明参考文献结束；只有年份 / 页码的行（PDF 换页处的 "2016." "7"）不算——
+    # 2026-10 用户的 PDF 论文参考文献在第一个换页处被截断，后面的条目被当成正文检测
+    if is_section_heading(s) and not re.fullmatch(r"[\d\s.,;:()（）\-–—]+", s):
         return True
     looks_ref = _looks_ref
     if len(s) >= 250 and not looks_ref(s):
@@ -493,10 +495,69 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
     for s in segments:
         s.text = s.text.strip()
     segments = _merge_short(segments)
+    segments = _mark_front_matter(segments)
     for i, s in enumerate(segments):
         s.index = i
     if flag_quotations:
         _flag_quotations(segments)
+    return segments
+
+
+_FRONT_HINT = re.compile(r"arXiv:|@|\b(university|universit[àa]|department|institute|college|school of|faculty|laborator|"
+                         r"academy|corresponding|e-?mail|received|accepted|published|copyright|doi)\b|大学|学院|研究所|研究院|"
+                         r"通讯作者|作者简介|收稿日期|基金项目|邮箱|^(作者|单位|所属领域|课题组)[：:]|^\*|^\d{1,2}$", re.I | re.M)
+
+
+def _mark_front_matter(segments):
+    """论文摘要前面的题目、作者、单位、邮箱、arXiv 编号等（PDF 论文常被切成好几个零碎的短段）：不是正文，不参与检测。
+    它们并入摘要所在的那篇，题目作为这篇的标题。"""
+    for k, seg in enumerate(segments):
+        if seg.kind != "body":
+            continue
+        lines = seg.text.split("\n")
+        ai = next((i for i, l in enumerate(lines) if _ABSTRACT_HEAD.match(l.strip())), None)
+        if ai is None:
+            continue
+        front = []
+        j = k - 1
+        while j >= 0 and len(front) < 8:
+            p = segments[j]
+            if p.kind not in ("body", "quotation") or len(p.text) > 300:
+                break
+            # 正文的样子：有完整的中文句子，或两句以上英文——题目、作者、单位行都没有
+            prose = ((len(re.findall(r"[。！？]", p.text)) >= 1 and len(_CJK.findall(p.text)) > 30)
+                     or len(re.findall(r"[a-z]{2}[.!?](\s|$)", p.text)) >= 2) and not _FRONT_HINT.search(p.text)
+            if prose:
+                break
+            front.insert(0, p)
+            j -= 1
+        head_lines = [l for l in lines[:ai] if l.strip()]
+        if head_lines and len("\n".join(head_lines)) <= 300 and (
+                front or any(_FRONT_HINT.search(l) for l in head_lines)):
+            # 同一段里摘要前面的单位 / 邮箱行：拆成单独的"作者信息"段
+            head = "\n".join(lines[:ai]).strip()
+            rest = "\n".join(lines[ai:]).strip()
+            fm = Segment(seg.index, head, seg.start, "frontmatter", ["论文题目 / 作者 / 单位信息，不计入"],
+                         seg.register, seg.block, "")
+            seg.text, seg.start = rest, seg.start + len("\n".join(lines[:ai])) + 1
+            segments.insert(k, fm)
+            front.append(fm)
+        if not front or not (any(_FRONT_HINT.search(p.text) for p in front) or len(front) >= 2):
+            continue
+        title = ""
+        for p in front:               # 题目：第一个不像单位 / 作者信息的短段，取它前两行
+            first = p.text.strip().split("\n")
+            if not _FRONT_HINT.search(first[0]) and len(p.text.strip()) >= 8:
+                title = re.sub(r"\s+", " ", " ".join(x.strip() for x in first[:2]
+                                                      if x.strip() and not _FRONT_HINT.search(x) and not re.fullmatch(r"\d{1,2}", x.strip())))
+                break
+        for p in front:
+            p.kind = "frontmatter"
+            p.notes = ["论文题目 / 作者 / 单位信息，不计入"]
+            p.block = seg.block
+            p.title = ""
+        front[0].title = (title or seg.title)[:120]
+        seg.title = ""
     return segments
 
 

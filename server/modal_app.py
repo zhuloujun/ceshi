@@ -44,6 +44,7 @@ CPU_CORES = 4
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
+    .apt_install("fonts-wqy-zenhei")          # PDF 报告嵌入的中文字体（文泉驿正黑，开源）
     .pip_install("torch==2.7.1", index_url="https://download.pytorch.org/whl/cpu")
     .pip_install_from_requirements("requirements.txt")
     .env({
