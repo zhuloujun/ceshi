@@ -371,7 +371,7 @@ def en_gen_parts():
         return out
     for f in sorted(GEN_EN_DIR.glob("*.jsonl")):
         human = f.stem.endswith("_human")
-        for line in f.read_text("utf-8").splitlines():
+        for line in f.read_text("utf-8").split("\n"):
             if not line.strip():
                 continue
             r = json.loads(line)
