@@ -118,6 +118,10 @@ HUMAN_SOURCES = [  # (数据集, 配置, 文本字段（None = 自动取最长�
     ("AsakusaRinne/gaokao_bench", "2010-2022_Chinese_Modern_Lit", None, "gaokao", 300, 400),
     ("clue/clue", "c3", "context", "c3", 1500, 250),
     ("Hello-SimpleAI/HC3-Chinese", "all", "human_answers", "hc3", 800, 300),
+    # 2026-10：真人的"翻译腔"和"知识介绍"文字——译本前言《关于成长小说与人性的枷锁》、《老人与海》译文、
+    # 译过来的散文诗《孤独的树》被判成 AI：训练数据里缺少这两类真人中文
+    ("pleisto/wikipedia-cn-20230720-filtered", None, "completion", "wiki", 500, 500),
+    ("Helsinki-NLP/news_commentary", "en-zh", None, "newscomm", 450, 500),     # 经济学家评论文章的专业中译（逐句，按顺序拼回文章）
 ]
 
 
@@ -152,6 +156,7 @@ def hf_rows(dataset, config, field, want, rnd, min_cjk=600):
     rnd.shuffle(offsets)
     for off in offsets[:200]:
         try:
+            time.sleep(0.8)                      # 放慢，避免 429 Too Many Requests
             rows = _get(f"https://datasets-server.huggingface.co/rows?dataset={q}&config={urllib.parse.quote(cfg)}"
                         f"&split={urllib.parse.quote(split)}&offset={off}&length=100")["rows"]
         except Exception as e:  # noqa: BLE001
@@ -183,6 +188,55 @@ def hf_rows(dataset, config, field, want, rnd, min_cjk=600):
     return out[:want]
 
 
+def translated_docs(dataset, config, want, rnd, min_cjk):
+    """平行语料（逐句一行、按文章顺序排列）：取连续 100 行的中文译文，按 900–1600 字切成一篇篇"文章"。"""
+    q = urllib.parse.quote(dataset, safe="")
+    sp = _get(f"https://datasets-server.huggingface.co/splits?dataset={q}")["splits"]
+    sp = [s for s in sp if s["config"] == config] or sp
+    cfg, split = sp[0]["config"], sp[0]["split"]
+    try:
+        size = _get(f"https://datasets-server.huggingface.co/size?dataset={q}")["size"]["splits"]
+        n_rows = next((s["num_rows"] for s in size if s["config"] == cfg and s["split"] == split), 50000)
+    except Exception:  # noqa: BLE001
+        n_rows = 50000
+    offsets = list(range(0, max(1, n_rows - 100), 100))
+    rnd.shuffle(offsets)
+    out = []
+    for off in offsets[:300]:
+        try:
+            time.sleep(1.0)
+            rows = _get(f"https://datasets-server.huggingface.co/rows?dataset={q}&config={urllib.parse.quote(cfg)}"
+                        f"&split={urllib.parse.quote(split)}&offset={off}&length=100")["rows"]
+        except Exception as e:  # noqa: BLE001
+            print(f"  {dataset} offset {off}: {e}", flush=True)
+            time.sleep(10)
+            continue
+        zh = []
+        for r in rows:
+            tr = r["row"].get("translation") or {}
+            t = (tr.get("zh") or "").strip() if isinstance(tr, dict) else ""
+            if t:
+                zh.append(t)
+        buf = ""
+        for t in zh:
+            buf += t
+            if len(buf) >= rnd.randint(900, 1600):
+                if len(re.findall(r"[\u4e00-\u9fff]", buf)) >= min_cjk:
+                    # 每 3–5 句一段，像真实文章
+                    sents = re.split(r"(?<=[。！？])", buf)
+                    paras, cur = [], ""
+                    for k, x in enumerate(sents):
+                        cur += x
+                        if k % rnd.randint(3, 5) == 0 and len(cur) > 80:
+                            paras.append(cur); cur = ""
+                    paras.append(cur)
+                    out.append("\n".join(p for p in paras if p.strip()))
+                buf = ""
+        if len(out) >= want:
+            break
+    return out[:want]
+
+
 def collect_human():
     rnd = random.Random(11)
     for ds, cfg, field, name, want, min_cjk in HUMAN_SOURCES:
@@ -190,7 +244,8 @@ def collect_human():
         if len(load(f)) >= want * 0.8:
             continue
         try:
-            rows = hf_rows(ds, cfg, field, want, rnd, min_cjk)
+            rows = (translated_docs(ds, cfg, want, rnd, min_cjk) if name == "newscomm"
+                    else hf_rows(ds, cfg, field, want, rnd, min_cjk))
         except Exception as e:  # noqa: BLE001
             print(f"::warning title=真人中文 {name} 下载失败::{ds} {e}", flush=True)
             continue
