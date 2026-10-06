@@ -53,6 +53,7 @@ jobs:
                   r = g.get("raw") or {}
                   f = lambda k: "" if r.get(k) is None else f" {k.replace('classifier_', '').replace('classifier', 'cls')}{round(r[k] * 100)}"
                   segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}] {g.get('label') or g.get('kind')} p{round((g.get('prob') or 0) * 100)}"
+                              f"{'' if g.get('ref_prob') is None else ' r' + str(round(g['ref_prob'] * 100))} {(g.get('register') or '')[3:5]}"
                               f"{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}")
               try:                      # 顺便检查 PDF 报告能否生成、是否嵌入了中文字体
                   body = {"source": d["name"], "method": "方法", "result": {"summary": s, "works": res.get("works", []),
