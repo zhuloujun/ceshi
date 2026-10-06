@@ -536,6 +536,20 @@ class Engine:
                 zh_human_work.update(i for i in idxs if (results[i].get("classifier") or 1) < 0.5
                                      and smoothed.get(i) is not None
                                      and smoothed[i] >= float(prof[i][0].get("threshold", 0.5)))
+        # 6.1) 国产大模型中文分类器明确判为人写的作品（整篇中位数 < ZH2_HUMAN_VETO，本段也 < 0.1）里，只到"轻度疑似"
+        #      （< 0.65）的段落多半是 MPU 分类器对翻译腔、工整文风的误判，不计入，标"接近阈值"。
+        #      依据：v3 在没参与训练的真人文档上整篇最高 0.05，AI 文档几乎都 ≥ 0.9；2026-10 用户测试中被误判的
+        #      译文散文诗《孤独的树》、《老人与海》译文段落，MPU 75–99%，而 v3 只有 4–5%。
+        for (blk, reg), idxs in groups.items():
+            if reg != "zh":
+                continue
+            z2 = [(results[i]["classifier_zh2"], len(segs_by_idx[i].text)) for i in idxs
+                  if results[i].get("classifier_zh2") is not None]
+            if len(z2) < 2 or _wmedian(z2) >= config.ZH2_HUMAN_VETO:
+                continue
+            zh_human_work.update(i for i in idxs if results[i].get("classifier_zh2") is not None
+                                 and results[i]["classifier_zh2"] < 0.1 and smoothed.get(i) is not None
+                                 and float(prof[i][0].get("threshold", 0.5)) <= smoothed[i] < 0.65)
         # 6.5) 中文第二分类器的整篇判断：同一篇中文作品（≥ 2 段、≥ 400 字）各段得分按字数加权的中位数达到 ZH2_DOC_THRESHOLD，
         #      本篇未过阈值的段落计为"中度疑似（整篇判断）"。针对豆包、千问等写的散文 / 游记：MPU 中文分类器和语言模型
         #      信号都不明显，但整篇文风一致。验证见 Release 里的 training_result.json（真人文档整篇中位数远低于阈值）。
