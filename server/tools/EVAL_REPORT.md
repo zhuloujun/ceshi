@@ -26,44 +26,44 @@
 
 ## 英文
 - 数据：MAGE（人写文本与 GPT-3.5 / GPT-4 等生成文本）
-- 校准集 576 人写 / 598 AI；阈值 0.7457；交叉验证 AUROC 0.9831；特征 fastdetect, binoculars, logit_classifier, logit_classifier_en2
-- **国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准**（318 AI / 305 人写）：AUROC 0.9884；检出率 89.9%；误判率 1.3%
-  - 各来源误判率：arxiv-human 5%，pmc-human 0%，pubmed-human 1%
-  - 各特征 AUROC：fastdetect 0.6834，binoculars 0.316，logit_classifier 0.9453，fastdetect_norm 0.6835，lrr 0.6059，log_rank 0.3407，entropy 0.3735，top10 0.6491，lp_burstiness 0.5647，style_cv 0.5286，style_phrases 0.5787，logit_classifier_en2 0.9905
-- **国产新模型 AI 英文短篇（DeepSeek / Kimi / 文心一言，用户提供；英文第二分类器训练时没见过的那 1/3）**（15 AI / 0 人写）：AUROC None；检出率 13.3%
-  - 各来源检出率：repo-ai-deepseek 10%，repo-ai-kimi 0%，repo-ai-wenxin 33%
+- 校准集 776 人写 / 655 AI；阈值 0.7444；交叉验证 AUROC 0.9789；特征 fastdetect, binoculars, logit_classifier, logit_classifier_en2
+- **国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准**（399 AI / 478 人写）：AUROC 0.9778；检出率 83.2%；误判率 2.3%
+  - 各来源误判率：arxiv-human 5%，genre-human 4%，pmc-human 0%，pubmed-human 1%
+  - 各特征 AUROC：fastdetect 0.6899，binoculars 0.3104，logit_classifier 0.9345，fastdetect_norm 0.691，lrr 0.6484，log_rank 0.2964，entropy 0.3185，top10 0.6922，lp_burstiness 0.5935，style_cv 0.5129，style_phrases 0.5964，logit_classifier_en2 0.976
+- **国产新模型 AI 英文短篇（DeepSeek / Kimi / 文心一言，用户提供；英文第二分类器训练时没见过的那 1/3）**（15 AI / 0 人写）：AUROC None；检出率 20.0%
+  - 各来源检出率：repo-ai-deepseek 20%，repo-ai-kimi 0%，repo-ai-wenxin 33%
   - 各特征 AUROC：
-- **MAGE：GPT-4 在未见过的领域生成的文本**（150 AI / 150 人写）：AUROC 0.977；检出率 94.7%；误判率 8.7%
+- **MAGE：GPT-4 在未见过的领域生成的文本**（150 AI / 150 人写）：AUROC 0.9776；检出率 94.7%；误判率 8.7%
   - 各来源检出率：cnn_gpt4 97%，imdb_gpt4 96%，pubmed_gpt4 86%，dialogsum_gpt4 100%
   - 各来源误判率：pubmed_human 6%，dialogsum_human 18%，imdb_human 0%，cnn_human 10%
   - 各特征 AUROC：fastdetect 0.8273，binoculars 0.1768，logit_classifier 0.9828，fastdetect_norm 0.8235，lrr 0.7548，log_rank 0.1979，entropy 0.2756，top10 0.7896，lp_burstiness 0.7117，style_cv 0.3014，style_phrases 0.6956，logit_classifier_en2 0.9213
-- **MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）**（173 AI / 150 人写）：AUROC 0.8486；检出率 63.6%；误判率 12.7%
-  - 各来源检出率：pubmed_gpt4_para 35%，cnn_gpt4_para 63%，imdb_gpt4_para 77%，dialogsum_gpt4_para 81%，repo-ai-english 87%
-  - 各来源误判率：pubmed_human 0%，imdb_human 0%，pubmed_human_para 0%，cnn_human 24%，dialogsum_human_para 39%，cnn_human_para 10%，imdb_human_para 18%，dialogsum_human 8%
-  - 各特征 AUROC：fastdetect 0.5799，binoculars 0.4234，logit_classifier 0.8832，fastdetect_norm 0.5805，lrr 0.6236，log_rank 0.3531，entropy 0.3639，top10 0.6535，lp_burstiness 0.5053，style_cv 0.3114，style_phrases 0.5934，logit_classifier_en2 0.7491
-- **国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准【对照：不用英文第二分类器】**（318 AI / 305 人写）：AUROC 0.9434；检出率 81.1%；误判率 1.6%
-  - 各来源误判率：arxiv-human 0%，pmc-human 0%，pubmed-human 3%
-  - 各特征 AUROC：fastdetect 0.6834，binoculars 0.316，logit_classifier 0.9453，fastdetect_norm 0.6835，lrr 0.6059，log_rank 0.3407，entropy 0.3735，top10 0.6491，lp_burstiness 0.5647，style_cv 0.5286，style_phrases 0.5787，logit_classifier_en2 0.9905
+- **MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）**（173 AI / 150 人写）：AUROC 0.8504；检出率 64.2%；误判率 12.0%
+  - 各来源检出率：pubmed_gpt4_para 35%，cnn_gpt4_para 63%，imdb_gpt4_para 77%，dialogsum_gpt4_para 85%，repo-ai-english 87%
+  - 各来源误判率：pubmed_human 0%，imdb_human 0%，pubmed_human_para 0%，cnn_human 18%，dialogsum_human_para 39%，cnn_human_para 10%，imdb_human_para 18%，dialogsum_human 8%
+  - 各特征 AUROC：fastdetect 0.5799，binoculars 0.4234，logit_classifier 0.8832，fastdetect_norm 0.5805，lrr 0.6235，log_rank 0.3531，entropy 0.3639，top10 0.6535，lp_burstiness 0.5053，style_cv 0.3114，style_phrases 0.5934，logit_classifier_en2 0.7491
+- **国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准【对照：不用英文第二分类器】**（399 AI / 478 人写）：AUROC 0.933；检出率 77.2%；误判率 2.5%
+  - 各来源误判率：arxiv-human 5%，genre-human 2%，pmc-human 2%，pubmed-human 3%
+  - 各特征 AUROC：fastdetect 0.6899，binoculars 0.3104，logit_classifier 0.9345，fastdetect_norm 0.691，lrr 0.6484，log_rank 0.2964，entropy 0.3185，top10 0.6922，lp_burstiness 0.5935，style_cv 0.5129，style_phrases 0.5964，logit_classifier_en2 0.976
 - **国产新模型 AI 英文短篇（DeepSeek / Kimi / 文心一言，用户提供；英文第二分类器训练时没见过的那 1/3）【对照：不用英文第二分类器】**（15 AI / 0 人写）：AUROC None；检出率 6.7%
   - 各来源检出率：repo-ai-deepseek 0%，repo-ai-kimi 0%，repo-ai-wenxin 33%
   - 各特征 AUROC：
-- **MAGE：GPT-4 在未见过的领域生成的文本【对照：不用英文第二分类器】**（150 AI / 150 人写）：AUROC 0.9845；检出率 91.3%；误判率 5.3%
-  - 各来源检出率：cnn_gpt4 86%，imdb_gpt4 94%，pubmed_gpt4 89%，dialogsum_gpt4 97%
-  - 各来源误判率：pubmed_human 6%，dialogsum_human 15%，imdb_human 0%，cnn_human 0%
+- **MAGE：GPT-4 在未见过的领域生成的文本【对照：不用英文第二分类器】**（150 AI / 150 人写）：AUROC 0.9841；检出率 93.3%；误判率 6.0%
+  - 各来源检出率：cnn_gpt4 86%，imdb_gpt4 94%，pubmed_gpt4 94%，dialogsum_gpt4 100%
+  - 各来源误判率：pubmed_human 6%，dialogsum_human 18%，imdb_human 0%，cnn_human 0%
   - 各特征 AUROC：fastdetect 0.8273，binoculars 0.1768，logit_classifier 0.9828，fastdetect_norm 0.8235，lrr 0.7548，log_rank 0.1979，entropy 0.2756，top10 0.7896，lp_burstiness 0.7117，style_cv 0.3014，style_phrases 0.6956，logit_classifier_en2 0.9213
-- **MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）【对照：不用英文第二分类器】**（173 AI / 150 人写）：AUROC 0.8856；检出率 67.6%；误判率 11.3%
-  - 各来源检出率：pubmed_gpt4_para 78%，cnn_gpt4_para 56%，imdb_gpt4_para 71%，dialogsum_gpt4_para 74%，repo-ai-english 57%
-  - 各来源误判率：pubmed_human 11%，imdb_human 0%，pubmed_human_para 0%，cnn_human 6%，dialogsum_human_para 39%，cnn_human_para 14%，imdb_human_para 12%，dialogsum_human 0%
-  - 各特征 AUROC：fastdetect 0.5799，binoculars 0.4234，logit_classifier 0.8832，fastdetect_norm 0.5805，lrr 0.6236，log_rank 0.3531，entropy 0.3639，top10 0.6535，lp_burstiness 0.5053，style_cv 0.3114，style_phrases 0.5934，logit_classifier_en2 0.7491
+- **MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）【对照：不用英文第二分类器】**（173 AI / 150 人写）：AUROC 0.8857；检出率 69.4%；误判率 13.3%
+  - 各来源检出率：pubmed_gpt4_para 80%，cnn_gpt4_para 58%，imdb_gpt4_para 74%，dialogsum_gpt4_para 74%，repo-ai-english 57%
+  - 各来源误判率：pubmed_human 11%，imdb_human 0%，pubmed_human_para 0%，cnn_human 6%，dialogsum_human_para 39%，cnn_human_para 24%，imdb_human_para 18%，dialogsum_human 0%
+  - 各特征 AUROC：fastdetect 0.5799，binoculars 0.4234，logit_classifier 0.8832，fastdetect_norm 0.5805，lrr 0.6235，log_rank 0.3531，entropy 0.3639，top10 0.6535，lp_burstiness 0.5053，style_cv 0.3114，style_phrases 0.5934，logit_classifier_en2 0.7491
 
 ## 英文学术论文
 - 数据：arXiv / PubMed / PMC 真人学术英文（含中国作者）+ DeepSeek / 文心一言 / Kimi 写的英文论文
-- 校准集 280 人写 / 298 AI；阈值 0.9104；交叉验证 AUROC 0.9914；特征 logit_classifier_en2, fastdetect, binoculars
-- **英文学术论文：没参与训练和校准的题目（国产模型写的论文 vs arXiv / PubMed / PMC 真人，含中国作者）**（318 AI / 305 人写）：AUROC 0.9883；检出率 93.4%；误判率 2.0%
-  - 各来源误判率：arxiv-human 8%，pmc-human 0%，pubmed-human 1%
-  - 各特征 AUROC：fastdetect 0.6834，binoculars 0.316，logit_classifier 0.9453，fastdetect_norm 0.6835，lrr 0.6059，log_rank 0.3407，entropy 0.3735，top10 0.6491，lp_burstiness 0.5647，style_cv 0.5286，style_phrases 0.5787，logit_classifier_en2 0.9905
-- **国产新模型 AI 英文短篇（用户提供，没参与训练的那 1/3）**（15 AI / 0 人写）：AUROC None；检出率 80.0%
-  - 各来源检出率：repo-ai-deepseek 90%，repo-ai-kimi 50%，repo-ai-wenxin 67%
+- 校准集 480 人写 / 355 AI；阈值 0.8893；交叉验证 AUROC 0.9795；特征 logit_classifier_en2, fastdetect, binoculars
+- **英文学术论文：没参与训练和校准的题目（国产模型写的论文 vs arXiv / PubMed / PMC 真人，含中国作者）**（399 AI / 478 人写）：AUROC 0.9726；检出率 73.7%；误判率 1.1%
+  - 各来源误判率：arxiv-human 3%，genre-human 2%，pmc-human 0%，pubmed-human 0%
+  - 各特征 AUROC：fastdetect 0.6899，binoculars 0.3104，logit_classifier 0.9345，fastdetect_norm 0.691，lrr 0.6484，log_rank 0.2964，entropy 0.3185，top10 0.6922，lp_burstiness 0.5935，style_cv 0.5129，style_phrases 0.5964，logit_classifier_en2 0.976
+- **国产新模型 AI 英文短篇（用户提供，没参与训练的那 1/3）**（15 AI / 0 人写）：AUROC None；检出率 33.3%
+  - 各来源检出率：repo-ai-deepseek 50%，repo-ai-kimi 0%，repo-ai-wenxin 0%
   - 各特征 AUROC：
 
 ## 文言
