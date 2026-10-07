@@ -106,6 +106,7 @@ def main():
     ap.add_argument("--max-train-per-class", type=int, default=5000)
     ap.add_argument("--n-test", type=int, default=3000)
     ap.add_argument("--time-budget-min", type=float, default=240)
+    ap.add_argument("--eval-model", default="", help="只评估这个已训练好的模型（同样的评估集，用于新旧版本对比），不训练")
     args = ap.parse_args()
 
     import torch
@@ -164,9 +165,13 @@ def main():
           f"国产新模型 {len(ut)}×{reps}），开发 {len(dev)}；评估：ChangAn {len(test_h)} 人写 / {len(test_a)} AI，"
           f"唐宋三百首 {len(classic_eval)}，国产新模型 {len(user_test)}，故事诗 {len(story)}", flush=True)
 
-    tok = AutoTokenizer.from_pretrained(args.base)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.base, num_labels=2, id2label={0: "human", 1: "ai"}, label2id={"human": 0, "ai": 1})
+    if args.eval_model:
+        tok = AutoTokenizer.from_pretrained(args.eval_model)
+        model = AutoModelForSequenceClassification.from_pretrained(args.eval_model, dtype=torch.float32)
+    else:
+        tok = AutoTokenizer.from_pretrained(args.base)
+        model = AutoModelForSequenceClassification.from_pretrained(
+            args.base, num_labels=2, id2label={0: "human", 1: "ai"}, label2id={"human": 0, "ai": 1})
 
     def batches(data, bs, shuffle):
         idx = list(range(len(data)))
@@ -196,7 +201,9 @@ def main():
     t0 = time.time()
     step, best, best_state = 0, -1.0, None
     evals = sorted({int(total * f) for f in (0.5, 0.75, 1.0)})
-    done = False
+    done = bool(args.eval_model)
+    if done:
+        best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
     while not done:
         for enc, y in batches(train, args.batch, True):
             loss = torch.nn.functional.cross_entropy(model(**enc).logits, y)
@@ -255,6 +262,8 @@ def main():
            "minutes": round((time.time() - t0) / 60, 1)}
     print(json.dumps(res, ensure_ascii=False, indent=1), flush=True)
     print("::notice title=诗词分类器评估（没见过的作者、名篇与模型）::" + json.dumps(res, ensure_ascii=False), flush=True)
+    if args.eval_model:
+        return
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
