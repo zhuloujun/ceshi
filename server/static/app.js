@@ -232,7 +232,7 @@ async function runAnalysis(){
     let job = await api('/v1/detect', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', ...authHeaders() },
-      body: JSON.stringify({ text, mode, exclude_references: $('optRefs').checked, flag_quotations: $('optQuotes').checked, wait: false })
+      body: JSON.stringify({ text, mode, exclude_references: $('optRefs').checked, flag_quotations: $('optQuotes').checked, genre: $('optClassical') && $('optClassical').checked ? 'classical' : 'auto', wait: false })
     });
     Lib() && Lib().onJobStarted(job.id);
     await finishJob(job, text);

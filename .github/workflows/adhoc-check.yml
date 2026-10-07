@@ -38,7 +38,7 @@ jobs:
           tok = key.get("key") or key.get("api_key") or key.get("token")
           H = {"Authorization": "Bearer " + tok}
           for d in docs:
-              j = call("/v1/detect", {"text": d["text"], "wait": True}, H)
+              j = call("/v1/detect", {"text": d["text"], "wait": True, "genre": d.get("genre", "auto")}, H)
               jid = j.get("job_id") or j.get("id")
               while j.get("status") not in ("done", "error") and jid:
                   time.sleep(10)

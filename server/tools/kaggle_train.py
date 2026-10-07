@@ -30,7 +30,7 @@ t0 = time.time()
 sh("git", "init", "-q", "/tmp/ceshi")
 sh("git", "-C", "/tmp/ceshi", "fetch", "-q", "--depth", "1", f"https://github.com/{{REPO}}", SHA)
 sh("git", "-C", "/tmp/ceshi", "checkout", "-q", "FETCH_HEAD")
-sh(sys.executable, "-m", "pip", "install", "-q", "transformers>=4.45,<5", "tokenizers>=0.20", "sentencepiece", "protobuf", "safetensors")
+sh(sys.executable, "-m", "pip", "install", "-q", "transformers>=4.45,<5", "tokenizers>=0.20", "sentencepiece", "protobuf", "safetensors", "pypinyin")
 import torch
 print("torch", torch.__version__, "cuda", torch.cuda.is_available(),
       torch.cuda.get_device_name(0) if torch.cuda.is_available() else "-", flush=True)

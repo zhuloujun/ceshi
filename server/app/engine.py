@@ -15,7 +15,8 @@ from . import config, scoring
 from .detectors import stylometry
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import REGISTER_NAMES, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english, segment_text
+from .segmenter import (REGISTER_NAMES, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+                        is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
 
@@ -62,6 +63,8 @@ def is_short(seg, text: str) -> bool:
 def score_text(seg) -> str:
     """送进模型打分的文字：去掉开头的标题行（标题不是作者的正文，短诗里标题占比又很大）；文言去掉引号。"""
     text = seg.text
+    if seg.register != "en" and is_list_item(text.split("\n", 1)[0]):
+        text = strip_list_mark(text)       # 作品集的条目编号（"1、""1）、"）不是作品内容，不送进模型
     if seg.title and seg.text.startswith(seg.title):
         rest = seg.text[len(seg.title):].strip()
         if len(rest) >= 10:
@@ -313,10 +316,10 @@ class Engine:
         return out
 
     def analyze(self, text: str, mode: str = "full", exclude_references: bool = True,
-                flag_quotations: bool = True, progress=None) -> dict:
+                flag_quotations: bool = True, progress=None, genre: str = "auto") -> dict:
         t_start = time.time()
         self.wait_loaded()
-        segs = segment_text(text, exclude_references, flag_quotations)
+        segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 全文都被判为引文/参考文献时，退回为全部计入，否则报告里没有任何数值
         fallback_all = bool(segs) and not any(s.counted for s in segs)
         if fallback_all:
@@ -701,6 +704,9 @@ class Engine:
                                                      for k, v in chars_by_register.items()) + "），各自用对应的模型和阈值判断。")
         for reg in sorted(uncalibrated_regs):
             notes.append(f"{REGISTER_NAMES.get(reg, reg)}部分尚无专门校准，结果只宜作相对参考。")
+        n_works = len({s.block for s in segs})
+        if genre == "classical":
+            notes.append(f"按“中国古典文学作品”检测：共 {n_works} 篇（每个编号条目单独判断），文言、诗词和古白话对话都计入，不当作引文排除。")
         if chars_by_register.get("zh_poetry"):
             notes.append("诗词对联篇幅短、格律限制多，是公认最难检测的文体（ACL 2026 ChangAn 基准中多数检测器接近随机），"
                          "诗词部分的结果请只作参考。")
@@ -791,6 +797,7 @@ class Engine:
                 "segments_by_level": level_counts,
                 "smoothing": config.SMOOTHING,
                 "mode": mode,
+                "genre": genre,
                 "lm_sampled": sampled,
                 "lm_scored_segments": len(lm_ids) if (self.lm and self.lm.ready) else 0,
                 "calibrated": bool(main_cal.get("calibrated")),
@@ -896,7 +903,8 @@ class JobQueue:
                 if job["kind"] == "detect":
                     job["result"] = self.engine.analyze(p["text"], p.get("mode", "full"),
                                                         p.get("exclude_references", True),
-                                                        p.get("flag_quotations", True), progress)
+                                                        p.get("flag_quotations", True), progress,
+                                                        p.get("genre", "auto"))
                 elif job["kind"] == "calibrate":
                     job["result"] = run_calibration(self.engine, p, progress)
                 elif job["kind"] == "autocalibrate":

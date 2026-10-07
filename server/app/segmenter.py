@@ -92,6 +92,63 @@ def modern_ratio(text: str) -> float:
     return len(_MODERN.findall(text)) / cjk
 
 
+# 作品集里的条目编号："1、""1）""1）、""16)""(3)""（3）"。编号本身不是作品内容：判断文体、送进模型前都去掉
+# （2026-10 用户的 gw.docx：人写的条目用"1、"，AI 写的用"1）、"——编号格式不能成为模型判断的依据）。
+_LIST_MARK = re.compile(r"^\s*(?:[（(]\s*\d{1,3}\s*[)）]|\d{1,3}\s*[)）]|\d{1,3}\s*[、．](?!\d))\s*[、，,.．]?\s*")
+
+
+def strip_list_mark(line: str) -> str:
+    return _LIST_MARK.sub("", line, count=1)
+
+
+def is_list_item(line: str) -> bool:
+    """以条目编号开头、编号后面直接就是作品正文（有逗号句号、至少 8 个汉字）的行。"""
+    s = line.strip()
+    m = _LIST_MARK.match(s)
+    if not m:
+        return False
+    rest = s[m.end():]
+    return len(_CJK.findall(rest)) >= 8 and bool(re.search(r"[，。！？；,]", rest))
+
+
+# 押韵：句末字（句号、问号、叹号、分号前）的韵母，最常见的一个韵占多大比例。
+# 宋词中位数 0.83、唐诗 0.75，古文 0.33、现代文 0（chinese-poetry 宋词 600 首、NiuTrans 古文 800 段测定）。
+try:
+    from pypinyin import Style as _PyStyle, lazy_pinyin as _lazy_pinyin
+except Exception:  # noqa: BLE001
+    _lazy_pinyin = None
+_RHYME_MERGE = {"iang": "ang", "uang": "ang", "iong": "ong", "ian": "an", "uan": "an", "van": "an", "iao": "ao",
+                "ing": "eng", "in": "en", "un": "en", "vn": "en", "ui": "ei", "uei": "ei", "iu": "ou", "iou": "ou",
+                "ia": "a", "ua": "a", "ie": "e", "ve": "e", "uo": "o", "uai": "ai", "v": "i"}
+
+
+def rhyme_ratio(text: str) -> float | None:
+    if _lazy_pinyin is None:
+        return None
+    ends = re.findall(r"([\u4e00-\u9fff])[。！？；!?;]", text)
+    if len(ends) < 3:
+        return 0.0
+    finals = [f.replace("ü", "v") for f in _lazy_pinyin(ends, style=_PyStyle.FINALS, strict=False)]
+    groups = [_RHYME_MERGE.get(f, f) for f in finals]
+    return max(groups.count(g) for g in set(groups)) / len(groups)
+
+
+def is_ci(text: str) -> bool:
+    """词、曲（长短句）：小句长短不一（1–9 字）、几乎不用文言虚词和白话标志词、句末押韵。
+    is_poetry 要求句长整齐，只认得出约 85% 的宋词；加上这条后宋词约 96%，古文误认约 1%，现代文约 0.1%。"""
+    if re.search(r"[0-9A-Za-z：:]", text):
+        return False
+    clauses = [len(_CJK.findall(c)) for c in _CLAUSE_SPLIT.split(text) if _CJK.search(c)]
+    cjk = len(_CJK.findall(text)) or 1
+    if len(clauses) < 4 or cjk > 420 or max(clauses) > 9:
+        return False
+    mean = sum(clauses) / len(clauses)
+    if not 3.5 <= mean <= 7.5 or len(_POETRY_FUNC.findall(text)) / cjk > 0.03 or modern_ratio(text) > 0.04:
+        return False
+    r = rhyme_ratio(text)
+    return r is not None and r >= 0.5
+
+
 _EN_TITLE_SKIP = re.compile(r"^(stage|step|part|phase|section|chapter|appendix|table|figure|fig\.|week|month|day)\b", re.I)
 _EN_SMALL = {"a", "an", "the", "and", "or", "of", "in", "on", "for", "to", "with", "by", "at", "from", "as", "vs", "via", "into"}
 
@@ -167,6 +224,8 @@ def is_section_heading(line: str) -> bool:
     s = line.strip()
     if not s or len(s) > 60 or s.startswith("《"):
         return False
+    if is_list_item(s) and len(re.findall(r"[，。！？；]", s)) >= 2:
+        return False                                  # "8、客心争日月，来往预期程。……"是一首诗，不是章节标题
     return bool(_SECTION_NUM.match(s) or _SECTION_NAMES.match(s))
 
 
@@ -222,7 +281,7 @@ def is_poetry(text: str) -> bool:
 
 def detect_register(text: str) -> str:
     """zh（现代汉语）/ zh_classical（文言）/ zh_poetry（诗词、对联）/ en（英文及其他拉丁字母语言）。"""
-    t = _body_lines(text)
+    t = _body_lines("\n".join(strip_list_mark(l) for l in text.splitlines()))
     cjk = len(_CJK.findall(t))
     latin = len(_LATIN.findall(t))
     # 拉丁字母为主就是英文（短诗行也算，例如 "A cap of flowers, and a kirtle" 只有 24 个字母）
@@ -232,6 +291,8 @@ def detect_register(text: str) -> str:
         return "zh_poetry"
     if cjk >= 20 and classical_ratio(t) >= config.CLASSICAL_THRESHOLD and modern_ratio(t) <= config.MODERN_MAX_RATIO:
         return "zh_classical"
+    if cjk >= 12 and is_ci(t):
+        return "zh_poetry"
     return "zh"
 
 
@@ -285,7 +346,12 @@ def quotation_ratio(text: str) -> float:
     return min(1.0, quoted / cjk)
 
 
-def segment_text(text: str, exclude_references: bool = True, flag_quotations: bool = True):
+GENRES = ("auto", "classical")
+
+
+def segment_text(text: str, exclude_references: bool = True, flag_quotations: bool = True, genre: str = "auto"):
+    """genre = "classical"：用户声明这是中国古典文学作品集（诗、词、曲、赋、文言、古白话）。此时
+    每个编号条目都是一篇独立作品；文言、诗词、引号多的对话体都是检测对象，不当作引文排除。"""
     target = config.SEGMENT_TARGET_CHARS
     segments: list[Segment] = []
     in_refs = False
@@ -332,6 +398,20 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             ok = len(nxt) >= 40 and len(nxt.split()) >= 6
         if ok:
             iso_titles.add(a)
+
+    # 作品集条目模式：很多行以"1、""1）"这类编号开头、编号后直接就是诗文正文（不是"1. 引言"这样的章节标题）。
+    # 每个条目是一篇独立作品——古典诗词一首只有几十个字，不分开就会和前后几首（可能一首人写、一首 AI 写）
+    # 混成一段判断。自动模式下只在条目以诗词、文言为主时启用，避免把现代文里的"1、首先……"拆散；
+    # 用户勾选"中国古典文学"时只要有两条以上就启用。
+    item_lines = [l for l in nonempty if is_list_item(l)]
+    is_paper_doc = any(_ABSTRACT_HEAD.match(l) or _KEYWORDS_LINE.match(l) for l in nonempty)
+    list_mode = False
+    if genre == "classical":
+        list_mode = len(item_lines) >= 2
+    elif len(item_lines) >= 4 and not is_paper_doc:
+        verse = sum(len(l) for l in item_lines if detect_register(l) in ("zh_poetry", "zh_classical"))
+        list_mode = verse >= 0.5 * sum(len(l) for l in item_lines)
+    blk_item = False                 # 当前作品是不是作品集里的一个条目
 
     work_heads: set = set()          # 文集里带编号的作品标题（"1. 天坛：圆丘上的沉默""4. Hawaii"）
     blk_paper, blk_numbered = False, False
@@ -407,6 +487,13 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             continue
         section = is_section_heading(stripped)
         title = stripped in paper_titles or (is_title(stripped) and not section)
+        item = list_mode and is_list_item(stripped)
+        if (list_mode and not item and pending_break and blk_item and buf.strip()
+                and len(_CJK.findall(buf)) >= 40 and len(_CJK.findall(stripped)) >= 40
+                and detect_register(buf) == "zh_poetry" and detect_register(stripped) == "zh_poetry"):
+            item = True                  # 漏了编号的下一首诗（上一首已经完整，这一段又是一首完整的诗）
+        if item:
+            section, title = False, True
         block_before = block
         # 前后空行隔开的短标题：普通文章里就是新作品；论文里只有在论文本身用编号小标题（"8 Missing information …"）、
         # 而这一行不带编号、也不是"Introduction / 结论"这类章节名时，才是插进来的另一篇作品（"Walden"）
@@ -429,7 +516,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             title = True
         # 文集里带编号的作品标题：文体与上一篇不同（中英切换），或当前这篇不是论文、且它自己的标题也带编号
         # "001  把夜色缝好的小裁缝"：补零的三位编号 + 空格，也是文集里的作品编号
-        top = ((bool(re.match(r"^\d+\s*[.、．]\s*\S", stripped)) or bool(re.match(r"^0\d{1,2}\s+\S", stripped)))
+        top = not item and ((bool(re.match(r"^\d+\s*[.、．]\s*\S", stripped)) or bool(re.match(r"^0\d{1,2}\s+\S", stripped)))
                and not re.match(r"^\d+\.\d", stripped)
                and len(stripped) <= 90 and not _SECTION_NAMES.match(re.sub(r"^\d+\s*[.、．]?\s*", "", stripped)))
         if top and not title and re.match(r"^0\d{1,2}\s+\S", stripped) and not blk_paper:
@@ -456,7 +543,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             block = back_to
         elif buf.strip():
             reg = detect_register(buf)
-            if title and not (buf.strip() and is_title(buf.strip().splitlines()[-1])):
+            if item or (title and not (buf.strip() and is_title(buf.strip().splitlines()[-1]))):
                 # 新作品开始（连续两行标题视为同一个标题块）
                 flush()
                 block = max_block = max_block + 1
@@ -470,6 +557,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             block = max_block = max_block + 1
         was_pending, new_block_pending = new_block_pending, False
         if block != block_before or was_pending or (not segments and not buf.strip()):
+            blk_item = item
             blk_paper, blk_numbered = False, bool(title and top)
             blk_numsec = 0
             blk_concluded = False
@@ -498,7 +586,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
     segments = _mark_front_matter(segments)
     for i, s in enumerate(segments):
         s.index = i
-    if flag_quotations:
+    if flag_quotations and genre != "classical":
         _flag_quotations(segments)
     return segments
 
@@ -583,12 +671,16 @@ def _flag_quotations(segments):
     for s in segments:
         if s.kind == "body":
             blocks.setdefault(s.block, []).append(s)
+    # 整个文档以诗词、文言为主（古典文学作品集）：文言和诗词就是检测对象，不是现代文里引用的古籍
+    cjk_all = sum(len(s.text) for b in blocks.values() for s in b if s.register != "en") or 1
+    classical_all = sum(len(s.text) for b in blocks.values() for s in b if s.register in ("zh_classical", "zh_poetry"))
+    classical_collection = classical_all >= 0.6 * cjk_all
     for body in blocks.values():
         total = sum(len(s.text) for s in body) or 1
         cjk_body = [s for s in body if s.register != "en"]
         cjk_total = sum(len(s.text) for s in cjk_body) or 1
         classical_chars = sum(len(s.text) for s in cjk_body if s.register == "zh_classical")
-        classical_doc = classical_chars >= 0.5 * cjk_total
+        classical_doc = classical_chars >= 0.5 * cjk_total or classical_collection
         modern_doc = sum(len(s.text) for s in cjk_body if s.register == "zh") >= 0.5 * cjk_total
         quoted = [(s, quotation_ratio(s.text)) for s in cjk_body]
         quote_heavy = [s for s, q in quoted if q >= 0.5]
@@ -598,7 +690,7 @@ def _flag_quotations(segments):
                 s.kind, s.notes = "quotation", [f"引号内文字约占 {q:.0%}"]
             elif s.register == "zh_classical" and not classical_doc and len(s.text) >= 40:
                 s.kind, s.notes = "quotation", [f"文言段落（文言虚词 {classical_ratio(s.text):.0%}），疑为古籍引文"]
-            elif s.register == "zh_poetry" and modern_doc and not s.title:
+            elif s.register == "zh_poetry" and modern_doc and not s.title and not classical_collection:
                 s.kind, s.notes = "quotation", ["正文中引用的诗词（无标题）"]
 
 
