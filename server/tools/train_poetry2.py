@@ -165,7 +165,15 @@ def main():
           f"国产新模型 {len(ut)}×{reps}），开发 {len(dev)}；评估：ChangAn {len(test_h)} 人写 / {len(test_a)} AI，"
           f"唐宋三百首 {len(classic_eval)}，国产新模型 {len(user_test)}，故事诗 {len(story)}", flush=True)
 
-    if args.eval_model:
+    members = []
+    if args.eval_model and (Path(args.eval_model) / "ensemble.json").exists():
+        # 多版本合议包：各版本分别打分，取对数几率的平均（与线上 app/detectors/classifier.py 相同）
+        names = json.loads((Path(args.eval_model) / "ensemble.json").read_text("utf-8"))["members"]
+        members = [AutoModelForSequenceClassification.from_pretrained(str(Path(args.eval_model) / n), dtype=torch.float32)
+                   for n in names]
+        tok = AutoTokenizer.from_pretrained(str(Path(args.eval_model) / names[0]))
+        model = members[0]
+    elif args.eval_model:
         tok = AutoTokenizer.from_pretrained(args.eval_model)
         model = AutoModelForSequenceClassification.from_pretrained(args.eval_model, dtype=torch.float32)
     else:
@@ -183,6 +191,14 @@ def main():
             yield enc, torch.tensor([r["y"] for r in chunk])
 
     def predict(data):
+        if members:
+            out = []
+            with torch.inference_mode():
+                for enc, _ in batches(data, 64, False):
+                    lg = [m(**enc).logits.float() for m in members]
+                    z = sum(l[:, 1] - l[:, 0] for l in lg) / len(lg)
+                    out.extend(torch.sigmoid(z).tolist())
+            return out
         model.eval()
         out = []
         with torch.inference_mode():
