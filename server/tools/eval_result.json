@@ -607,41 +607,39 @@
    "auroc": {
     "fastdetect": 0.8229,
     "binoculars": 0.807,
-    "classifier": 0.9716,
-    "fastdetect_norm": 0.8095,
-    "lrr": 0.8431,
-    "log_rank": 0.8516,
-    "entropy": 0.7341,
-    "top10": 0.8071,
-    "style_cv": 0.6265,
-    "style_phrases": 0.5
+    "classifier": 0.9716
    },
    "features_used": [
-    "fastdetect",
-    "binoculars",
-    "logit_classifier",
-    "fastdetect_norm",
-    "lrr",
-    "log_rank",
-    "entropy",
-    "top10",
-    "style_cv",
-    "style_phrases"
+    "logit_classifier"
    ],
    "cross_validated": true,
-   "combined_auroc": 0.9715,
-   "threshold": 0.7748,
+   "combined_auroc": 0.9704,
+   "threshold": 0.8612,
    "human_flagged_rate": 0.03,
-   "ai_caught_rate": 0.8546,
+   "ai_caught_rate": 0.8521,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。",
+   "count_check": {
+    "fp_changan_human": 0.0233,
+    "fp_tang_song_300": 0.0155,
+    "worst_auroc": 0.672
+   },
    "feature_selection": {
+    "只用诗词分类器": 0.672,
     "诗词分类器 + 语言模型": 0.3586,
     "诗词分类器 + 通用分类器 + 语言模型": 0.3333,
     "通用分类器 + 语言模型": 0.1325,
     "只用语言模型": 0.1128
    },
-   "feature_set": "诗词分类器 + 语言模型",
+   "feature_set": "只用诗词分类器",
    "variant_table": {
+    "只用诗词分类器": {
+     "ChangAn 保留集": 0.9562,
+     "故事诗 vs 当代人写": 0.672,
+     "ChangAn AI vs 唐宋名篇": 0.9695,
+     "故事诗 vs 唐宋名篇": 0.7395,
+     "国产新模型诗 vs 当代人写": 0.9398,
+     "国产新模型诗 vs 唐宋名篇": 0.9546
+    },
     "诗词分类器 + 语言模型": {
      "ChangAn 保留集": 0.9549,
      "故事诗 vs 当代人写": 0.7098,
@@ -675,7 +673,7 @@
      "国产新模型诗 vs 唐宋名篇": 0.3101
     }
    },
-   "reference_only": true
+   "reference_only": false
   },
   "evaluation": [
    {
@@ -683,13 +681,13 @@
     "n_human": 0,
     "n_ai": 70,
     "auroc": null,
-    "ai_caught": 0.8429,
+    "ai_caught": 0.7857,
     "human_flagged": null,
     "per_signal_auroc": {},
     "ai_caught_by_model": {
-     "repo-ai-deepseek": 0.8571,
-     "repo-ai-kimi": 0.8,
-     "repo-ai-wenxin": 0.8667
+     "repo-ai-deepseek": 0.8,
+     "repo-ai-kimi": 0.75,
+     "repo-ai-wenxin": 0.8
     },
     "human_flagged_by_source": {}
    },
@@ -697,9 +695,9 @@
     "name": "ChangAn 保留集（另一批作者 + 没见过的 Kimi-K2 与其他模型的新诗词）",
     "n_human": 300,
     "n_ai": 300,
-    "auroc": 0.9549,
-    "ai_caught": 0.7533,
-    "human_flagged": 0.0333,
+    "auroc": 0.9562,
+    "ai_caught": 0.7267,
+    "human_flagged": 0.0233,
     "per_signal_auroc": {
      "fastdetect": 0.7595,
      "binoculars": 0.2502,
@@ -715,13 +713,13 @@
      "logit_classifier_mpu": 0.7237
     },
     "ai_caught_by_model": {
-     "Deepseek": 0.6533,
+     "Deepseek": 0.6667,
      "gpt-4.1": 0.8667,
-     "kimi-k2": 0.6933,
-     "seed": 0.8
+     "kimi-k2": 0.6133,
+     "seed": 0.76
     },
     "human_flagged_by_source": {
-     "human": 0.0333
+     "human": 0.0233
     }
    },
    {
@@ -729,11 +727,11 @@
     "n_human": 0,
     "n_ai": 40,
     "auroc": null,
-    "ai_caught": 0.125,
+    "ai_caught": 0.025,
     "human_flagged": null,
     "per_signal_auroc": {},
     "ai_caught_by_model": {
-     "repo-ai-story-poem": 0.125
+     "repo-ai-story-poem": 0.025
     },
     "human_flagged_by_source": {}
    },
@@ -743,12 +741,12 @@
     "n_ai": 0,
     "auroc": null,
     "ai_caught": null,
-    "human_flagged": 0.2307,
+    "human_flagged": 0.0155,
     "per_signal_auroc": {},
     "ai_caught_by_model": {},
     "human_flagged_by_source": {
-     "唐诗三百首": 0.2951,
-     "宋词三百首": 0.1464
+     "唐诗三百首": 0.0219,
+     "宋词三百首": 0.0071
     }
    }
   ],
