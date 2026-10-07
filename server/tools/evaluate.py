@@ -550,13 +550,17 @@ def fit_profile(prof, parts, target_fpr):
 
 
 POETRY_VARIANTS = {
+    # 只用诗词分类器：语言模型（Qwen）背过大量唐诗宋词，名篇的困惑度极低、看起来"像 AI"，
+    # 语言模型特征在名篇上反而拖后腿（v3 时：分类器单独 ChangAn AI vs 唐宋名篇 0.97，加上语言模型后 0.79）
+    "只用诗词分类器": ["logit_classifier"],
     "诗词分类器 + 语言模型": [f for f in scoring.EXTENDED_FEATURES if f != "lp_burstiness"],
     "诗词分类器 + 通用分类器 + 语言模型": [f for f in scoring.EXTENDED_FEATURES if f != "lp_burstiness"] + ["logit_classifier_mpu"],
     "通用分类器 + 语言模型": [f for f in scoring.EXTENDED_FEATURES if f not in ("lp_burstiness", "logit_classifier")] + ["logit_classifier_mpu"],
     "只用语言模型": [f for f in scoring.EXTENDED_FEATURES if f not in ("lp_burstiness", "logit_classifier")],
 }
-# 诗词的最差情况 AUROC 低于这个值时，诗词结果只作参考、不计入 AI 率
-POETRY_COUNT_MIN_AUROC = 0.80
+# 诗词计入 AI 率的条件：当代人写与唐宋名篇的误判率都不超过 5%，且 ChangAn 保留集 AUROC 不低于 0.93；否则只作参考
+POETRY_COUNT_MAX_FPR = 0.05
+POETRY_COUNT_MIN_HOLDOUT_AUROC = 0.93
 
 
 def fit_poetry(parts, target_fpr, hs, as_):
@@ -595,12 +599,24 @@ def fit_poetry(parts, target_fpr, hs, as_):
     res = fitted[best]
     cal = res["calibration"]
     worst = min(table[best].values()) if table[best] else 0
-    cal["reference_only"] = worst < POETRY_COUNT_MIN_AUROC
+    # 是否计入 AI 率：看"会不会冤枉人"——当代人写（ChangAn 保留集）和唐宋名篇的误判率都不超过 POETRY_COUNT_MAX_FPR，
+    # 且 ChangAn 保留集 AUROC 足够高。最差情况 AUROC 低（如复述故事的 AI 诗）只意味着这类 AI 诗会漏检，不会误判真人。
+    cal_ = dict(scoring.DEFAULTS); cal_.update(cal)
+    thr = cal_["threshold"]
+    fpr = lambda rows: (sum((scoring.combine(r["s"], cal_)["prob"] or 0) >= thr for r in rows) / len(rows)) if rows else 1.0
+    fp_modern = fpr([r for r in test if r["y"] == 0])
+    fp_classic = fpr(classic)
+    safe = (max(fp_modern, fp_classic) <= POETRY_COUNT_MAX_FPR
+            and table[best].get("ChangAn 保留集", 0) >= POETRY_COUNT_MIN_HOLDOUT_AUROC)
+    cal["reference_only"] = not safe
+    res["report"]["count_check"] = {"fp_changan_human": round(fp_modern, 4), "fp_tang_song_300": round(fp_classic, 4),
+                                    "worst_auroc": worst}
     cal["models"] = {"observer": config.OBSERVER_MODEL, "performer": config.PERFORMER_MODEL,
                      "classifier": config.classifier_for("zh_poetry")}
     cal["source"] = PROFILE_SOURCE["zh_poetry"]
     cal["note"] = (f"内置默认校准（诗词）：{best}；最差情况 AUROC {worst}。"
-                   + ("诗词检测在不同来源之间不够稳定，诗词结果只作参考、不计入 AI 率。" if cal["reference_only"] else ""))
+                   + ("诗词检测误判率偏高，诗词结果只作参考、不计入 AI 率。" if cal["reference_only"]
+                      else f"当代人写误判 {fp_modern:.1%}、唐宋名篇误判 {fp_classic:.1%}，诗词计入 AI 率。"))
     res["report"]["feature_selection"] = {k: min(v.values()) if v else None for k, v in table.items()}
     res["report"]["feature_set"] = best
     res["report"]["variant_table"] = table
