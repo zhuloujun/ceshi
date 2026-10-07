@@ -443,7 +443,9 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             off += len(p)
         buf = ""
 
+    line_no = -1
     for line in text.splitlines(keepends=True):
+        line_no += 1
         stripped = line.strip()
         line_start = pos
         pos += len(line)
@@ -510,6 +512,15 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             # 论文本身用编号小标题（已出现 ≥ 2 个"3 A worked example"这样的编号章节），而这一行不带编号、也不是
             # 章节名：是插进来的另一篇作品（"Walden"）。论文里的小节通常也带编号（"2.1"），不带编号的极少单独成行。
             numbered_paper = blk_numsec >= 2 and not _SECTION_NUM.match(stripped) and not _SECTION_NAMES.match(stripped)
+            if numbered_paper:
+                # 但论文自己的三级小标题不算：紧跟在"3.1 ……"这类带小数点编号的小节之后，或者后面几行又出现同样
+                # 不带编号的短标题（"Perplexity-Based Detection""Burstiness Analysis"……一组并列小标题）
+                li = next((k for k in range(line_no, -1, -1) if lines_all[k] == stripped), line_no)
+                before = [l for l in lines_all[max(0, li - 8):li] if l][-3:]
+                after = [l for l in lines_all[li + 1:li + 30] if l][:6]
+                sub_of_dotted = any(re.match(r"^\d+\.\d+", l) for l in before)
+                sibling = any(l in iso_titles or (_short_title_like(l) and not _SECTION_NUM.match(l)) for l in after)
+                numbered_paper = not (sub_of_dotted or sibling)
             iso_new = bool(_CJK.search(stripped)) != cur_zh or numbered_paper
         # 论文内部不带编号的英文小标题（"Risk Factors and Prevention"）是章节，不是新作品
         if (title and blk_paper and stripped not in paper_titles and not _CJK.search(stripped) and not iso_new
