@@ -1,0 +1,23 @@
+# 诊断用：查看线上叠加的"标注校准"和服务器上保存的标注数量（不打印标注原文）。只能手动运行。
+name: 校准诊断
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 查询
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          BASE = "https://zhuloujun--ai-text-checker-web.modal.run"
+          H = {"X-Admin-Token": os.environ["ADMIN_TOKEN"]}
+          for path in ("/admin/api/labels", "/admin/api/calibration"):
+              with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=H), timeout=600) as r:
+                  d = json.loads(r.read())
+              print(f"::notice title={path}::" + json.dumps(d, ensure_ascii=False)[:3800], flush=True)
+          PY

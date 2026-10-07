@@ -356,6 +356,16 @@ def admin_labels_clear(request: Request, x_admin_token: str | None = Header(None
     return {"ok": True, "message": "已清空服务器上的标注（已启用的校准不变；如需恢复默认，请再点“恢复默认校准”）。"}
 
 
+@app.get("/admin/api/calibration")
+def admin_calibration_status(request: Request, x_admin_token: str | None = Header(None)):
+    """当前叠加的"标注校准"（每个文体的阈值、特征、权重、样本说明），便于排查。"""
+    require_admin(request, x_admin_token)
+    user = config.load_user_profiles()
+    return {"source": engine.cal_source,
+            "user_profiles": {p: {k: c.get(k) for k in ("threshold", "lr", "note", "models", "reference_only")}
+                              for p, c in user.items()}}
+
+
 @app.delete("/admin/api/calibration")
 def admin_reset(request: Request, x_admin_token: str | None = Header(None)):
     """清除所有“用我的标注校准”的结果，恢复内置默认校准。"""
