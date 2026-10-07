@@ -1,0 +1,50 @@
+# 把同一种分类器的几个已发布版本合成一个"多版本合议"模型包（检测时各版本分别打分，取对数几率平均），发布为新的 Release。
+# 例：kind=classical members=classical-classifier-v4,classical-classifier-v3 tag=classical-classifier-v5
+# 只能手动运行；发布后还要用评估工作流（evaluate.yml，填 classical_tag / poetry_tag）重新拟合校准，线上才会换用。
+name: 合成多版本分类器
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "classical 或 poetry"
+        required: true
+      members:
+        description: "参与合议的 Release 标签，逗号分隔（第一个的分词器会被使用，各版本须同一底座）"
+        required: true
+      tag:
+        description: "新 Release 标签"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 合成并发布
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KIND: ${{ github.event.inputs.kind }}
+          MEMBERS: ${{ github.event.inputs.members }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -e
+          NAME="$KIND-classifier"
+          mkdir -p "out/$NAME" dl
+          LIST=""
+          for T in ${MEMBERS//,/ }; do
+            gh release download "$T" -p "$NAME.tar.gz" -D "dl/$T" -R "${{ github.repository }}"
+            mkdir -p "dl/$T/x" && tar xzf "dl/$T/$NAME.tar.gz" -C "dl/$T/x"
+            V="${T##*-}"
+            mv "dl/$T/x/$NAME" "out/$NAME/$V"
+            LIST="$LIST\"$V\","
+          done
+          echo "{\"members\": [${LIST%,}], \"source_tags\": \"$MEMBERS\"}" > "out/$NAME/ensemble.json"
+          cat "out/$NAME/ensemble.json"; du -sh "out/$NAME"
+          tar czf "$NAME.tar.gz" -C out "$NAME"
+          gh release create "$TAG" "$NAME.tar.gz" -R "${{ github.repository }}" --title "$TAG" \
+            --notes "多版本合议：$MEMBERS（各版本分别打分，取对数几率平均）。由 .github/workflows/make-ensemble.yml 合成。"
+          echo "::notice title=已发布::$TAG（$MEMBERS）"
