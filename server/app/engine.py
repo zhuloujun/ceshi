@@ -76,6 +76,36 @@ def score_text(seg) -> str:
     return text
 
 
+_EVAL_CACHE: dict = {}
+
+
+def known_error_rates(profiles: list) -> list:
+    """本工具在独立测试集上实测的检出率 / 误判率（tools/eval_result.json，由 tools/evaluate.py 生成）。
+    参考 Weber-Wulff 等（2023）与 Liang 等（2023）对检测工具的要求：报告应按文体说明已知误差，
+    而不是只给一个分数。只列"未参与训练和校准"的测试集，不列对照实验。"""
+    import json
+    from pathlib import Path
+    if "d" not in _EVAL_CACHE:
+        f = Path(__file__).resolve().parent.parent / "tools" / "eval_result.json"
+        try:
+            _EVAL_CACHE["d"] = json.loads(f.read_text("utf-8"))
+        except (OSError, ValueError):
+            _EVAL_CACHE["d"] = {}
+    d = _EVAL_CACHE["d"]
+    out = []
+    for prof in profiles:
+        sets = []
+        for e in (d.get(prof) or {}).get("evaluation") or []:
+            if "对照" in e.get("name", "") or (not e.get("n_ai") and not e.get("n_human")):
+                continue
+            sets.append({"name": e["name"], "n_ai": e.get("n_ai", 0), "n_human": e.get("n_human", 0),
+                         "ai_caught": e.get("ai_caught") if e.get("n_ai") else None,
+                         "human_flagged": e.get("human_flagged") if e.get("n_human") else None})
+        if sets:
+            out.append({"profile": prof, "name": scoring.PROFILE_NAMES.get(prof, prof), "sets": sets})
+    return out
+
+
 def works_summary(seg_out: list) -> list:
     """按作品（标题分开的部分）汇总，类似知网报告里的“章节 / 片段 AI 率”：每篇给出字数、AI 率和结论。"""
     works: dict = {}
@@ -689,6 +719,15 @@ class Engine:
             })
 
         excluded = [s for s in segs if not s.counted]
+        used_profiles = []
+        for s_ in counted:
+            r_ = s_.register
+            if r_ == "zh" and has_short and len(score_text(s_)) < config.SHORT_SEGMENT_CHARS:
+                r_ = "zh_short"
+            if r_ == "en" and s_.block in paper_blocks:
+                r_ = "en_paper"
+            if r_ not in used_profiles:
+                used_profiles.append(r_)
         flagged_chars = chars_by_level["high"] + chars_by_level["mid"] + chars_by_level["light"]
         rate = (lambda n: round(n / counted_chars, 4) if counted_chars else None)
         main_reg = max(chars_by_register, key=chars_by_register.get) if chars_by_register else "zh"
@@ -798,6 +837,7 @@ class Engine:
                 "smoothing": config.SMOOTHING,
                 "mode": mode,
                 "genre": genre,
+                "error_rates": known_error_rates(used_profiles),
                 "lm_sampled": sampled,
                 "lm_scored_segments": len(lm_ids) if (self.lm and self.lm.ready) else 0,
                 "calibrated": bool(main_cal.get("calibrated")),

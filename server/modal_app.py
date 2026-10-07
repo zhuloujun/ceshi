@@ -71,6 +71,8 @@ image = (
     .run_commands(f"python /root/download_models.py {OBSERVER_MODEL} {PERFORMER_MODEL} {CLASSIFIER_MODEL} {EN_CLASSIFIER_MODEL}")
     .add_local_dir("app", "/root/app")
     .add_local_dir("static", "/root/static")
+    # 各文体在独立测试集上的检出率 / 误判率（报告里的"已知误差"一节）
+    .add_local_file("tools/eval_result.json", "/root/tools/eval_result.json")
 )
 if HAS_POETRY:
     image = image.add_local_dir(str(POETRY_LOCAL), POETRY_DIR)
