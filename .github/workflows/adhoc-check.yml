@@ -43,6 +43,9 @@ jobs:
               while j.get("status") not in ("done", "error") and jid:
                   time.sleep(10)
                   j = call(f"/v1/jobs/{jid}", headers=H)
+                  if not j:                 # 任务丢了（服务重新部署 / 容器重启）：重新提交一次
+                      j = call("/v1/detect", {"text": d["text"], "wait": False, "genre": d.get("genre", "auto")}, H)
+                      jid = j.get("job_id") or j.get("id")
               res = j.get("result") or {}
               s = res.get("summary") or {}
               works = " ； ".join(f"{w['title'][:24]} {'—' if w.get('ai_rate') is None else round(w['ai_rate'] * 100)}%"
