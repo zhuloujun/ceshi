@@ -289,7 +289,10 @@ def detect_register(text: str) -> str:
         return "en"
     if cjk >= 12 and is_poetry(t):
         return "zh_poetry"
-    if cjk >= 20 and classical_ratio(t) >= config.CLASSICAL_THRESHOLD and modern_ratio(t) <= config.MODERN_MAX_RATIO:
+    cr, mr = classical_ratio(t), modern_ratio(t)
+    # 文言虚词很多（≥ 8%）时，偶尔一两个白话字（"那""这""一个"）不改变文言的判断
+    if cjk >= 20 and cr >= config.CLASSICAL_THRESHOLD and (mr <= config.MODERN_MAX_RATIO
+                                                          or (cjk >= 60 and cr >= 0.08 and mr <= 2 * config.MODERN_MAX_RATIO)):
         return "zh_classical"
     if cjk >= 12 and is_ci(t):
         return "zh_poetry"
