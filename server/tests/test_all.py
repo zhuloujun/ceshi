@@ -653,7 +653,15 @@ def test_labels_sync_and_auto_calibrate(client, monkeypatch):
     monkeypatch.setattr(eng, "load_builtin_calib", lambda profile: fake)
     config.save_user_profiles({})
     engine.reload_calibration()
-    items = [{"key": f"k{i}", "text": CLASSICAL + str(i), "register": "zh_classical", "label": "ai"} for i in range(3)]
+    # 只有一类标注（3 段 AI、0 段人写）：不启用，继续用内置校准
+    only_ai = [{"key": f"k{i}", "text": CLASSICAL + str(i), "register": "zh_classical", "label": "ai"} for i in range(3)]
+    client.post("/admin/api/labels", json={"items": only_ai}, headers=ADMIN)
+    for _ in range(120):
+        time.sleep(0.25)
+        if client.get("/admin/api/labels", headers=ADMIN).json()["last"].get("zh_classical", {}).get("status") in ("done", "error"):
+            break
+    assert "zh_classical" not in config.load_user_profiles()
+    items = only_ai + [{"key": f"h{i}", "text": CLASSICAL + "人" + str(i), "register": "zh_classical", "label": "human"} for i in range(2)]
     r = client.post("/admin/api/labels", json={"items": items}, headers=ADMIN)
     assert r.status_code == 200 and r.json()["by_register"]["zh_classical"]["ai"] == 3
     for _ in range(120):
