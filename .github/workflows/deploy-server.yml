@@ -125,6 +125,21 @@ jobs:
           else
             echo "::warning title=第二个英文整篇分类器::没有找到 Release $TAG，本次不部署它"
           fi
+      - name: 检查专用分类器确实会随镜像部署（内置校准用到了却没装上，相应文体的校准会被整个丢弃）
+        working-directory: server
+        run: |
+          python3 - <<'PY'
+          import re, sys
+          sys.path.insert(0, ".")
+          import modal_app as m
+          cal = open("app/default_calibration.json", encoding="utf-8").read()
+          bad = [n for n, tag, ok in (("文言分类器", "classical-classifier-v", m.HAS_CLASSICAL), ("诗词分类器", "poetry-classifier-v", m.HAS_POETRY))
+                 if tag in cal and not ok]
+          if bad:
+              print(f"::error title=分类器缺失::内置校准用到了 {'、'.join(bad)}，但模型目录里没有 config.json / ensemble.json")
+              sys.exit(1)
+          print("诗词分类器", m.HAS_POETRY, "文言分类器", m.HAS_CLASSICAL)
+          PY
       - name: 部署
         working-directory: server
         env:

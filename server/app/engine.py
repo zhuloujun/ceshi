@@ -909,8 +909,23 @@ class JobQueue:
                     job["result"] = run_calibration(self.engine, p, progress)
                 elif job["kind"] == "autocalibrate":
                     res = run_calibration(self.engine, p, progress)
-                    saved, _ = apply_user_calibration(self.engine, res["calibration"])
-                    job["result"] = {"report": res["report"], "saved": saved}
+                    rep = res["report"]
+                    caught = rep.get("ai_caught_rate")
+                    # 自动校准的安全检查：人写、AI 标注各少于 2 段，或新阈值下（内置 + 你的样本里）AI 文字检出不到一半，
+                    # 说明标注太少或互相矛盾（例如一段里混着人写和 AI 的作品），这次不启用，继续用内置校准
+                    reason = ("人写和 AI 标注各需要至少 2 段" if min(rep.get("user_human", 0), rep.get("user_ai", 0)) < 2 else
+                              f"新校准下 AI 样本只检出 {caught:.0%}" if caught is not None and caught < 0.5 else "")
+                    if reason:
+                        user = config.load_user_profiles()
+                        prof_ = res["calibration"].get("profile")
+                        if prof_ in user:
+                            del user[prof_]
+                            config.save_user_profiles(user)
+                            self.engine.reload_calibration()
+                        job["result"] = {"report": rep, "saved": False, "rejected": reason}
+                    else:
+                        saved, _ = apply_user_calibration(self.engine, {**res["calibration"], "guard": AUTOCAL_GUARD})
+                        job["result"] = {"report": rep, "saved": saved}
                 job["status"] = "done"
             except Exception as e:  # noqa: BLE001
                 log.exception("job %s failed", jid)
@@ -931,6 +946,9 @@ def apply_user_calibration(engine: Engine, cal: dict):
     return saved, user
 
 
+AUTOCAL_GUARD = 1
+
+
 class AutoCalibrator:
     """"标完自动生效"：管理员在报告页上的每一次标注都同步到服务器（永久保存），
     停手 AUTO_CALIBRATE_DELAY 秒后，用服务器上这一文体的全部标注自动重新校准并启用——越标越准。"""
@@ -941,6 +959,12 @@ class AutoCalibrator:
         self.timers: dict[str, threading.Timer] = {}
         self.last: dict[str, dict] = {}
         self.labels: dict = config.load_json_file(config.USER_LABELS_FILE, {}).get("labels", {})
+        # 安全检查（见 JobQueue 里的 autocalibrate）上线前保存的标注校准：启动后按现有标注重新校准一次
+        user = config.load_user_profiles()
+        regs = {v["register"] for v in self.labels.values()}
+        for reg, c in user.items():
+            if reg in regs and c.get("guard") != AUTOCAL_GUARD:
+                self.schedule(reg, 60)
 
     def _save(self):
         config.save_json_file(config.USER_LABELS_FILE, {"format": "user_labels_v1", "labels": self.labels})

@@ -19,11 +19,12 @@ EN_CLASSIFIER_MODEL = "desklib/ai-text-detector-v1.01"   # 英文分类器（DeB
 # 仓库是私有的，部署工作流会先用 GitHub 令牌把它下载解压到 server/poetry-classifier，再随镜像上传。
 POETRY_LOCAL = Path(__file__).resolve().parent / "poetry-classifier"
 POETRY_DIR = "/models/poetry-classifier"
-HAS_POETRY = (POETRY_LOCAL / "config.json").exists()
+HAS_POETRY = (POETRY_LOCAL / "config.json").exists() or (POETRY_LOCAL / "ensemble.json").exists()
 # 文言专用分类器（tools/train_classical.py 训练，Release classical-classifier-v3）：部署工作流按需下载到 server/classical-classifier
 CLASSICAL_LOCAL = Path(__file__).resolve().parent / "classical-classifier"
 CLASSICAL_DIR = "/models/classical-classifier"
-HAS_CLASSICAL = (CLASSICAL_LOCAL / "config.json").exists()
+# 多版本合议包（classical-classifier-v5 起）顶层只有 ensemble.json，没有 config.json
+HAS_CLASSICAL = (CLASSICAL_LOCAL / "config.json").exists() or (CLASSICAL_LOCAL / "ensemble.json").exists()
 # 英文第二分类器（tools/train_english.py 训练，Release english-classifier-v1）：部署工作流按需下载到 server/english-classifier
 EN2_LOCAL = Path(__file__).resolve().parent / "english-classifier"
 EN2_DIR = "/models/english-classifier"
