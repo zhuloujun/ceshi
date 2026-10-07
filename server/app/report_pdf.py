@@ -168,6 +168,33 @@ def build(payload: dict) -> bytes:
     story.append(Paragraph(esc(payload.get("method") or ""), S["small"]))
     story.append(Paragraph("说明：任何 AI 检测都有误判，本报告只供作者自查，不能作为学术不端判定依据。", S["small"]))
 
+    # ---- 已知误差 + 如何解读（Weber-Wulff 等 2023、Liang 等 2023 对检测报告的要求：说明测的是什么、
+    #      在相应文体上的检出率与误判率、还需要哪些旁证）----
+    er = s.get("error_rates") or []
+    if er:
+        story.append(Paragraph("已知误差（本工具在独立测试集上的实测）", S["h2"]))
+        rows = [[Paragraph(x, S["cellc"]) for x in ("文体", "测试集（未参与训练和校准）", "AI 检出率", "人写误判率")]]
+        for g in er:
+            for k, e in enumerate(g["sets"]):
+                rows.append([Paragraph(esc(g["name"]) if k == 0 else "", S["cell"]),
+                             Paragraph(esc(f'{e["name"]}（AI {e["n_ai"]} / 人写 {e["n_human"]}）'), S["cell"]),
+                             Paragraph(pct(e.get("ai_caught")), S["cellc"]),
+                             Paragraph(pct(e.get("human_flagged")), S["cellc"])])
+        t = Table(rows, colWidths=[W * x for x in (0.13, 0.57, 0.15, 0.15)], repeatRows=1)
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef1f3")),
+                               ("GRID", (0, 0), (-1, -1), 0.3, C_RULE), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+        story.append(t)
+    story.append(Paragraph("如何解读与复核", S["h2"]))
+    guide = [
+        "AI 率是“被判为疑似 AI 的文字占计入字数的比例”，不是“这篇文章由 AI 写成的概率”，更不是学术不端的概率。",
+        "误判有基数效应：即使误判率只有 1%，检测 1000 篇真人文章也会冤枉约 10 篇。单一检测分数不能作为定论。",
+        "复核被标出的段落时，请结合旁证：写作草稿与修改记录（文档版本历史）、引用资料与参考文献的核对、作者能否当面讲清文中的观点和方法。",
+        "检测模型只认得训练时见过的 AI 写法：对更新的模型、经过人工改写或翻译的文字，检出率会下降；诗词、文言这类短小、程式化的文体误差也更大（见上表）。",
+    ]
+    if (s.get("chars_by_register") or {}).get("en"):
+        guide.append("英文非母语作者的文字更容易被误判（Liang 等，2023）；本工具的真人英文测试集包含中国作者的论文，误判率已计入上表。")
+    story += [Paragraph(esc(g), S["note"], bulletText="•") for g in guide]
+
     # ---- 分篇结果 ----
     if len(works) > 1:
         story.append(Paragraph("分篇结果", S["h2"]))

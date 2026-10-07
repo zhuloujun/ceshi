@@ -71,7 +71,6 @@
       <label class="opt"><input type="radio" name="mode" value="fast"> 快速检测（抽样约 60 段）</label>
       <label class="opt"><input type="checkbox" id="optRefs" checked> 排除参考文献</label>
       <label class="opt"><input type="checkbox" id="optQuotes" checked> 引文为主的段落不计入</label>
-      <label class="opt" title="诗、词、曲、赋、文言文、古白话小说的作品集：每个编号条目单独判断；文言和诗词都计入，不当作引文"><input type="checkbox" id="optClassical"> 中国古典文学作品（诗词曲赋、文言文）</label>
       <p class="opt-hint">完整检测耗时与服务器配置有关：默认 8 核 CPU 上 20 万字约 10 分钟左右，2 核约 25–30 分钟；快速检测一般几分钟内完成。页面会显示实际剩余时间。服务闲置后首次打开需要 1–3 分钟启动。检测在服务器后台进行，可以关掉页面稍后用同一 Key 查询（结果保留 1 小时）。</p>
     </div>
     <div class="input-footer">
@@ -112,11 +111,12 @@
       <div class="summary-card"><span class="summary-num" id="sumMean">—</span><span class="summary-label">平均 AI 概率</span></div>
       <div class="summary-card"><span class="summary-num" id="sumFlagged">—</span><span class="summary-label">疑似段落 / 计入段落</span></div>
       <div class="summary-card"><span class="summary-num" id="sumExcluded">—</span><span class="summary-label">未计入字数</span></div>
-      <button id="exportBtn" class="ghost-btn">导出报告 (PDF)</button>
+      <button id="exportBtn" class="export-btn"><span class="export-ico" aria-hidden="true">⤓</span>导出报告 (PDF)</button>
       <button id="exportTxtBtn" class="ghost-btn" title="纯文本格式，便于复制">导出 .txt</button>
     </div>
     <p class="calib-line" id="calibLine"></p>
     <ul class="notes-list" id="notesList"></ul>
+    <details class="err-box" id="errBox" hidden><summary>本工具的已知误差与如何解读</summary><div id="errBody"></div></details>
     <div class="works-box" id="worksBox" hidden></div>
 
     <div class="legend">

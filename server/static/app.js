@@ -232,7 +232,7 @@ async function runAnalysis(){
     let job = await api('/v1/detect', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', ...authHeaders() },
-      body: JSON.stringify({ text, mode, exclude_references: $('optRefs').checked, flag_quotations: $('optQuotes').checked, genre: $('optClassical') && $('optClassical').checked ? 'classical' : 'auto', wait: false })
+      body: JSON.stringify({ text, mode, exclude_references: $('optRefs').checked, flag_quotations: $('optQuotes').checked, wait: false })
     });
     Lib() && Lib().onJobStarted(job.id);
     await finishJob(job, text);
@@ -336,6 +336,17 @@ function renderResult(res){
   const flagged = (L.high||0) + (L.mid||0) + (L.light||0);
   const counted = flagged + (L.low||0);
   $('notesList').innerHTML = (s.reliability_notes || []).map(n=>`<li>${escapeHtml(n)}</li>`).join('');
+  // 已知误差（独立测试集实测）+ 如何解读：检测分数只是线索，需要旁证
+  const er = s.error_rates || [];
+  $('errBox').hidden = !er.length;
+  if(er.length){
+    const rows = er.map(g=>g.sets.map((e,k)=>`<tr><td>${k?'':escapeHtml(g.name)}</td><td>${escapeHtml(e.name)}<span class="err-n">（AI ${e.n_ai} / 人写 ${e.n_human}）</span></td>`+
+      `<td>${pct(e.ai_caught)}</td><td>${pct(e.human_flagged)}</td></tr>`).join('')).join('');
+    $('errBody').innerHTML = `<table class="err-table"><thead><tr><th>文体</th><th>测试集（未参与训练和校准）</th><th>AI 检出率</th><th>人写误判率</th></tr></thead><tbody>${rows}</tbody></table>`+
+      `<ul class="err-guide"><li>AI 率是被判为疑似 AI 的文字所占比例，不是“由 AI 写成的概率”，更不是学术不端的概率。</li>`+
+      `<li>即使误判率只有 1%，检测 1000 篇真人文章也会冤枉约 10 篇：单一分数不能作为定论。</li>`+
+      `<li>复核时请结合草稿与修改记录、引用资料核对，以及作者能否讲清文中的观点和方法。</li></ul>`;
+  }
   $('sumFlagged').textContent = `${flagged} / ${counted}`;
   $('sumExcluded').textContent = s.excluded_chars.toLocaleString();
   const methods = Object.entries(s.methods).filter(([,v])=>v).map(([k])=>SIG_NAME[k]).join('、') || '无';
@@ -508,7 +519,7 @@ function download(blob, name){
 // PDF 报告：把结果交给服务器排版（嵌入中文字体，任何阅读器都能正常显示）
 exportBtn.addEventListener('click', async ()=>{
   if(!lastResult) return;
-  const old = exportBtn.textContent;
+  const old = exportBtn.innerHTML;
   exportBtn.disabled = true; exportBtn.textContent = '正在生成 PDF…';
   try{
     const payload = {
@@ -527,7 +538,7 @@ exportBtn.addEventListener('click', async ()=>{
   }catch(err){
     showError('生成 PDF 失败：' + err.message + '。可以先用“导出 .txt”。');
   }finally{
-    exportBtn.disabled = false; exportBtn.textContent = old;
+    exportBtn.disabled = false; exportBtn.innerHTML = old;
   }
 });
 // 纯文本报告（便于复制粘贴）
