@@ -4,9 +4,11 @@
 - 英文：desklib/ai-text-detector-v1.01（DeBERTa-v3-large，用 RAID 基准训练，发布时位列 RAID 排行榜首位，MIT 许可）。"""
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
+from pathlib import Path
 
 from .. import config
 
@@ -31,11 +33,17 @@ class Classifier:
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         self.torch = torch
-        self.tok = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name).eval()
+        # 模型目录里有 ensemble.json 时是"多版本合议"：几个同底座（同一分词器）的版本各自打分，取对数几率的平均。
+        # 例：文言分类器 v5 = v4（新增千问古典体裁数据）+ v3（对 Kimi / 文心等旧来源更稳），比任一单版的最差来源都好
+        ens = Path(self.model_name) / "ensemble.json"
+        names = ([str(Path(self.model_name) / m) for m in json.loads(ens.read_text("utf-8"))["members"]]
+                 if ens.exists() else [self.model_name])
+        self.tok = AutoTokenizer.from_pretrained(names[0])
+        self.models = [AutoModelForSequenceClassification.from_pretrained(n).eval() for n in names]
+        self.model = self.models[0]
         self.labels = {int(k): str(v) for k, v in self.model.config.id2label.items()}
         self.ai_index = self._resolve_ai_index()
-        log.info("classifier labels=%s ai_index=%s", self.labels, self.ai_index)
+        log.info("classifier labels=%s ai_index=%s members=%d", self.labels, self.ai_index, len(self.models))
         self.ready = True
 
     def _resolve_ai_index(self) -> int:
@@ -61,8 +69,13 @@ class Classifier:
             for i in range(0, len(texts), batch_size):
                 enc = self.tok(texts[i:i + batch_size], truncation=True, max_length=self.max_tokens,
                                padding=True, return_tensors="pt")
-                probs = torch.softmax(self.model(**enc).logits.float(), dim=-1)
-                out.extend(probs[:, self.ai_index].tolist())
+                models = getattr(self, "models", None) or [self.model]
+                lo = None
+                for m in models:
+                    p = torch.softmax(m(**enc).logits.float(), dim=-1)[:, self.ai_index].clamp(1e-6, 1 - 1e-6)
+                    x = torch.log(p) - torch.log1p(-p)
+                    lo = x if lo is None else lo + x
+                out.extend(torch.sigmoid(lo / len(models)).tolist())
         return out
 
 
