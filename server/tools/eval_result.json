@@ -291,7 +291,7 @@
      "binoculars": 0.4234,
      "logit_classifier": 0.8832,
      "fastdetect_norm": 0.5805,
-     "lrr": 0.6236,
+     "lrr": 0.6235,
      "log_rank": 0.3531,
      "entropy": 0.3639,
      "top10": 0.6535,
@@ -408,7 +408,7 @@
      "binoculars": 0.4234,
      "logit_classifier": 0.8832,
      "fastdetect_norm": 0.5805,
-     "lrr": 0.6236,
+     "lrr": 0.6235,
      "log_rank": 0.3531,
      "entropy": 0.3639,
      "top10": 0.6535,
@@ -522,7 +522,7 @@
    "auroc": {
     "fastdetect": 0.8882,
     "binoculars": 0.8835,
-    "classifier": 0.9982
+    "classifier": 0.9997
    },
    "features_used": [
     "fastdetect",
@@ -530,10 +530,10 @@
     "logit_classifier"
    ],
    "cross_validated": true,
-   "combined_auroc": 0.9969,
-   "threshold": 0.5022,
-   "human_flagged_rate": 0.0339,
-   "ai_caught_rate": 0.975,
+   "combined_auroc": 0.9994,
+   "threshold": 0.5,
+   "human_flagged_rate": 0.0127,
+   "ai_caught_rate": 0.9875,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
   },
   "evaluation": [
@@ -541,13 +541,13 @@
     "name": "文言保留集（另一组古籍 + 未参与校准的 AI 文言）",
     "n_human": 143,
     "n_ai": 40,
-    "auroc": 0.9932,
+    "auroc": 0.9888,
     "ai_caught": 0.925,
-    "human_flagged": 0.035,
+    "human_flagged": 0.021,
     "per_signal_auroc": {
      "fastdetect": 0.8934,
-     "binoculars": 0.103,
-     "logit_classifier": 0.9909,
+     "binoculars": 0.1028,
+     "logit_classifier": 0.9895,
      "fastdetect_norm": 0.8892,
      "lrr": 0.9318,
      "log_rank": 0.0675,
@@ -567,12 +567,12 @@
      "困学纪闻": 0.0,
      "幽明录": 0.0,
      "搜神记": 0.0,
-     "新唐书": 0.1818,
+     "新唐书": 0.0909,
      "旧五代史": 0.0,
      "明夷待访录": 0.0,
      "武林旧事": 0.0,
      "聊斋志异": 0.0,
-     "西湖梦寻": 0.2727,
+     "西湖梦寻": 0.1818,
      "资治通鉴": 0.0,
      "金史": 0.0,
      "陶庵梦忆": 0.0
@@ -583,12 +583,12 @@
     "n_human": 0,
     "n_ai": 50,
     "auroc": null,
-    "ai_caught": 0.92,
+    "ai_caught": 0.96,
     "human_flagged": null,
     "per_signal_auroc": {},
     "ai_caught_by_model": {
-     "repo-ai-deepseek": 0.9286,
-     "repo-ai-kimi": 0.8333,
+     "repo-ai-deepseek": 0.9643,
+     "repo-ai-kimi": 0.9167,
      "repo-ai-wenxin": 1.0
     },
     "human_flagged_by_source": {}
@@ -597,7 +597,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "classical-classifier-v5"
+   "classifier": "classical-classifier-v6"
   }
  },
  "zh_poetry": {
@@ -607,61 +607,61 @@
    "auroc": {
     "fastdetect": 0.8229,
     "binoculars": 0.807,
-    "classifier": 0.9716
+    "classifier": 0.9702
    },
    "features_used": [
     "logit_classifier"
    ],
    "cross_validated": true,
-   "combined_auroc": 0.9704,
-   "threshold": 0.8612,
-   "human_flagged_rate": 0.03,
-   "ai_caught_rate": 0.8521,
+   "combined_auroc": 0.9686,
+   "threshold": 0.8698,
+   "human_flagged_rate": 0.0325,
+   "ai_caught_rate": 0.8321,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。",
    "count_check": {
-    "fp_changan_human": 0.0233,
-    "fp_tang_song_300": 0.0155,
-    "worst_auroc": 0.672
+    "fp_changan_human": 0.0267,
+    "fp_tang_song_300": 0.0217,
+    "worst_auroc": 0.6788
    },
    "feature_selection": {
-    "只用诗词分类器": 0.672,
-    "诗词分类器 + 语言模型": 0.3586,
-    "诗词分类器 + 通用分类器 + 语言模型": 0.3333,
+    "只用诗词分类器": 0.6788,
+    "诗词分类器 + 语言模型": 0.4193,
+    "诗词分类器 + 通用分类器 + 语言模型": 0.3767,
     "通用分类器 + 语言模型": 0.1325,
     "只用语言模型": 0.1128
    },
    "feature_set": "只用诗词分类器",
    "variant_table": {
     "只用诗词分类器": {
-     "ChangAn 保留集": 0.9562,
-     "故事诗 vs 当代人写": 0.672,
-     "ChangAn AI vs 唐宋名篇": 0.9695,
-     "故事诗 vs 唐宋名篇": 0.7395,
-     "国产新模型诗 vs 当代人写": 0.9398,
-     "国产新模型诗 vs 唐宋名篇": 0.9546
+     "ChangAn 保留集": 0.9488,
+     "故事诗 vs 当代人写": 0.6788,
+     "ChangAn AI vs 唐宋名篇": 0.9624,
+     "故事诗 vs 唐宋名篇": 0.7424,
+     "国产新模型诗 vs 当代人写": 0.946,
+     "国产新模型诗 vs 唐宋名篇": 0.959
     },
     "诗词分类器 + 语言模型": {
-     "ChangAn 保留集": 0.9549,
-     "故事诗 vs 当代人写": 0.7099,
-     "ChangAn AI vs 唐宋名篇": 0.7913,
-     "故事诗 vs 唐宋名篇": 0.3586,
-     "国产新模型诗 vs 当代人写": 0.9692,
-     "国产新模型诗 vs 唐宋名篇": 0.8305
+     "ChangAn 保留集": 0.9431,
+     "故事诗 vs 当代人写": 0.7147,
+     "ChangAn AI vs 唐宋名篇": 0.8189,
+     "故事诗 vs 唐宋名篇": 0.4193,
+     "国产新模型诗 vs 当代人写": 0.9641,
+     "国产新模型诗 vs 唐宋名篇": 0.853
     },
     "诗词分类器 + 通用分类器 + 语言模型": {
-     "ChangAn 保留集": 0.9531,
-     "故事诗 vs 当代人写": 0.6752,
-     "ChangAn AI vs 唐宋名篇": 0.7603,
-     "故事诗 vs 唐宋名篇": 0.3333,
-     "国产新模型诗 vs 当代人写": 0.9553,
-     "国产新模型诗 vs 唐宋名篇": 0.7645
+     "ChangAn 保留集": 0.9435,
+     "故事诗 vs 当代人写": 0.6751,
+     "ChangAn AI vs 唐宋名篇": 0.7819,
+     "故事诗 vs 唐宋名篇": 0.3767,
+     "国产新模型诗 vs 当代人写": 0.9433,
+     "国产新模型诗 vs 唐宋名篇": 0.777
     },
     "通用分类器 + 语言模型": {
      "ChangAn 保留集": 0.8769,
      "故事诗 vs 当代人写": 0.5923,
      "ChangAn AI vs 唐宋名篇": 0.3359,
      "故事诗 vs 唐宋名篇": 0.1325,
-     "国产新模型诗 vs 当代人写": 0.8361,
+     "国产新模型诗 vs 当代人写": 0.836,
      "国产新模型诗 vs 唐宋名篇": 0.3113
     },
     "只用语言模型": {
@@ -681,13 +681,13 @@
     "n_human": 0,
     "n_ai": 70,
     "auroc": null,
-    "ai_caught": 0.7857,
+    "ai_caught": 0.8143,
     "human_flagged": null,
     "per_signal_auroc": {},
     "ai_caught_by_model": {
-     "repo-ai-deepseek": 0.8,
-     "repo-ai-kimi": 0.75,
-     "repo-ai-wenxin": 0.8
+     "repo-ai-deepseek": 0.8571,
+     "repo-ai-kimi": 0.7,
+     "repo-ai-wenxin": 0.8667
     },
     "human_flagged_by_source": {}
    },
@@ -695,13 +695,13 @@
     "name": "ChangAn 保留集（另一批作者 + 没见过的 Kimi-K2 与其他模型的新诗词）",
     "n_human": 300,
     "n_ai": 300,
-    "auroc": 0.9562,
-    "ai_caught": 0.7267,
-    "human_flagged": 0.0233,
+    "auroc": 0.9488,
+    "ai_caught": 0.71,
+    "human_flagged": 0.0267,
     "per_signal_auroc": {
      "fastdetect": 0.7596,
      "binoculars": 0.2502,
-     "logit_classifier": 0.9562,
+     "logit_classifier": 0.9488,
      "fastdetect_norm": 0.7519,
      "lrr": 0.8175,
      "log_rank": 0.1699,
@@ -713,13 +713,13 @@
      "logit_classifier_mpu": 0.7237
     },
     "ai_caught_by_model": {
-     "Deepseek": 0.6667,
+     "Deepseek": 0.6267,
      "gpt-4.1": 0.8667,
      "kimi-k2": 0.6133,
-     "seed": 0.76
+     "seed": 0.7333
     },
     "human_flagged_by_source": {
-     "human": 0.0233
+     "human": 0.0267
     }
    },
    {
@@ -741,11 +741,11 @@
     "n_ai": 0,
     "auroc": null,
     "ai_caught": null,
-    "human_flagged": 0.0155,
+    "human_flagged": 0.0217,
     "per_signal_auroc": {},
     "ai_caught_by_model": {},
     "human_flagged_by_source": {
-     "唐诗三百首": 0.0219,
+     "唐诗三百首": 0.0328,
      "宋词三百首": 0.0071
     }
    }
@@ -753,7 +753,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "poetry-classifier-v3"
+   "classifier": "poetry-classifier-v5"
   }
  }
 }
