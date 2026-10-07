@@ -5,7 +5,7 @@
   GET  /admin             管理页（签发 Key、校准）
   GET  /health            运行状态
 需要 API Key（请求头 Authorization: Bearer <key> 或 X-API-Key: <key>）：
-  POST /v1/detect         JSON {text, mode, exclude_references, flag_quotations, wait}
+  POST /v1/detect         JSON {text, mode, exclude_references, flag_quotations, genre, wait}
   POST /v1/detect/file    表单上传 file（.docx/.pdf/.txt）+ 同样的选项
   GET  /v1/jobs/{id}      查询任务进度与结果
   GET  /v1/me             查看当前 Key 信息与今日用量
@@ -153,10 +153,12 @@ class DetectIn(BaseModel):
     mode: str = Field("full", description="full = 逐段全部检测；fast = 语言模型抽样检测")
     exclude_references: bool = True
     flag_quotations: bool = True
+    genre: str = Field("auto", description="auto = 自动识别；classical = 中国古典文学作品（诗、词、曲、赋、文言、古白话）")
     wait: bool | None = Field(None, description="是否等待结果；默认短文本等待、长文本返回任务编号")
 
 
-async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bool | None, key: dict):
+async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bool | None, key: dict,
+                         genre: str = "auto"):
     ensure_ready()
     text = (text or "").replace("\r\n", "\n")
     if len(text.strip()) < 50:
@@ -165,6 +167,8 @@ async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bo
         err(413, "too_long", f"文本超过 {config.MAX_TEXT_CHARS} 字上限。")
     if mode not in ("full", "fast"):
         err(400, "bad_mode", "mode 只能是 full 或 fast。")
+    if genre not in ("auto", "classical"):
+        err(400, "bad_genre", "genre 只能是 auto 或 classical。")
     if jobs.pending() >= config.MAX_QUEUED_JOBS:
         err(429, "busy", "排队任务太多，请稍后再试。")
     if key["i"] != "public":
@@ -172,7 +176,7 @@ async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bo
         if not ok:
             err(429, "quota_exceeded", f"今日额度不足：剩余 {left} 字。额度每天（UTC）零点重置。")
     job = jobs.submit("detect", key["i"], {"text": text, "mode": mode, "exclude_references": excl,
-                                          "flag_quotations": flagq})
+                                          "flag_quotations": flagq, "genre": genre})
     if wait is None:
         wait = len(text) <= config.SYNC_MAX_CHARS
     if wait:
@@ -188,7 +192,8 @@ async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bo
 @app.post("/v1/detect")
 async def detect(body: DetectIn, authorization: str | None = Header(None), x_api_key: str | None = Header(None)):
     key = require_key(authorization, x_api_key)
-    return await _submit_detect(body.text, body.mode, body.exclude_references, body.flag_quotations, body.wait, key)
+    return await _submit_detect(body.text, body.mode, body.exclude_references, body.flag_quotations, body.wait, key,
+                                body.genre)
 
 
 @app.post("/v1/report/pdf")
@@ -210,7 +215,7 @@ async def report_pdf(body: dict = Body(...), authorization: str | None = Header(
 @app.post("/v1/detect/file")
 async def detect_file(file: UploadFile = File(...), mode: str = Form("full"),
                       exclude_references: bool = Form(True), flag_quotations: bool = Form(True),
-                      wait: bool | None = Form(None),
+                      wait: bool | None = Form(None), genre: str = Form("auto"),
                       authorization: str | None = Header(None), x_api_key: str | None = Header(None)):
     key = require_key(authorization, x_api_key)
     data = await file.read(config.MAX_UPLOAD_MB * 1024 * 1024 + 1)
@@ -222,7 +227,7 @@ async def detect_file(file: UploadFile = File(...), mode: str = Form("full"),
         err(400, "bad_file", str(e))
     except Exception as e:  # noqa: BLE001
         err(400, "parse_failed", f"文件解析失败：{type(e).__name__}")
-    return await _submit_detect(text, mode, exclude_references, flag_quotations, wait, key)
+    return await _submit_detect(text, mode, exclude_references, flag_quotations, wait, key, genre)
 
 
 @app.get("/v1/jobs/{job_id}")

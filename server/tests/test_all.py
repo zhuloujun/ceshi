@@ -1062,3 +1062,38 @@ def test_report_pdf(client):
     r = client.post("/v1/report/pdf", json=payload, headers=h)
     assert r.status_code == 200, r.text[:300]
     assert r.headers["content-type"].startswith("application/pdf") and r.content[:4] == b"%PDF" and len(r.content) > 2000
+
+
+def test_classical_collection_items():
+    """古典诗文作品集：每个编号条目单独成篇；编号（"1、""1）、"）不影响文体判断；词（长短句）认作诗词；文言不当作引文。"""
+    from app.segmenter import is_ci, strip_list_mark
+    doc = ("1、相思意已深，白纸书难足。字字苦参商，故要檀郎读。分明记得约当归，远至樱桃熟。何事菊花时，犹未回乡曲？\n\n"
+           "1）、孤雁向南飞，嘹唳长空里。万里云罗一羽轻，不道归无计。欲下寒塘栖，又恐惊鱼戏。\n\n拣尽寒枝不肯栖，寂寞沙洲睡。\n\n"
+           "2、画桥流水，雨湿落红飞不起。月破黄昏，帘里余香马上闻。徘徊不语，今夜梦魂何处去。不似垂杨，犹解飞花入洞房。\n\n"
+           "2）、村巷静，晚烟浓，几处邻家响碓舂。老妇倚门呼小犬，稻香吹过短篱东。\n\n"
+           "3、庭有旧瓮，口缺一角。家人欲弃，吾留以贮雨。客见而笑之，吾曰：器之有用，在其所置，非在其完也。客默然而去。\n\n"
+           "3）、余居城东，得隙地半亩，辟为小园。去市不数百步，而尘嚣渐远。环园植竹，篱落之间杂以菊。客问其故，余曰：乐在其中矣。\n")
+    segs = segment_text(doc)
+    assert len({s.block for s in segs}) == 6, [(s.block, s.text[:8]) for s in segs]
+    assert all(s.kind == "body" for s in segs)
+    assert detect_register("1）、孤雁向南飞，嘹唳长空里。万里云罗一羽轻，不道归无计。欲下寒塘栖，又恐惊鱼戏。") == "zh_poetry"
+    assert is_ci("帘卷西风，晚钟催得斜阳去。断云残雾，遮却山前路。独立阶前，黄叶纷纷舞。无人语，一痕月吐，凉浸衣如许。")
+    assert not is_ci(MODERN) and not is_ci(CLASSICAL)
+    assert strip_list_mark("16)、枫叶初丹菊正黄") == "枫叶初丹菊正黄"
+    # 用户声明"中国古典文学"：两条就按条目分篇，文言和引号多的段落也计入
+    two = doc.split("\n\n2、")[0]
+    assert len({s.block for s in segment_text(two, genre="classical")}) == 2
+    # 现代文里的编号要点不拆成作品
+    modern = "".join(f"{i}、我们认为这个问题的关键在于制度设计，因为没有好的制度就没有好的执行，这是大家的共识。\n\n" for i in range(1, 6))
+    assert len({s.block for s in segment_text(modern)}) == 1
+
+
+def test_detect_genre_param(client):
+    c = client
+    H = {"Authorization": "Bearer " + issue(client)}
+    r = c.post("/v1/detect", json={"text": "1、相思意已深，白纸书难足。字字苦参商，故要檀郎读。\n\n2、画桥流水，雨湿落红飞不起。月破黄昏，帘里余香马上闻。",
+                                    "genre": "classical", "wait": True}, headers=H)
+    assert r.status_code == 200, r.text
+    res = r.json()["result"]
+    assert res["summary"]["genre"] == "classical" and len(res["works"]) == 2
+    assert c.post("/v1/detect", json={"text": "x" * 60, "genre": "bogus"}, headers=H).status_code == 400
