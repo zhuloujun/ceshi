@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import queue
 import threading
 import time
@@ -526,7 +527,9 @@ class Engine:
             if s_.register != "en":
                 continue
             lines = [l.strip() for l in s_.text.splitlines() if l.strip()][1:] or [""]
-            if len(lines) >= 4 and sorted(len(l) for l in lines)[len(lines) // 2] <= 80:
+            # 清单 / 配料表（"Fine salt: 5 g"）行也很短，但不是诗：带冒号或数字的短行占三成以上就不算
+            listy = sum(bool(re.search(r":\s|\d", l)) for l in lines) >= 0.3 * len(lines)
+            if len(lines) >= 4 and sorted(len(l) for l in lines)[len(lines) // 2] <= 80 and not listy:
                 en_verse.add(s_.index)
 
         paper_ai = set()
