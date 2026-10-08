@@ -161,6 +161,16 @@ def extract_couplets(text: str) -> list:
     return out
 
 
+def is_gufeng(text: str) -> bool:
+    """古风歌行（"君不见昆吾铁冶飞炎烟，红光紫气俱赫然。"）：绝大多数句子五言 / 七言，偶有"君不见"之类的长句。"""
+    clauses = [len(_CJK.findall(c)) for c in _CLAUSE_SPLIT.split(text) if _CJK.search(c)]
+    if len(clauses) < 6 or max(clauses) > 11:
+        return False
+    cjk = len(_CJK.findall(text)) or 1
+    return (sum(n in (5, 7) for n in clauses) >= 0.75 * len(clauses)
+            and len(_POETRY_FUNC.findall(text)) / cjk <= 0.05 and modern_ratio(text) <= 0.02)
+
+
 def is_couplet(text: str) -> bool:
     """对联：上下联字数相等、句式相同（"四面湖山归眼底；万家忧乐到心头。""桥跨虎溪，三教三源流，三人三笑语；
     莲开僧舍，一花一世界，一叶一如来。"）。七言联只有两小句，诗词规则要求至少四句，以前都被当成现代汉语。"""
@@ -250,7 +260,7 @@ _SECTION_NAMES = re.compile(
     r"^(#{1,6}\s*)?(abstract|introduction|background|literature review|related work|theoretical framework|method(s|ology)?|"
     r"data( and methods?)?|results?|findings|analysis|discussion|conclusions?|limitations|future work|keywords?|"
     r"acknowledge?ments?|appendix|materials?( and methods?)?|figures?( and tables?)?|tables?( and figures?)?|"
-    r"conflicts? of interests?|competing interests?|funding|data availability|author contributions?|supplementary|ethics|"
+    r"conflicts? of interests?|competing interests?|declarations?|statements? and declarations|ethics statement|funding|data availability|author contributions?|supplementary|ethics|"
     r"摘\s*要|关键词|引\s*言|绪\s*论|前\s*言|文献综述|研究方法|研究设计|结\s*论|结\s*语|讨\s*论|致\s*谢|附\s*录)"
     r"\b.{0,50}$", re.I)
 _ABSTRACT_HEAD = re.compile(r"^((摘\s*要|内容摘要|内容提要|abstract)\s*([:：.—–]|$|\s)|[【\[〔]\s*(摘\s*要|内容摘要|内容提要|abstract)\s*[】\]〕])", re.I)
@@ -345,6 +355,8 @@ def detect_register(text: str) -> str:
     if cjk >= 12 and is_poetry(t):
         return "zh_poetry"
     if is_couplet(t) or is_couplet(raw):
+        return "zh_poetry"
+    if cjk >= 30 and is_gufeng(t):
         return "zh_poetry"
     cr, mr = classical_ratio(t), modern_ratio(t)
     # 文言虚词很多（≥ 8%）时，偶尔一两个白话字（"那""这""一个"）不改变文言的判断

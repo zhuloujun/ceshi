@@ -48,7 +48,43 @@ def load_classic(cpoetry_dir, n, rnd):
         pool += ["\n".join(p.get("paragraphs") or []) for p in json.loads(Path(f).read_text("utf-8"))]
     pool = [t for t in pool if 16 <= len(t) <= 240 and norm(t)[:24] not in held]
     rnd.shuffle(pool)
-    return [{"text": t, "y": 0, "model": "tang-song"} for t in pool[:n]], evals
+    out = [{"text": t, "y": 0, "model": "tang-song"} for t in pool[:n]]
+    # v6 新增：元曲、诗经、楚辞、纳兰词、曹操诗、五代词（chinese-poetry）也作人写样本——以前的训练集里几乎没有曲和
+    # 骚体、古风歌行，用户文档里真人的元曲、汉魏古诗被判成 AI。元曲每 5 首留 1 首作评估（"元曲误判"）。
+    extra, yq_eval = [], []
+    for name, f, key in (("元曲", "元曲/yuanqu.json", "paragraphs"), ("诗经", "诗经/shijing.json", "content"),
+                         ("楚辞", "楚辞/chuci.json", "content"), ("纳兰", "纳兰性德/纳兰性德诗集.json", "para"),
+                         ("曹操", "曹操诗集/caocao.json", "paragraphs")):
+        fp = d / f
+        if not fp.exists():
+            continue
+        for k, p in enumerate(json.loads(fp.read_text("utf-8"))):
+            body = p.get(key) or p.get("paragraphs") or p.get("content") or []
+            if isinstance(body, str):
+                body = [body]
+            t = cc.convert("\n".join(body))
+            for i in range(0, len(t), 200):          # 楚辞等长篇切成 200 字以内
+                piece = t[i:i + 200]
+                if len(piece) < 16:
+                    continue
+                if name == "元曲" and k % 5 == 0:
+                    yq_eval.append({"text": piece, "y": 0, "model": "元曲"})
+                else:
+                    extra.append({"text": piece, "y": 0, "model": "classic-" + name})
+    for sub in ("huajianji", "nantang"):
+        for f in sorted(glob.glob(str(d / "五代诗词" / sub / "*.json"))):
+            try:
+                items = json.loads(Path(f).read_text("utf-8"))
+            except ValueError:
+                continue
+            for p in items if isinstance(items, list) else []:
+                t = cc.convert("\n".join(p.get("paragraphs") or []))
+                if 16 <= len(t) <= 240:
+                    extra.append({"text": t, "y": 0, "model": "classic-五代"})
+    rnd.shuffle(extra)
+    out += extra[: max(1500, n // 2)]
+    load_classic.yuanqu_eval = yq_eval[:400]
+    return out, evals
 
 
 def gen_cl_rows(register):
@@ -277,6 +313,7 @@ def main():
     ps = predict(story)
     pg = predict(gen_test)
     pcp = predict(cp_test) if cp_test else []
+    pyq = predict(getattr(load_classic, "yuanqu_eval", []))
     pcp_ai = [p for p, r in zip(pg, gen_test) if r["genre"] == "duilian"]
     by_gen = {}
     for p, r in zip(pg, gen_test):
@@ -301,6 +338,7 @@ def main():
            "at_threshold": {"changan_ai_caught": rate(pa), "user_models_caught": rate(pu), "story_caught": rate(ps),
                             "tang_song_300_flagged": rate(pc), "gen_cl_caught": rate(pg),
                             "human_couplets_flagged": rate(pcp), "ai_couplets_caught": rate(pcp_ai),
+                            "yuanqu_flagged": rate(pyq),
                             "gen_cl_caught_by": {k: rate(v) for k, v in sorted(by_gen.items())}},
            "n_gen_cl_train_unique": len({r["text"] for r in gen_train}), "n_gen_cl_test": len(gen_test),
            "n_train": len(train), "n_test_human": len(ph), "n_test_ai": len(pa),
