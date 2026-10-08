@@ -519,7 +519,9 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                 before = [l for l in lines_all[max(0, li - 8):li] if l][-3:]
                 after = [l for l in lines_all[li + 1:li + 30] if l][:6]
                 sub_of_dotted = any(re.match(r"^\d+\.\d+", l) for l in before)
-                sibling = any(l in iso_titles or (_short_title_like(l) and not _SECTION_NUM.match(l)) for l in after)
+                zh_head = bool(_CJK.search(stripped))
+                sibling = any((l in iso_titles or (_short_title_like(l) and not _SECTION_NUM.match(l)))
+                              and bool(_CJK.search(l)) == zh_head for l in after)   # 换了文字的是另一篇插入的作品，不是并列小标题
                 numbered_paper = not (sub_of_dotted or sibling)
             iso_new = bool(_CJK.search(stripped)) != cur_zh or numbered_paper
         # 论文内部不带编号的英文小标题（"Risk Factors and Prevention"）是章节，不是新作品
