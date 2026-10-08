@@ -173,22 +173,40 @@ def build(payload: dict) -> bytes:
     er = s.get("error_rates") or []
     if er:
         story.append(Paragraph("已知误差（本工具在独立测试集上的实测）", S["h2"]))
-        rows = [[Paragraph(x, S["cellc"]) for x in ("文体", "测试集（未参与训练和校准）", "AI 检出率", "人写误判率")]]
+        rows = [[Paragraph(x, S["cellc"]) for x in ("文体", "测试集（未参与训练和校准）", "AI 检出率", "人写误判率（95% 上限）")]]
         for g in er:
             for k, e in enumerate(g["sets"]):
+                fp = pct(e.get("human_flagged"))
+                if e.get("human_flagged_upper95") is not None:
+                    fp += f"（≤{pct(e['human_flagged_upper95'])}）"
                 rows.append([Paragraph(esc(g["name"]) if k == 0 else "", S["cell"]),
                              Paragraph(esc(f'{e["name"]}（AI {e["n_ai"]} / 人写 {e["n_human"]}）'), S["cell"]),
                              Paragraph(pct(e.get("ai_caught")), S["cellc"]),
-                             Paragraph(pct(e.get("human_flagged")), S["cellc"])])
-        t = Table(rows, colWidths=[W * x for x in (0.13, 0.57, 0.15, 0.15)], repeatRows=1)
+                             Paragraph(fp, S["cellc"])])
+        t = Table(rows, colWidths=[W * x for x in (0.13, 0.52, 0.13, 0.22)], repeatRows=1)
         t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef1f3")),
                                ("GRID", (0, 0), (-1, -1), 0.3, C_RULE), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
         story.append(t)
+    ppv = [g for g in er if g.get("ppv")]
+    if ppv:
+        story.append(Spacer(1, 4))
+        for g in ppv:
+            v = g["ppv"]
+            story.append(Paragraph(esc(f"{g['name']}：按上表“{g['ppv_basis'][:30]}”的检出率与误判率估算，如果送检文章里真有一半是 AI 写的，"
+                                       f"被标出的文字确实是 AI 的概率约 {pct(v.get('50%'))}；只有 10% 是 AI 写的时约 {pct(v.get('10%'))}；"
+                                       f"只有 2% 时约 {pct(v.get('2%'))}。"), S["small"]))
+    rec = s.get("record") or {}
+    if rec:
+        story.append(Paragraph(esc("检测记录：语言模型 " + " / ".join(rec.get("lm") or []) + "；分类器 " +
+                                   "；".join(f"{REG.get(k, k)} {v}" for k, v in (rec.get("classifiers") or {}).items()) +
+                                   "；阈值 " + "；".join(f"{REG.get(k, k)} {pct(v)}" for k, v in (rec.get("thresholds") or {}).items())),
+                               S["small"]))
     story.append(Paragraph("如何解读与复核", S["h2"]))
     guide = [
         "AI 率是“被判为疑似 AI 的文字占计入字数的比例”，不是“这篇文章由 AI 写成的概率”，更不是学术不端的概率。",
         "误判有基数效应：即使误判率只有 1%，检测 1000 篇真人文章也会冤枉约 10 篇。单一检测分数不能作为定论。",
-        "复核被标出的段落时，请结合旁证：写作草稿与修改记录（文档版本历史）、引用资料与参考文献的核对、作者能否当面讲清文中的观点和方法。",
+        "复核被标出的段落时，请结合旁证：写作草稿与修改记录（文档版本历史）、引用资料与参考文献的核对（是否有查不到的文献）、作者能否当面讲清文中的观点和方法。",
+        "人写、AI 改写混合的文字（如 AI 润色、翻译）没有明确的“标准答案”，分数落在中间（如 40%）可能对应多种写作方式，其中有的是允许的。",
         "检测模型只认得训练时见过的 AI 写法：对更新的模型、经过人工改写或翻译的文字，检出率会下降；诗词、文言这类短小、程式化的文体误差也更大（见上表）。",
     ]
     if (s.get("chars_by_register") or {}).get("en"):

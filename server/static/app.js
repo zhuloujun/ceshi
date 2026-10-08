@@ -341,11 +341,12 @@ function renderResult(res){
   $('errBox').hidden = !er.length;
   if(er.length){
     const rows = er.map(g=>g.sets.map((e,k)=>`<tr><td>${k?'':escapeHtml(g.name)}</td><td>${escapeHtml(e.name)}<span class="err-n">（AI ${e.n_ai} / 人写 ${e.n_human}）</span></td>`+
-      `<td>${pct(e.ai_caught)}</td><td>${pct(e.human_flagged)}</td></tr>`).join('')).join('');
-    $('errBody').innerHTML = `<table class="err-table"><thead><tr><th>文体</th><th>测试集（未参与训练和校准）</th><th>AI 检出率</th><th>人写误判率</th></tr></thead><tbody>${rows}</tbody></table>`+
+      `<td>${pct(e.ai_caught)}</td><td>${pct(e.human_flagged)}${e.human_flagged_upper95!=null?`<span class="err-n">（≤${pct(e.human_flagged_upper95)}）</span>`:''}</td></tr>`).join('')).join('');
+    const ppv = er.filter(g=>g.ppv).map(g=>`<li>${escapeHtml(g.name)}：如果送检文章里真有一半是 AI 写的，被标出的文字确实是 AI 的概率约 ${pct(g.ppv['50%'])}；只有 10% 是 AI 写的时约 ${pct(g.ppv['10%'])}；只有 2% 时约 ${pct(g.ppv['2%'])}。</li>`).join('');
+    $('errBody').innerHTML = `<table class="err-table"><thead><tr><th>文体</th><th>测试集（未参与训练和校准）</th><th>AI 检出率</th><th>人写误判率（95% 上限）</th></tr></thead><tbody>${rows}</tbody></table>`+
       `<ul class="err-guide"><li>AI 率是被判为疑似 AI 的文字所占比例，不是“由 AI 写成的概率”，更不是学术不端的概率。</li>`+
       `<li>即使误判率只有 1%，检测 1000 篇真人文章也会冤枉约 10 篇：单一分数不能作为定论。</li>`+
-      `<li>复核时请结合草稿与修改记录、引用资料核对，以及作者能否讲清文中的观点和方法。</li></ul>`;
+      `<li>复核时请结合草稿与修改记录、引用资料核对，以及作者能否讲清文中的观点和方法。</li>${ppv}</ul>`;
   }
   $('sumFlagged').textContent = `${flagged} / ${counted}`;
   $('sumExcluded').textContent = s.excluded_chars.toLocaleString();
@@ -542,53 +543,6 @@ exportBtn.addEventListener('click', async ()=>{
   }
 });
 // 纯文本报告（便于复制粘贴）
-$('exportTxtBtn').addEventListener('click', ()=>{
-  if(!lastResult) return;
-  const s = lastResult.summary;
-  let out = `审读 · AI 文本检测报告\n生成时间：${new Date().toLocaleString('zh-CN')}\n来源：${currentSource}\n`;
-  out += `总字数：${s.total_chars} · 计入字数：${s.counted_chars} · 未计入：${s.excluded_chars}\n`;
-  out += `AI 率：${pct(s.ai_rate)}（高度 ${pct(s.high_rate)} / 中度 ${pct(s.mid_rate)} / 轻度 ${pct(s.light_rate)}${s.near_threshold_rate ? ' · 接近阈值 ' + pct(s.near_threshold_rate) : ''}） · 平均 AI 概率：${pct(s.mean_prob)} · 阈值：${pct(s.threshold)} · ${s.calibrated ? '已校准' : '未校准'}\n`;
-  (s.reliability_notes || []).forEach(n=>{ out += `提示：${n}\n`; });
-  out += `方法：Fast-DetectGPT、Binoculars（Qwen2.5 打分）、MPU 中文分类器 + 国产大模型中文分类器、desklib 英文分类器 + 国产大模型英文分类器（按段落文体选用）；模式：${s.mode === 'fast' ? '快速（抽样）' : '完整'}\n`;
-  if(s.chars_by_register) out += `文体：${Object.entries(s.chars_by_register).map(([k,v])=>`${REG_NAME[k]||k} ${v} 字`).join('、')}\n`;
-  out += `\n【说明】任何 AI 检测都有误判，本报告只供作者自查，不能作为学术不端判定依据。\n`;
-  const works = lastResult.works || [];
-  if(works.length > 1){
-    out += `\n${'='.repeat(60)}\n分篇结果\n${'='.repeat(60)}\n`;
-    works.forEach(w=>{
-      out += `${w.title} | ${w.registers.map(r=>REG_NAME[r]||r).join('、')} | ${w.chars} 字 | AI 率 ${w.ai_rate==null ? '—' : pct(w.ai_rate)} | 平均 AI 概率 ${w.mean_prob==null ? '—' : pct(w.mean_prob)} | ${w.verdict}\n`;
-    });
-    out += `说明：${WORKS_NOTE}\n`;
-  }
-  out += `\n${'='.repeat(60)}\n分段结果\n${'='.repeat(60)}\n`;
-  lastResult.segments.forEach(seg=>{
- const tag = seg.kind === 'reference' ? '参考文献，不计入' : seg.kind === 'frontmatter' ? '题目 / 作者信息，不计入' : seg.kind === 'quotation' ? '引文为主，不计入' : seg.kind === 'reference_only' ? '仅供参考，不计入' : (seg.label || (seg.near_threshold ? '接近阈值（未计入）' : '未达阈值'));
-    const probStr = seg.prob!=null ? pct(seg.prob) : seg.ref_prob!=null ? `${pct(seg.ref_prob)}（参考值，不计入）` : '—';
-    out += `\n[第 ${seg.index+1} 段 | ${REG_NAME[seg.register] || '现代汉语'} | AI 概率 ${probStr} | ${tag} | ${seg.chars} 字]\n`;
-    const sg = seg.signals || {}, r = seg.raw || {};
-    const bits = [
-      r.classifier!=null ? `${sigName('classifier', seg)} ${pct(r.classifier)}` : `${sigName('classifier', seg)} 未运行`,
-      r.classifier_zh2!=null ? `国产大模型中文分类器 ${pct(r.classifier_zh2)}` : '',
-      r.classifier_en2!=null ? `国产大模型英文分类器 ${pct(r.classifier_en2)}` : '',
-      r.classifier_en3!=null ? `英文整篇分类器 ${pct(r.classifier_en3)}` : '',
-      r.classifier_en4!=null ? `英文整篇分类器 2 ${pct(r.classifier_en4)}` : '',
-      r.fastdetect!=null ? `Fast-DetectGPT 曲率 ${r.fastdetect.toFixed(3)}` : '',
-      r.binoculars!=null ? `Binoculars ${r.binoculars.toFixed(3)}` : '',
-      r.ppl!=null ? `困惑度 ${Math.exp(r.ppl).toFixed(1)}` : '',
-      r.lrr!=null ? `LRR ${r.lrr.toFixed(3)}` : '',
-      r.top10!=null ? `前10名占比 ${pct(r.top10)}` : '',
-      r.lp_burstiness!=null ? `困惑度波动 ${r.lp_burstiness.toFixed(3)}` : '',
-      seg.style ? `句长变异 ${seg.style.sentence_len_cv}` : '',
-      (seg.notes && seg.notes.length) ? `备注：${seg.notes.join('；')}` : '',
-      seg.memorized ? '疑似名篇原文（不采信语言模型信号）' : '',
-      seg.short ? '篇幅短' : ''
-    ].filter(Boolean).join(' · ');
-    if(bits) out += `指标：${bits}\n`;
-    out += `${seg.text}\n`;
-  });
-  out += formatItemsToText(lastFormatItems);
-  download(new Blob([out], { type: 'text/plain;charset=utf-8' }), `审读报告_${new Date().toISOString().slice(0,10)}.txt`);
-});
 
 /* ============================================================
    标点符号与排版格式检查

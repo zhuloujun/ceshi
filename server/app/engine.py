@@ -79,6 +79,19 @@ def score_text(seg) -> str:
 _EVAL_CACHE: dict = {}
 
 
+def _wilson_upper(k: int, n: int, z: float = 1.96) -> float | None:
+    if not n:
+        return None
+    p = k / n
+    return round(min(1.0, (p + z * z / (2 * n) + z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / (1 + z * z / n)), 4)
+
+
+def precision_at_prevalence(tpr: float, fpr: float, prevalence: float) -> float | None:
+    """被标出的文字真是 AI 写的概率（贝叶斯公式）：TPR·π / (TPR·π + FPR·(1−π))。"""
+    den = tpr * prevalence + fpr * (1 - prevalence)
+    return round(tpr * prevalence / den, 4) if den else None
+
+
 def known_error_rates(profiles: list) -> list:
     """本工具在独立测试集上实测的检出率 / 误判率（tools/eval_result.json，由 tools/evaluate.py 生成）。
     参考 Weber-Wulff 等（2023）与 Liang 等（2023）对检测工具的要求：报告应按文体说明已知误差，
@@ -98,11 +111,20 @@ def known_error_rates(profiles: list) -> list:
         for e in (d.get(prof) or {}).get("evaluation") or []:
             if "对照" in e.get("name", "") or (not e.get("n_ai") and not e.get("n_human")):
                 continue
-            sets.append({"name": e["name"], "n_ai": e.get("n_ai", 0), "n_human": e.get("n_human", 0),
-                         "ai_caught": e.get("ai_caught") if e.get("n_ai") else None,
-                         "human_flagged": e.get("human_flagged") if e.get("n_human") else None})
+            nh, na = e.get("n_human", 0), e.get("n_ai", 0)
+            fp = e.get("human_flagged") if nh else None
+            sets.append({"name": e["name"], "n_ai": na, "n_human": nh,
+                         "ai_caught": e.get("ai_caught") if na else None, "human_flagged": fp,
+                         # 误判率的 95% 置信上限（Wilson 区间；0 次误判时近似"三法则" 3/n）：样本有限，实测 0% 不等于不会误判
+                         "human_flagged_upper95": _wilson_upper(round(fp * nh), nh) if fp is not None else None})
         if sets:
-            out.append({"profile": prof, "name": scoring.PROFILE_NAMES.get(prof, prof), "sets": sets})
+            g = {"profile": prof, "name": scoring.PROFILE_NAMES.get(prof, prof), "sets": sets}
+            both = next((e for e in sets if e["ai_caught"] is not None and e["human_flagged"] is not None), None)
+            if both:     # 被标出的文字真是 AI 的概率取决于送检文章里 AI 文章的比例（基数）
+                g["ppv"] = {f"{int(pi * 100)}%": precision_at_prevalence(both["ai_caught"], max(both["human_flagged"], 1e-4), pi)
+                            for pi in (0.5, 0.1, 0.02)}
+                g["ppv_basis"] = both["name"]
+            out.append(g)
     return out
 
 
@@ -838,6 +860,12 @@ class Engine:
                 "mode": mode,
                 "genre": genre,
                 "error_rates": known_error_rates(used_profiles),
+                # 检测记录（模型版本、各文体阈值）：便于事后复核与复现，见 tools 评估报告
+                "record": {"lm": [config.OBSERVER_MODEL, config.PERFORMER_MODEL],
+                           "classifiers": {p_: config.classifier_for(p_.replace("_short", "").replace("_paper", ""))
+                                           for p_ in used_profiles},
+                           "thresholds": {p_: round(float(scoring.profile_for(cal, p_)[0].get("threshold", 0.5)), 4)
+                                          for p_ in used_profiles}},
                 "lm_sampled": sampled,
                 "lm_scored_segments": len(lm_ids) if (self.lm and self.lm.ready) else 0,
                 "calibrated": bool(main_cal.get("calibrated")),
