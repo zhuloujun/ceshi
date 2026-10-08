@@ -17,7 +17,7 @@ from .detectors import stylometry
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
 from .segmenter import (REGISTER_NAMES, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
-                        is_list_item, segment_text, strip_list_mark)
+                        is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
 
@@ -78,6 +78,9 @@ def score_text(seg) -> str:
 
 
 _EVAL_CACHE: dict = {}
+# 不在 tools/eval_result.json 里的独立测试（来自分类器训练报告，测试样本从未参与训练）
+EXTRA_EVAL = {"zh_poetry": [{"name": "对联：国产模型写的对联 vs 真人对联（couplet-dataset 测试集；对联用单独阈值）",
+                             "n_ai": 162, "n_human": 500, "ai_caught": 0.691, "human_flagged": 0.042}]}
 
 
 def _wilson_upper(k: int, n: int, z: float = 1.96) -> float | None:
@@ -109,7 +112,7 @@ def known_error_rates(profiles: list) -> list:
     out = []
     for prof in profiles:
         sets = []
-        for e in (d.get(prof) or {}).get("evaluation") or []:
+        for e in ((d.get(prof) or {}).get("evaluation") or []) + EXTRA_EVAL.get(prof, []):
             if "对照" in e.get("name", "") or (not e.get("n_ai") and not e.get("n_human")):
                 continue
             nh, na = e.get("n_human", 0), e.get("n_ai", 0)
@@ -466,6 +469,13 @@ class Engine:
             if reg == "en" and s.block in paper_blocks:
                 reg = "en_paper"
             prof[s.index] = scoring.profile_for(cal, reg)
+            if reg == "zh_poetry" and is_couplet(score_text(s)):
+                # 对联单独的阈值：诗词阈值按当代诗词"人写误判约 5%"定，对联只有十几二十个字，同样的阈值几乎认不出 AI 对联。
+                # 用没参与训练的 500 副真人对联（couplet-dataset）测定：分类器 0.975 时真人对联误判约 4%、AI 对联检出约 69%。
+                pc, ok = prof[s.index]
+                tc = scoring.combine({"classifier": config.COUPLET_CLASSIFIER_THRESHOLD}, pc)["prob"]
+                if tc is not None and tc < float(pc.get("threshold", 0.5)):
+                    prof[s.index] = ({**pc, "threshold": round(tc, 4)}, ok)
         memo = {s.index for s in scored if memorized(results[s.index])}
         # 中文名篇原文（如朱自清《背影》）：困惑度极低说明语言模型逐字背过，不论分类器怎么判，都不计入 AI 率
         famous = {s.index for s in counted if s.register == "zh" and results[s.index].get("ppl") is not None
