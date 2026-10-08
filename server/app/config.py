@@ -139,6 +139,7 @@ ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.7") or 0.7)
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
 WORK_MAJORITY = float(os.getenv("WORK_MAJORITY", "0.6") or 0.6)   # 同篇已判 AI 的文字占比达到此值，接近阈值的段落按整篇计入
 # 文言虚词（之乎者也矣焉哉曰…）占汉字比例超过此值的段落，视为以古籍引文为主，不计入 AI 率
+COUPLET_CLASSIFIER_THRESHOLD = float(os.getenv("COUPLET_CLASSIFIER_THRESHOLD", "0.975") or 0.975)
 CLASSICAL_THRESHOLD = float(os.getenv("CLASSICAL_THRESHOLD", "0.03") or 0.03)
 MODERN_MAX_RATIO = float(os.getenv("MODERN_MAX_RATIO", "0.015") or 0.015)
 
