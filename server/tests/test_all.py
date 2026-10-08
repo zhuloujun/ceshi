@@ -1105,3 +1105,13 @@ def test_detect_genre_param(client):
     res = r.json()["result"]
     assert res["summary"]["genre"] == "classical" and len(res["works"]) == 2
     assert c.post("/v1/detect", json={"text": "x" * 60, "genre": "bogus"}, headers=H).status_code == 400
+
+
+def test_unnumbered_subheadings_stay_in_numbered_paper():
+    """论文"3.1 ……"下面一组不带编号的并列小标题（Perplexity-Based Detection / Burstiness Analysis）仍属同一篇论文。"""
+    para = "Statistical methods estimate how predictable a passage is under a reference language model. " * 6
+    doc = "\n\n".join(["Detecting Generated Content in Research Papers", "Abstract", "This review surveys detection methods. " * 6,
+                       "1. Introduction", para, "2. Foundations", para, "3. Approaches", "3.1 Statistical Detection Methods", para,
+                       "Perplexity-Based Detection", para, "Burstiness Analysis", para, "Lexical Diversity Evaluation", para,
+                       "4. Conclusion", para])
+    assert len({s.block for s in segment_text(doc) if s.kind == "body"}) == 1
