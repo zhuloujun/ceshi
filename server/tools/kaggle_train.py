@@ -44,7 +44,7 @@ elif LANG == "poetry":
     sh("git", "clone", "-q", "--depth", "1", "https://github.com/VelikayaScarlet/ChangAn", "/tmp/changan")
     sh("git", "clone", "-q", "--depth", "1", "--filter=blob:none", "--sparse", "https://github.com/chinese-poetry/chinese-poetry", "/tmp/cpoetry")
     sh("git", "-C", "/tmp/cpoetry", "sparse-checkout", "set", "--no-cone", "/全唐诗/唐诗三百首.json", "/宋词/宋词三百首.json",
-       "/全唐诗/poet.tang.*.json", "/宋词/ci.song.*.json")
+       "/全唐诗/poet.tang.*.json", "/宋词/ci.song.*.json", "/元曲/", "/诗经/", "/楚辞/", "/纳兰性德/", "/曹操诗集/", "/五代诗词/")
     cmd = ["tools/train_poetry2.py", "--changan", "/tmp/changan", "--cpoetry", "/tmp/cpoetry", "--out", "/tmp/poetry-classifier"]
     try:   # 真人对联（couplet-dataset，七十多万副）
         sh("wget", "-q", "-O", "/tmp/couplet.tar.gz", "https://github.com/wb14123/couplet-dataset/releases/download/1.0/couplet.tar.gz")
