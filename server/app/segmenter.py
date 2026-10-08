@@ -16,12 +16,19 @@ _REF_ENTRY = re.compile(r"^\s*(\[\d+\]|［\d+］|\(\d+\)|\d+[.、]\s)|\b(19|20)\
                         re.IGNORECASE)
 
 
+# PDF 页眉：页码 + 作者（"12 M. Masoumi et al."）或作者 + 页码
+_RUNNING_HEAD = re.compile(r"^(\d{1,4}\s+(?:[A-Z]\.\s*){1,3}[A-Z][\w'’\-]+(?:\s+et\s+al\.?|\s+and\s+[A-Z][\w'’\-]+)?"
+                           r"|(?:[A-Z]\.\s*){1,3}[A-Z][\w'’\-]+\s+et\s+al\.?\s+\d{1,4})\s*$")
+
+
 def _looks_ref(t: str) -> bool:
     t = t.strip()
     if (len(t) >= 200 and not re.match(r"^\s*(\[\d+\]|［\d+］|\(\d+\)|\d+[.、]\s)", t)
             and not re.search(r"doi[:.]|https?://|\bet al\.|\bpp?\.\s*\d|\[[JMCDR]\]", t, re.I)
             and len(re.findall(r"[。！？!?]|[a-z]\.\s+[A-Z]", t)) >= 3):
         return False          # 多句长段正文，即使含年份（"One summer, along about 1904, …"）也不是参考文献条目
+    if len(re.findall(r"[A-Z][\w'’\-]+,\s(?:[A-Z]\.(?:-?[A-Z]\.)*)", t)) >= 2:
+        return True           # 作者名单续行（"Minello, G., Nguyen, H.D., …"）
     return bool(_REF_ENTRY.search(t[:160])) or bool(re.search(r"\bet al\.|\bJ\.|Press\b|出版社|学报", t))
 
 
@@ -34,6 +41,8 @@ def _ends_references(line: str, prev_lines: list) -> bool:
         return False
     # 章节标题才说明参考文献结束；只有年份 / 页码的行（PDF 换页处的 "2016." "7"）不算——
     # 2026-10 用户的 PDF 论文参考文献在第一个换页处被截断，后面的条目被当成正文检测
+    if _RUNNING_HEAD.match(s):
+        return False          # PDF 每页页眉（"12 M. Masoumi et al."），不是新的章节
     if is_section_heading(s) and not re.fullmatch(r"[\d\s.,;:()（）\-–—]+", s):
         return True
     looks_ref = _looks_ref
@@ -133,6 +142,47 @@ def rhyme_ratio(text: str) -> float | None:
     return max(groups.count(g) for g in set(groups)) / len(groups)
 
 
+_COUPLET_LABEL = re.compile(r"^\s*(上[联聯]|下[联聯]|出句|对句|對句)\s*[:：]\s*(.+?)\s*$")
+
+
+def extract_couplets(text: str) -> list:
+    """从"上联：…… / 下联：……"格式里取出每一副对联，统一成"上联，下联。"（横批、说明文字不要）。"""
+    out, up = [], None
+    for line in text.splitlines():
+        m = _COUPLET_LABEL.match(line)
+        if not m:
+            continue
+        body = m.group(2).rstrip("。．.;；,，")
+        if m.group(1)[0] in "上出":
+            up = body
+        elif up:
+            out.append(f"{up}；{body}。" if ("，" in up or "," in up) else f"{up}，{body}。")
+            up = None
+    return out
+
+
+def is_couplet(text: str) -> bool:
+    """对联：上下联字数相等、句式相同（"四面湖山归眼底；万家忧乐到心头。""桥跨虎溪，三教三源流，三人三笑语；
+    莲开僧舍，一花一世界，一叶一如来。"）。七言联只有两小句，诗词规则要求至少四句，以前都被当成现代汉语。"""
+    cps = extract_couplets(text)
+    if cps:
+        return all(is_couplet(c) for c in cps)
+    t = re.sub(r"\s+", "", text).rstrip("。．.!！")
+    if re.search(r"[0-9A-Za-z“”\"《》：:]", t) or not 8 <= len(_CJK.findall(t)) <= 120:
+        return False
+    halves = t.split("；") if t.count("；") == 1 else None
+    if halves is None:
+        parts = re.split(r"[，,]", t)
+        if len(parts) % 2 or re.search(r"[。！？；]", t):
+            return False
+        k = len(parts) // 2
+        halves = ["，".join(parts[:k]), "，".join(parts[k:])]
+    pat = [[len(_CJK.findall(c)) for c in re.split(r"[，,、]", h) if c] for h in halves]
+    if pat[0] != pat[1] or min(sum(p) for p in pat) < 4 or max(max(p) for p in pat) > 13:
+        return False
+    return modern_ratio(t) <= 0.08
+
+
 def is_ci(text: str) -> bool:
     """词、曲（长短句）：小句长短不一（1–9 字）、几乎不用文言虚词和白话标志词、句末押韵。
     is_poetry 要求句长整齐，只认得出约 85% 的宋词；加上这条后宋词约 96%，古文误认约 1%，现代文约 0.1%。"""
@@ -203,7 +253,7 @@ _SECTION_NAMES = re.compile(
     r"conflicts? of interests?|competing interests?|funding|data availability|author contributions?|supplementary|ethics|"
     r"摘\s*要|关键词|引\s*言|绪\s*论|前\s*言|文献综述|研究方法|研究设计|结\s*论|结\s*语|讨\s*论|致\s*谢|附\s*录)"
     r"\b.{0,50}$", re.I)
-_ABSTRACT_HEAD = re.compile(r"^((摘\s*要|内容摘要|内容提要|abstract)\s*([:：]|$|\s)|[【\[〔]\s*(摘\s*要|内容摘要|内容提要|abstract)\s*[】\]〕])", re.I)
+_ABSTRACT_HEAD = re.compile(r"^((摘\s*要|内容摘要|内容提要|abstract)\s*([:：.—–]|$|\s)|[【\[〔]\s*(摘\s*要|内容摘要|内容提要|abstract)\s*[】\]〕])", re.I)
 _KEYWORDS_LINE = re.compile(r"^((关键词|关键字|key\s*words?)\s*[:：]|[【\[〔]\s*(关键词|关键字|key\s*words?)\s*[】\]〕])", re.I)
 # 文集里"论文 1: ……""Paper 2: ……""第 3 篇 ……"这类作品标题
 _WORK_LABEL = re.compile(r"^(论文|文章|作品|篇目|范文|paper|article|essay|work|story)\s*\d+\s*[:：.、．]\s*\S|^第\s*[一二三四五六七八九十百\d]+\s*篇", re.I)
@@ -281,13 +331,20 @@ def is_poetry(text: str) -> bool:
 
 def detect_register(text: str) -> str:
     """zh（现代汉语）/ zh_classical（文言）/ zh_poetry（诗词、对联）/ en（英文及其他拉丁字母语言）。"""
-    t = _body_lines("\n".join(strip_list_mark(l) for l in text.splitlines()))
+    raw = "\n".join(strip_list_mark(l) for l in text.splitlines())
+    t = _body_lines(raw)
+    if not (_CJK.search(t) or _LATIN.search(t)):
+        t = raw               # 全是标题样的短行（论文单位 "Montreal Neurological Institute …"）：按整段文字判断
     cjk = len(_CJK.findall(t))
     latin = len(_LATIN.findall(t))
+    if cjk == 0 and latin:
+        return "en"           # 没有一个汉字（英文表格行 "Ham 12.032 0.844 …"）
     # 拉丁字母为主就是英文（短诗行也算，例如 "A cap of flowers, and a kirtle" 只有 24 个字母）
     if latin >= 8 and latin >= 2 * cjk:
         return "en"
     if cjk >= 12 and is_poetry(t):
+        return "zh_poetry"
+    if is_couplet(t) or is_couplet(raw):
         return "zh_poetry"
     cr, mr = classical_ratio(t), modern_ratio(t)
     # 文言虚词很多（≥ 8%）时，偶尔一两个白话字（"那""这""一个"）不改变文言的判断

@@ -46,6 +46,12 @@ elif LANG == "poetry":
     sh("git", "-C", "/tmp/cpoetry", "sparse-checkout", "set", "--no-cone", "/全唐诗/唐诗三百首.json", "/宋词/宋词三百首.json",
        "/全唐诗/poet.tang.*.json", "/宋词/ci.song.*.json")
     cmd = ["tools/train_poetry2.py", "--changan", "/tmp/changan", "--cpoetry", "/tmp/cpoetry", "--out", "/tmp/poetry-classifier"]
+    try:   # 真人对联（couplet-dataset，七十多万副）
+        sh("wget", "-q", "-O", "/tmp/couplet.tar.gz", "https://github.com/wb14123/couplet-dataset/releases/download/1.0/couplet.tar.gz")
+        sh("tar", "xzf", "/tmp/couplet.tar.gz", "-C", "/tmp")
+        cmd += ["--couplets", "/tmp/couplet"]
+    except Exception as e:  # noqa: BLE001
+        print("没有取到对联数据集：", e, flush=True)
     name = "poetry-classifier"
 elif LANG == "classical":
     sh(sys.executable, "-m", "pip", "install", "-q", "openpyxl")

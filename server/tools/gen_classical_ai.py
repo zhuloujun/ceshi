@@ -46,8 +46,13 @@ GENRES = [  # (genre, 题目池, 指令模板)
     ("fu", TRAD[:40] + MODERN, ["写一篇《{t}赋》，仿照古人辞赋的格式。", "以{t}为题作一篇骈赋，四六对仗。", "帮我写一篇关于{t}的赋。"]),
     ("pianwen", TRAD[:40], ["用骈文写一段关于{t}的文字，对仗工整。"]),
     ("wenyan", TRAD + MODERN, None),
-    ("duilian", TRAD + MODERN, ["以{t}为题写三副对联。", "写一副关于{t}的长联，上下联各二十字以上。"]),
+    ("duilian", TRAD + MODERN, ["以{t}为题写三副对联。", "写一副关于{t}的长联，上下联各二十字以上。",
+                                "写一副七言对联，主题是{t}，只要上联和下联。", "以{t}为题写一副五言对联。",
+                                "为{t}写一副楹联，上下联字数相等、平仄相对。", "写一副春联，内容与{t}有关，只写上下联。",
+                                "帮我对一副对联，题目是{t}，上下联各九字到十一字。"]),
 ]
+PLACES = ["黄鹤楼", "岳阳楼", "滕王阁", "杜甫草堂", "西湖", "寒山寺", "峨眉山", "武侯祠", "大观楼", "孔庙", "岳王庙",
+          "天一阁", "拙政园", "泰山南天门", "兰亭", "白帝城", "趵突泉", "桂林山水", "蓬莱阁", "黄山", "苏堤", "书院", "茶馆", "药铺"]
 STYLE_TAIL = ["", "", "只输出作品本身，不要解释。", "要求像古人写的，不要出现现代词汇。", "语言典雅一些。",
               "写得自然一点，不要堆砌辞藻，像真人写的。"]
 
@@ -99,6 +104,11 @@ def run(name, key, endpoints, n, t0, budget, lock):
             else:
                 for tpl in tpls:
                     jobs.append((genre, t, tpl))
+    only_g = [x for x in os.getenv("CL_GENRES", "").split(",") if x]
+    if only_g:          # 只生成指定体裁（如 CL_GENRES=duilian）：对联另加名胜楹联题目
+        jobs = [j for j in jobs if j[0].split("-")[0] in only_g]
+        if "duilian" in only_g:
+            jobs += [("duilian", t, tpl) for t in PLACES for tpl in GENRES[-1][2]]
     rnd.shuffle(jobs)
     n_new = 0
     for i, (genre, t, tpl) in enumerate(jobs[: n * 3]):
@@ -124,7 +134,10 @@ def main():
     ap.add_argument("--time-budget-min", type=float, default=260)
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
-    only = [x for x in os.getenv("ONLY_PROVIDERS", "").replace("classical:", "").split(",") if x]
+    op = os.getenv("ONLY_PROVIDERS", "")
+    if op.startswith("couplet:"):          # couplet:deepseek,qwen,… = 只生成对联
+        os.environ["CL_GENRES"] = "duilian"
+    only = [x for x in op.replace("classical:", "").replace("couplet:", "").split(",") if x]
     t0, lock, ths = time.time(), threading.Lock(), []
     for name, (env, eps) in g.PROVIDERS.items():
         if only and name not in only:
