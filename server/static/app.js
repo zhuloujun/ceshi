@@ -329,7 +329,8 @@ function renderWorks(works){
 function renderResult(res){
   const s = res.summary;
   sealNum.textContent = s.ai_rate == null ? '—' : pct(s.ai_rate);
-  $('sumRate').textContent = pct(s.ai_rate);
+  $('sumRate').textContent = pct(s.ai_rate) + (s.low_rate_caution ? '*' : '');
+  $('sumRate').title = s.low_rate_caution ? '低于 20% 的结果误判可能性较高，仅作提示' : '';
   $('sumMean').textContent = pct(s.mean_prob);
   $('sumHigh').textContent = pct(s.high_rate);
   const L = s.segments_by_level || {};

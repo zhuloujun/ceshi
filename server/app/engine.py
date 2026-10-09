@@ -778,6 +778,9 @@ class Engine:
                                                      for k, v in chars_by_register.items()) + "），各自用对应的模型和阈值判断。")
         for reg in sorted(uncalibrated_regs):
             notes.append(f"{REGISTER_NAMES.get(reg, reg)}部分尚无专门校准，结果只宜作相对参考。")
+        if counted_chars and 0 < flagged_chars / counted_chars < 0.2:
+            notes.append("整体 AI 率低于 20%：这一区间误判的可能性较高（Turnitin 对 1%–19% 只显示星号“*%”，不给具体数值），"
+                         "数字后加 * 表示仅作提示，请逐段复核被标出的部分，不宜据此下结论。")
         n_works = len({s.block for s in segs})
         if genre == "classical":
             notes.append(f"按“中国古典文学作品”检测：共 {n_works} 篇（每个编号条目单独判断），文言、诗词和古白话对话都计入，不当作引文排除。")
@@ -851,6 +854,8 @@ class Engine:
         return {
             "summary": {
                 "ai_rate": rate(flagged_chars),
+                # 低于 20% 的整体 AI 率误判可能性较高（Turnitin 对 1%–19% 只显示星号、不给具体数值和高亮）
+                "low_rate_caution": bool(counted_chars and 0 < flagged_chars / counted_chars < 0.2),
                 "high_rate": rate(chars_by_level["high"]),
                 "mid_rate": rate(chars_by_level["mid"]),
                 "light_rate": rate(chars_by_level["light"]),

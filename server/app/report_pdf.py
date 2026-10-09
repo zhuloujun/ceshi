@@ -140,7 +140,8 @@ def build(payload: dict) -> bytes:
 
     # ---- 摘要：大号 AI 率 + 关键数字 ----
     ai = s.get("ai_rate")
-    big = Paragraph(f'<font color="{rate_color(ai).hexval().replace("0x", "#")}">{pct(ai)}</font>', S["big"])
+    star = "*" if s.get("low_rate_caution") else ""
+    big = Paragraph(f'<font color="{rate_color(ai).hexval().replace("0x", "#")}">{pct(ai)}{star}</font>', S["big"])
     verdict = ("疑似 AI 生成为主" if (ai or 0) >= 0.5 else "部分内容疑似 AI" if (ai or 0) > 0 else "未见明显 AI 特征")
     left = [big, Paragraph(f"AI 率 · {verdict}", S["bigsub"])]
     stats = [
