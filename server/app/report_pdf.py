@@ -162,6 +162,12 @@ def build(payload: dict) -> bytes:
                              ("BOX", (0, 0), (-1, -1), 0.6, C_RULE), ("BACKGROUND", (0, 0), (0, 0), colors.HexColor("#fafbfc")),
                              ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
     story += [top, Spacer(1, 8), bar(s, W), Spacer(1, 6)]
+    ex = s.get("excluded_by_kind") or {}
+    if ex:
+        names = {"reference": "参考文献", "frontmatter": "题目 / 作者 / 期刊信息", "table": "表格", "quotation": "引文",
+                 "famous": "疑似公开名篇原文", "reference_only": "仅供参考的文体"}
+        story.append(Paragraph(esc("AI 率的分母 = 计入字数 " + str(s.get("counted_chars", "—")) + " 字；未计入：" +
+                                   "、".join(f"{names.get(k, k)} {v} 字" for k, v in ex.items())), S["small"]))
 
     notes = s.get("reliability_notes") or []
     if notes:
