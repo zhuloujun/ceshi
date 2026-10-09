@@ -1,0 +1,45 @@
+# 验收检测（免费版）：在 GitHub 的机器上用与线上相同的模型和内置校准跑完整检测，不调用 Modal、不产生 Modal 费用。
+# 输入与"临时验收"相同（压缩后的测试文档，不提交进仓库）。只能手动运行。
+name: 验收检测（GitHub 免费机器）
+
+on:
+  workflow_dispatch:
+    inputs:
+      payload:
+        description: "base64(xz(JSON 列表 [{name, text}]))"
+        required: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+      - name: 安装依赖
+        run: |
+          pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r server/requirements.txt
+      - name: 缓存模型
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-qwen05-mpu-zhv3-desklib
+      - name: 下载模型
+        working-directory: server
+        run: python download_models.py Qwen/Qwen2.5-0.5B Qwen/Qwen2.5-0.5B-Instruct yuchuantian/AIGC_detector_zhv3 desklib/ai-text-detector-v1.01
+      - name: 取出自训练分类器
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash server/tools/fetch_classifiers.sh
+      - name: 检测
+        working-directory: server
+        env:
+          PAYLOAD: ${{ github.event.inputs.payload }}
+          TORCH_THREADS: "4"
+          TOKENIZERS_PARALLELISM: "false"
+        run: python -u tools/local_check.py
