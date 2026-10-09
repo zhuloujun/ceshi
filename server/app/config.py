@@ -114,6 +114,7 @@ SHORT_WORDS_EN = _int("SHORT_WORDS_EN", 150)
 # "疑似名篇"判定：语言模型困惑度低于此值且分类器判为人写
 # 中文段落困惑度（Qwen2.5-0.5B）低于此值：模型几乎逐字复现，视为公开名篇原文（《背影》实测 1.3–2.4），不计入 AI 率。
 # 依据：评估集中约 1300 段中文 AI 文本（GLM / GPT-4o / Qwen / DeepSeek / 文心 / Kimi）困惑度最低 3.57。
+FAMOUS_PPL_CLASSICAL = float(os.getenv("FAMOUS_PPL_CLASSICAL", "7.0") or 7.0)
 FAMOUS_PPL_ZH = float(os.getenv("FAMOUS_PPL_ZH", "3.0") or 3.0)
 # 名篇特征（整篇）：某段困惑度 < FAMOUS_WORK_PPL 且困惑度波动 > FAMOUS_WORK_BURST（模型对部分句子逐字背过、其余正常）。
 # 评估集约 1460 段中文 AI 文本中只有 1 段同时满足（波动 > 0.9）；36 篇国产模型中文论文的结果不受影响；《草原》首段 5.5 / 0.94。

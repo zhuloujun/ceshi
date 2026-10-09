@@ -32,7 +32,10 @@ TRAIN_BOOKS = ["搜神后记", "新齐谐", "博物志", "神仙传", "西京杂
                "五代新说", "高士传", "洛阳伽蓝记", "清代名人轶事", "万历野获编", "龙川别志", "江南野史", "东观奏记",
                "南唐书", "唐才子传", "浮生六记", "小窗幽记", "岭外代答", "吴船录", "庐山记", "晋书", "旧唐书",
                "北史", "三国志", "后汉书", "随园诗话", "闲情偶寄", "列女传",
-               "文心雕龙", "艺文类聚", "训蒙骈句", "菜根谭"]  # 后四部：真人骈文 / 辞赋 / 对偶，防止把"赋体"本身学成 AI 特征
+               "文心雕龙", "艺文类聚", "训蒙骈句", "菜根谭",
+               # v7：名家书信、家训、语录、清言小品、乐府、戏曲曲文（用户文档里真人的书信、祭文、序、赋常被误判）
+               "曾国藩家书", "颜氏家训", "幽梦影", "围炉夜话", "呻吟语", "传习录", "韩诗外传", "说苑", "乐府诗集",
+               "桃花扇", "牡丹亭", "长生殿", "西厢记", "贞观政要"]  # 后四部：真人骈文 / 辞赋 / 对偶，防止把"赋体"本身学成 AI 特征
 
 
 def ai_rows():
@@ -102,7 +105,7 @@ def main():
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--max-len", type=int, default=256)
-    ap.add_argument("--n-human-train", type=int, default=900)
+    ap.add_argument("--n-human-train", type=int, default=1400)
     ap.add_argument("--n-human-test", type=int, default=400)
     ap.add_argument("--n-split-train", type=int, default=400, help="《聊斋志异》《唐传奇》训练一半篇目中取多少段")
     ap.add_argument("--time-budget-min", type=float, default=240)
