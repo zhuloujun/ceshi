@@ -129,6 +129,26 @@ def human_couplets(d, n_train, n_test, rnd):
     return out["train"], out["test"]
 
 
+def human_cl_poetry(rnd):
+    """用户提供的古典诗曲 / 楹联选本（tools/data/human_cl：全元散曲、元明清散曲、先秦至南北朝诗、宋词鉴赏里的原词；
+    楹联丛话、古代楹联里的对联），只保留原文、已剔除与评估集和用户测试文档重复的部分。每 5 段留 1 段作评估。"""
+    import hashlib
+    out = {"train": [], "test": []}
+    for name in ("poetry", "couplet"):
+        f = ev.DATA_DIR / "human_cl" / f"{name}.jsonl"
+        if not f.exists():
+            continue
+        for line in f.read_text("utf-8").split("\n"):
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            part = "test" if int(hashlib.md5((r["source"] + r["text"][:20]).encode("utf-8")).hexdigest(), 16) % 5 == 0 else "train"
+            out[part].append({"text": r["text"], "y": 0, "model": "名家-" + r["source"], "kind": name})
+    for v in out.values():
+        rnd.shuffle(v)
+    return out["train"], out["test"]
+
+
 def auroc(pos, neg):
     if not pos or not neg:
         return None
@@ -165,6 +185,7 @@ def main():
     ap.add_argument("--time-budget-min", type=float, default=240)
     ap.add_argument("--couplets", default="", help="couplet-dataset 解压目录（含 train/、test/）：真人对联")
     ap.add_argument("--n-couplets", type=int, default=2500)
+    ap.add_argument("--n-literary", type=int, default=3000, help="名家诗曲、楹联选本取多少段作人写训练样本")
     ap.add_argument("--eval-model", default="", help="只评估这个已训练好的模型（同样的评估集，用于新旧版本对比），不训练")
     args = ap.parse_args()
 
@@ -202,7 +223,11 @@ def main():
         gen_train = gen_train * reps_g
     # v6 新增：真人对联作人写训练样本（AI 对联来自 gen_cl），对联单独评估
     cp_train, cp_test = human_couplets(args.couplets, args.n_couplets, 500, rnd) if args.couplets else ([], [])
-    base = train_h + classic_train + train_a + user_train + gen_train + cp_train
+    # v8 新增：名家古典诗曲、楹联选本作人写训练样本
+    lit_train, lit_test = human_cl_poetry(random.Random(9))
+    lit_train = lit_train[: args.n_literary]
+    lit_test = lit_test[:800]
+    base = train_h + classic_train + train_a + user_train + gen_train + cp_train + lit_train
     rnd.shuffle(base)
     dev = base[: min(max(200, len(base) // 20), len(base) // 5)]
     train = base[len(dev):]
@@ -314,6 +339,10 @@ def main():
     pg = predict(gen_test)
     pcp = predict(cp_test) if cp_test else []
     pyq = predict(getattr(load_classic, "yuanqu_eval", []))
+    plit = predict(lit_test) if lit_test else []
+    lit_by = {}
+    for p_, r in zip(plit, lit_test):
+        lit_by.setdefault(r["model"], []).append(p_)
     pcp_ai = [p for p, r in zip(pg, gen_test) if r["genre"] == "duilian"]
     by_gen = {}
     for p, r in zip(pg, gen_test):
@@ -333,12 +362,15 @@ def main():
            "gen_cl_vs_changan_human_auroc": round(auroc(pg, ph), 4) if pg else None,
            "gen_cl_vs_tang_song_300_auroc": round(auroc(pg, pc), 4) if pg else None,
            "couplet_ai_vs_human_couplet_auroc": round(auroc(pcp_ai, pcp), 4) if pcp and pcp_ai else None,
+           "gen_cl_vs_literary_auroc": round(auroc(pg, plit), 4) if pg and plit else None,
+           "ai_couplets_vs_literary_couplets_auroc": round(auroc(pcp_ai, [p_ for p_, r in zip(plit, lit_test) if r["kind"] == "couplet"]), 4) if pcp_ai and plit else None,
            "n_couplet_test": [len(pcp_ai), len(pcp)],
            "reference_threshold": round(thr, 4),
            "at_threshold": {"changan_ai_caught": rate(pa), "user_models_caught": rate(pu), "story_caught": rate(ps),
                             "tang_song_300_flagged": rate(pc), "gen_cl_caught": rate(pg),
                             "human_couplets_flagged": rate(pcp), "ai_couplets_caught": rate(pcp_ai),
-                            "yuanqu_flagged": rate(pyq),
+                            "yuanqu_flagged": rate(pyq), "literary_flagged": rate(plit),
+                            "literary_flagged_by": {k: rate(v) for k, v in sorted(lit_by.items()) if len(v) >= 10},
                             "gen_cl_caught_by": {k: rate(v) for k, v in sorted(by_gen.items())}},
            "n_gen_cl_train_unique": len({r["text"] for r in gen_train}), "n_gen_cl_test": len(gen_test),
            "n_train": len(train), "n_test_human": len(ph), "n_test_ai": len(pa),
