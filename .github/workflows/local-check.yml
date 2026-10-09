@@ -1,13 +1,17 @@
-# 验收检测（免费版）：在 GitHub 的机器上用与线上相同的模型和内置校准跑完整检测，不调用 Modal、不产生 Modal 费用。
-# 输入与"临时验收"相同（压缩后的测试文档，不提交进仓库）。只能手动运行。
-name: 验收检测（GitHub 免费机器）
+# 验收检测（本地版）：在 GitHub Actions 的免费机器上启动一份和线上完全相同的检测服务（同样的模型、校准、代码），
+# 再把用户的测试文档送进去检测。和"临时验收"（adhoc-check.yml）输出相同，但不使用 Modal，不产生费用。
+# 线上的"标注校准"会先从线上服务读取一次，保证结果与线上一致。只能手动运行。
+name: 验收检测（本地，免费）
 
 on:
   workflow_dispatch:
     inputs:
       payload:
-        description: "base64(xz(JSON 列表 [{name, text}]))"
+        description: "base64(xz(JSON 列表 [{name, text, genre?}]))"
         required: true
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -22,24 +26,176 @@ jobs:
           cache-dependency-path: server/requirements.txt
       - name: 安装依赖
         run: |
+          sudo apt-get install -y -q fonts-wqy-zenhei >/dev/null
           pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
           pip install -r server/requirements.txt
-      - name: 缓存模型
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: hf-models-qwen05-mpu-zhv3-desklib
-      - name: 下载模型
-        working-directory: server
-        run: python download_models.py Qwen/Qwen2.5-0.5B Qwen/Qwen2.5-0.5B-Instruct yuchuantian/AIGC_detector_zhv3 desklib/ai-text-detector-v1.01
-      - name: 取出自训练分类器
+      - name: 取出诗词分类器（仓库是私有的，Release 文件需要用本工作流的令牌下载）
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash server/tools/fetch_classifiers.sh
-      - name: 检测
+        run: |
+          # 版本以内置校准里记录的为准（见 config._calibrated_classifier）
+          T=$(grep -oE '"poetry-classifier-v[0-9]+"' server/app/default_calibration.json | head -1 | tr -d '"'); T=${T:-poetry-classifier-v1}
+          if gh release download "$T" -p poetry-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
+            tar xzf /tmp/poetry-classifier.tar.gz -C server/
+            ls server/poetry-classifier
+          else
+            echo "::warning::没有找到诗词分类器（Release $T），诗词将改用通用中文分类器。"
+          fi
+      - name: 取出文言分类器（只在内置校准已按它拟合时使用，否则文言校准会因模型不一致被丢弃）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          T=$(grep -oE '"classical-classifier-v[0-9]+"' server/app/default_calibration.json | head -1 | tr -d '"')
+          if [ -n "$T" ]; then
+            gh release download "$T" -p classical-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
+            tar xzf /tmp/classical-classifier.tar.gz -C server/
+            ls server/classical-classifier
+          else
+            echo "内置校准的文言部分没有使用文言分类器，本次不部署它。"
+          fi
+      - name: 取出英文第二分类器（只在内置校准已按它拟合时使用）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 内置校准里写的是哪个版本（english-classifier-v1 / v2 …），就部署那个版本
+          TAG=$(grep -oE 'english-classifier-(exp-)?v[0-9]+' server/app/default_calibration.json | head -1 || true)
+          if [ -n "$TAG" ]; then
+            gh release download "$TAG" -p english-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
+            tar xzf /tmp/english-classifier.tar.gz -C server/
+            ls server/english-classifier
+          else
+            echo "内置校准的英文部分没有使用英文第二分类器，本次不部署它。"
+          fi
+      - name: 取出中文第二分类器（版本见 server/app/config.py 的 ZH2_CLASSIFIER_ID）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(grep -oE 'chinese-classifier-[A-Za-z0-9.-]+' server/app/config.py | head -1 || true)
+          if [ -n "$TAG" ] && gh release download "$TAG" -p chinese-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
+            tar xzf /tmp/chinese-classifier.tar.gz -C server/
+            ls server/chinese-classifier
+          else
+            echo "::warning title=中文第二分类器::没有找到 Release $TAG，本次不部署它"
+          fi
+      - name: 取出英文整篇分类器（版本见 server/app/config.py 的 EN3_CLASSIFIER_ID）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(grep -oE 'EN3_CLASSIFIER_ID", "english-classifier-[A-Za-z0-9.-]+' server/app/config.py | grep -oE 'english-classifier-[A-Za-z0-9.-]+' || true)
+          if [ -n "$TAG" ] && gh release download "$TAG" -p english-classifier.tar.gz -D /tmp/en3 -R "${{ github.repository }}"; then
+            mkdir -p /tmp/en3x && tar xzf /tmp/en3/english-classifier.tar.gz -C /tmp/en3x
+            mv /tmp/en3x/english-classifier server/english-doc-classifier
+            ls server/english-doc-classifier
+          else
+            echo "::warning title=英文整篇分类器::没有找到 Release $TAG，本次不部署它"
+          fi
+      - name: 取出第二个英文整篇分类器（版本见 server/app/config.py 的 EN4_CLASSIFIER_ID）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(grep -oE 'EN4_CLASSIFIER_ID", "english-classifier-[A-Za-z0-9.-]+' server/app/config.py | grep -oE 'english-classifier-[A-Za-z0-9.-]+' || true)
+          if [ -n "$TAG" ] && gh release download "$TAG" -p english-classifier.tar.gz -D /tmp/en4 -R "${{ github.repository }}"; then
+            mkdir -p /tmp/en4x && tar xzf /tmp/en4/english-classifier.tar.gz -C /tmp/en4x
+            mv /tmp/en4x/english-classifier server/english-doc-classifier-2
+            ls server/english-doc-classifier-2
+          else
+            echo "::warning title=第二个英文整篇分类器::没有找到 Release $TAG，本次不部署它"
+          fi
+      - name: 下载公开模型
         working-directory: server
+        run: python download_models.py Qwen/Qwen2.5-0.5B Qwen/Qwen2.5-0.5B-Instruct yuchuantian/AIGC_detector_zhv3 desklib/ai-text-detector-v1.01
+      - name: 读取线上的标注校准（与线上结果一致）
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          try:
+              req = urllib.request.Request("https://zhuloujun--ai-text-checker-web.modal.run/admin/api/calibration?full=1",
+                                           headers={"X-Admin-Token": os.environ["ADMIN_TOKEN"]})
+              d = json.loads(urllib.request.urlopen(req, timeout=600).read())
+              prof = d.get("user_profiles_full") or {}
+          except Exception as e:  # noqa: BLE001
+              print("::warning::没有读到线上标注校准：", e); prof = {}
+          json.dump({"profiles": prof}, open("/tmp/user_calibration.json", "w"), ensure_ascii=False)
+          print("::notice title=标注校准::" + "、".join(prof) if prof else "无")
+          PY
+      - name: 启动本地检测服务
+        working-directory: server
+        run: |
+          D=$PWD
+          export TORCH_THREADS=4 TOKENIZERS_PARALLELISM=false
+          export OBSERVER_MODEL=Qwen/Qwen2.5-0.5B PERFORMER_MODEL=Qwen/Qwen2.5-0.5B-Instruct
+          export CLASSIFIER_MODEL=yuchuantian/AIGC_detector_zhv3 EN_CLASSIFIER_MODEL=desklib/ai-text-detector-v1.01
+          for p in poetry-classifier:POETRY classical-classifier:CLASSICAL english-classifier:EN2 chinese-classifier:ZH2 english-doc-classifier:EN3 english-doc-classifier-2:EN4; do
+            dir=${p%%:*}; var=${p##*:}
+            if [ -f "$D/$dir/config.json" ] || [ -f "$D/$dir/ensemble.json" ]; then export ${var}_CLASSIFIER_MODEL=$D/$dir; fi
+          done
+          export USER_CALIBRATION_FILE=/tmp/user_calibration.json USER_LABELS_FILE=/tmp/user_labels.json
+          export ADMIN_TOKEN=local-$RANDOM-$RANDOM; echo "LOCAL_ADMIN=$ADMIN_TOKEN" >> $GITHUB_ENV
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/server.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -s http://127.0.0.1:8000/health | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if not d.get('loading') else 1)" 2>/dev/null; then echo ready; break; fi
+            sleep 10
+          done
+          curl -s http://127.0.0.1:8000/health | head -c 1500; echo
+      - name: 检测
         env:
           PAYLOAD: ${{ github.event.inputs.payload }}
-          TORCH_THREADS: "4"
-          TOKENIZERS_PARALLELISM: "false"
-        run: python -u tools/local_check.py
+        run: |
+          python3 - <<'PY'
+          import base64, json, lzma, os, time, urllib.request
+          BASE = "http://127.0.0.1:8000"
+          def call(path, body=None, headers=None):
+              for attempt in range(4):
+                  try:
+                      req = urllib.request.Request(BASE + path, json.dumps(body).encode() if body is not None else None,
+                                                   {"Content-Type": "application/json", **(headers or {})})
+                      with urllib.request.urlopen(req, timeout=900) as r:
+                          return json.loads(r.read())
+                  except Exception as e:
+                      print(f"::warning title=请求失败::{path} {e}", flush=True)
+                      time.sleep(20)
+              return {}
+          docs = json.loads(lzma.decompress(base64.b64decode(os.environ["PAYLOAD"])).decode("utf-8"))
+          key = call("/admin/api/keys", {"name": "adhoc-check", "days": 1}, {"X-Admin-Token": os.environ["LOCAL_ADMIN"]})
+          tok = key.get("key") or key.get("api_key") or key.get("token")
+          H = {"Authorization": "Bearer " + tok}
+          for d in docs:
+              j = call("/v1/detect", {"text": d["text"], "wait": True, "genre": d.get("genre", "auto")}, H)
+              jid = j.get("job_id") or j.get("id")
+              while j.get("status") not in ("done", "error") and jid:
+                  time.sleep(10)
+                  j = call(f"/v1/jobs/{jid}", headers=H)
+                  if not j:                 # 任务丢了（服务重新部署 / 容器重启）：重新提交一次
+                      j = call("/v1/detect", {"text": d["text"], "wait": False, "genre": d.get("genre", "auto")}, H)
+                      jid = j.get("job_id") or j.get("id")
+              res = j.get("result") or {}
+              s = res.get("summary") or {}
+              works = " ； ".join(f"{w['title'][:24]} {'—' if w.get('ai_rate') is None else round(w['ai_rate'] * 100)}%"
+                                 for w in res.get("works", []))
+              print(f"::warning title={d['name']} 分篇::AI 率 {s.get('ai_rate')} · {works}"[:4000], flush=True)
+              segs = []
+              for g in res.get("segments", []):
+                  r = g.get("raw") or {}
+                  f = lambda k: "" if r.get(k) is None else f" {k.replace('classifier_', '').replace('classifier', 'cls')}{round(r[k] * 100)}"
+                  segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}] {g.get('label') or g.get('kind')} p{round((g.get('prob') or 0) * 100)}"
+                              f"{'' if g.get('ref_prob') is None else ' r' + str(round(g['ref_prob'] * 100))} {(g.get('register') or '')[3:5]}"
+                              f"{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}")
+              try:                      # 顺便检查 PDF 报告能否生成、是否嵌入了中文字体
+                  body = {"source": d["name"], "method": "方法", "result": {"summary": s, "works": res.get("works", []),
+                          "segments": res.get("segments", [])}, "format_items": []}
+                  req = urllib.request.Request(BASE + "/v1/report/pdf", json.dumps(body).encode(),
+                                               {"Content-Type": "application/json", **H})
+                  with urllib.request.urlopen(req, timeout=300) as r:
+                      pdf = r.read()
+                  print(f"::warning title={d['name']} PDF 报告::{len(pdf)} 字节 · 开头 {pdf[:5]!r} · "
+                        f"嵌入中文字体 {'是' if b'FontFile2' in pdf else '否（用的是不嵌入的宋体）'}", flush=True)
+              except Exception as e:
+                  print(f"::warning title={d['name']} PDF 报告失败::{e}", flush=True)
+              for i in range(0, len(segs), 30):
+                  print(f"::notice title={d['name']} 分段 {i // 30 + 1}::" + " | ".join(segs[i:i + 30]), flush=True)
+          PY
+      - name: 服务日志（出错时看）
+        if: always()
+        run: tail -n 60 /tmp/server.log || true

@@ -357,11 +357,13 @@ def admin_labels_clear(request: Request, x_admin_token: str | None = Header(None
 
 
 @app.get("/admin/api/calibration")
-def admin_calibration_status(request: Request, x_admin_token: str | None = Header(None)):
-    """当前叠加的"标注校准"（每个文体的阈值、特征、权重、样本说明），便于排查。"""
+def admin_calibration_status(request: Request, x_admin_token: str | None = Header(None), full: int = 0):
+    """当前叠加的"标注校准"（每个文体的阈值、特征、权重、样本说明），便于排查。full=1 时附完整参数
+    （免费的本地验收工作流 local-check.yml 用它在 GitHub 机器上复现线上结果）。"""
     require_admin(request, x_admin_token)
     user = config.load_user_profiles()
-    return {"source": engine.cal_source,
+    extra = {"user_profiles_full": user} if full else {}
+    return {"source": engine.cal_source, **extra,
             "user_profiles": {p: {k: c.get(k) for k in ("threshold", "lr", "note", "models", "reference_only")}
                               for p, c in user.items()}}
 
