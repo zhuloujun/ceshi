@@ -351,6 +351,8 @@ function renderResult(res){
   }
   $('sumFlagged').textContent = `${flagged} / ${counted}`;
   $('sumExcluded').textContent = s.excluded_chars.toLocaleString();
+  const exNames = { reference:'参考文献', frontmatter:'题目 / 作者 / 期刊信息', table:'表格', quotation:'引文', famous:'疑似公开名篇原文', reference_only:'仅供参考的文体' };
+  $('sumExcluded').title = Object.entries(s.excluded_by_kind || {}).map(([k,v])=>`${exNames[k]||k} ${v} 字`).join('；');
   const methods = Object.entries(s.methods).filter(([,v])=>v).map(([k])=>SIG_NAME[k]).join('、') || '无';
   $('calibLine').innerHTML =
     `使用方法：${escapeHtml(methods)} · 判定阈值 ${pct(s.threshold)} · ` +

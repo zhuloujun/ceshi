@@ -77,6 +77,15 @@ def score_text(seg) -> str:
     return text
 
 
+def _excl_kind(seg) -> str:
+    if seg.kind == "quotation" and any("名篇" in n for n in seg.notes):
+        return "famous"
+    return seg.kind
+
+
+EXCL_NAMES = {"reference": "参考文献", "frontmatter": "题目 / 作者 / 期刊信息", "table": "表格", "quotation": "引文",
+              "famous": "疑似公开名篇原文", "reference_only": "仅供参考的文体"}
+
 _EVAL_CACHE: dict = {}
 # 不在 tools/eval_result.json 里的独立测试（来自分类器训练报告，测试样本从未参与训练）
 EXTRA_EVAL = {"zh_poetry": [{"name": "对联：国产模型写的对联 vs 真人对联（couplet-dataset 测试集；对联用单独阈值）",
@@ -873,6 +882,9 @@ class Engine:
                 "chars_by_register": chars_by_register,
                 "main_register": main_reg,
                 "excluded_chars": sum(len(s.text) for s in excluded),
+                # AI 率的分母说明：哪些文字没有计入、各多少字（参考文献、题目作者信息、表格、引文、名篇原文……）
+                "excluded_by_kind": {k: sum(len(s.text) for s in excluded if _excl_kind(s) == k)
+                                     for k in sorted({_excl_kind(s) for s in excluded})},
                 "fallback_all_counted": fallback_all,
                 "excluded_reference_segments": sum(1 for s in excluded if s.kind == "reference"),
                 "excluded_quotation_segments": sum(1 for s in excluded if s.kind == "quotation"),
