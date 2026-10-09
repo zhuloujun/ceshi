@@ -224,6 +224,8 @@ def is_english_title(line: str) -> bool:
     words = re.findall(r"[A-Za-z][A-Za-z'’\-]*", s)
     if not 3 <= len(words) <= 16:
         return False
+    if words[-1][0].islower() and words[-1].lower() not in ("of", "and", "for", "in", "on") and words[-1] not in ("vs",):
+        return False          # 以小写实词结尾（"… Processing (NLP) are"）：PDF 折行的句子，不是标题
     content = [w for w in words if w.lower() not in _EN_SMALL]
     return bool(content) and sum(w[0].isupper() for w in content) >= 0.8 * len(content)
 
@@ -467,7 +469,10 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         if _CJK.search(nxt):
             ok = len(nxt) >= 15 and re.search(r"[。！？，；]", nxt)
         else:
-            ok = len(nxt) >= 40 and len(nxt.split()) >= 6
+            # PDF 按行折断的英文句子（"Machine Learning and Natural Language Processing (NLP) are" + "subfields of AI …"）
+            # 不是标题：标题不以小写词结尾，下一行也不会以小写字母接着写
+            wrapped = bool(re.search(r"\b[a-z][a-z'’\-]*[,;]?$", a)) or bool(re.match(r"^[a-z]", nxt))
+            ok = len(nxt) >= 40 and len(nxt.split()) >= 6 and not wrapped
         if ok:
             iso_titles.add(a)
 
@@ -669,6 +674,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         s.text = s.text.strip()
     segments = _merge_short(segments)
     segments = _mark_front_matter(segments)
+    segments = _mark_masthead(segments)
     for i, s in enumerate(segments):
         s.index = i
     if flag_quotations and genre != "classical":
@@ -679,6 +685,24 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
 _FRONT_HINT = re.compile(r"arXiv:|@|\b(university|universit[àa]|department|institute|college|school of|faculty|laborator|"
                          r"academy|corresponding|e-?mail|received|accepted|published|copyright|doi)\b|大学|学院|研究所|研究院|"
                          r"通讯作者|作者简介|收稿日期|基金项目|邮箱|^(作者|单位|所属领域|课题组)[：:]|^\*|^\d{1,2}$", re.I | re.M)
+
+
+_MASTHEAD = re.compile(r"\bdoi\b|\bissn\b|\bvol(ume)?[.\-\s]*\d|\bjournal of\b|\bpp?\.\s*\d|©|copyright|"
+                       r"received:?\s|accepted:?\s|published( online)?:?\s|https?://|期刊|学报|第\s*\d+\s*卷|第\s*\d+\s*期|DOI", re.I)
+
+
+def _mark_masthead(segments):
+    """文章开头的期刊页眉（"Journal of … 2022 Nov, Vol-16(11) … DOI: 10.7860/…""View Point"）：不是正文，不计入。"""
+    for seg in segments[:3]:
+        if seg.kind != "body":
+            continue
+        t = seg.text.strip()
+        prose = len(re.findall(r"[a-z]{2}[.!?](\s|$)|[。！？]", t)) >= 2
+        if len(t) <= 300 and not prose and _MASTHEAD.search(t):
+            seg.kind, seg.notes = "frontmatter", ["期刊页眉 / 出版信息，不计入"]
+        elif prose:
+            break
+    return segments
 
 
 def _mark_front_matter(segments):
