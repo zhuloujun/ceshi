@@ -116,13 +116,21 @@ def main():
     _, q = kaggle("quota", check=False)
     print(f"::notice title=Kaggle 本周 GPU 额度::{q[:500]}", flush=True)
 
-    code, out = kaggle("kernels", "push", "-p", str(d), "--accelerator", "NvidiaTeslaT4", check=False)
-    print(out, flush=True)
-    if code or "error" in out.lower():
-        print("::warning title=Kaggle::指定 T4 失败，改用默认 GPU 重试", flush=True)
-        _, out = kaggle("kernels", "push", "-p", str(d))
+    # 推送新版本：失败（常见原因是 Kaggle 同时运行的 GPU 会话已满）就每 5 分钟重试，最多 1 小时。
+    # 必须确认推送成功：否则下面查到的是上一个版本的"complete"状态，会把上一次训练的结果当成这次的。
+    pushed = False
+    for attempt in range(13):
+        extra = ["--accelerator", "NvidiaTeslaT4"] if attempt % 2 == 0 else []
+        code, out = kaggle("kernels", "push", "-p", str(d), *extra, check=False)
         print(out, flush=True)
-    t0, last = time.time(), ""
+        if code == 0 and "successfully" in out.lower() and "error" not in out.lower():
+            pushed = True
+            break
+        print(f"::warning title=Kaggle::第 {attempt + 1} 次推送失败，5 分钟后重试", flush=True)
+        time.sleep(300)
+    if not pushed:
+        raise SystemExit("::error::Kaggle 推送一直失败（见上面的输出），没有开始训练")
+    t0, last, seen_active = time.time(), "", False
     time.sleep(60)
     while True:
         _, st = kaggle("kernels", "status", ref, check=False)
@@ -130,8 +138,12 @@ def main():
         if s != last:
             print(f"[{(time.time() - t0) / 60:.0f} 分钟] {st}", flush=True)
             last = s
-        if "complete" in s or "error" in s or "cancel" in s:
+        if "running" in s or "queued" in s:
+            seen_active = True
+        if seen_active and ("complete" in s or "error" in s or "cancel" in s):
             break
+        if not seen_active and time.time() - t0 > 1800:
+            raise SystemExit("::error::推送后 30 分钟仍未开始运行，可能拿到的是旧版本状态")
         if time.time() - t0 > a.max_hours * 3600:
             raise SystemExit("Kaggle 训练超时")
         time.sleep(60)
