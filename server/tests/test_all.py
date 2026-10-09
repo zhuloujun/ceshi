@@ -1115,3 +1115,14 @@ def test_unnumbered_subheadings_stay_in_numbered_paper():
                        "Perplexity-Based Detection", para, "Burstiness Analysis", para, "Lexical Diversity Evaluation", para,
                        "4. Conclusion", para])
     assert len({s.block for s in segment_text(doc) if s.kind == "body"}) == 1
+
+
+def test_tables_and_masthead_not_counted():
+    """表格（网页从 .docx 提取为"单元格 | 单元格"）和期刊页眉不是连贯正文，不计入（与 Turnitin 只检测 qualifying prose 一致）。"""
+    para = "Detection methods estimate how predictable a passage is under a reference language model. " * 8
+    doc = "\n\n".join(["Journal of Clinical Research. 2022 Nov, Vol-16(11): 1-3\nDOI: 10.7860/JCR/2022/1\nView Point",
+                       "Some Title Of The Paper", para,
+                       "Family | Core signal | Strengths\nStatistical | Token rank | Cheap\nCurvature | Log-prob shape | No training",
+                       para])
+    kinds = [s.kind for s in segment_text(doc)]
+    assert kinds[0] == "frontmatter" and "table" in kinds and kinds.count("body") >= 2

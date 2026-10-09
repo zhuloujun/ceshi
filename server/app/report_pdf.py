@@ -92,6 +92,8 @@ def seg_tag(seg) -> str:
     k = seg.get("kind")
     if k == "reference":
         return "参考文献，不计入"
+    if k == "table":
+        return "表格，不计入"
     if k == "frontmatter":
         return "题目 / 作者信息，不计入"
     if k == "quotation":
