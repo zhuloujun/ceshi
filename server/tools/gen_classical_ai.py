@@ -36,6 +36,29 @@ WENTI = [("记", "用文言文写一篇《{t}记》，三百字左右。"), ("�
          ("书", "用文言写一封书信，向友人诉说{t}的心情。"), ("铭", "仿照《陋室铭》，写一篇《{t}铭》。"),
          ("论", "用文言写一篇议论文，题目是《{t}论》。"), ("笔记", "用文言写一则笔记小说，讲一个关于{t}的奇闻。")]
 
+# v2 新增（对照用户提供的《全唐文》《全上古三代秦汉三国六朝文》《历代笔记小说大观》《诸子百家》《楚辞》《乐府诗》
+# 等真人古籍补充的体裁）：碑志、表奏、诏令、祭文、游记、题跋、家书、寓言说理、世说体、志怪传奇
+PEOPLE = ["一位清廉的县令", "一位隐居山林的老儒", "一位戍边的老将", "一位孝顺的农家女", "一位乐善好施的商人", "一位苦读成名的书生",
+          "一位医术高明的郎中", "一位刚直敢谏的御史", "一位守节的寡母", "一位游方的高僧", "一位善画的山人", "一位早逝的少年"]
+AFFAIRS = ["兴修水利", "赈济灾民", "减免赋税", "整顿吏治", "选拔人才", "劝课农桑", "禁绝奢靡", "修缮学宫", "抵御边患",
+           "平定盗贼", "请求致仕", "辞让封赏", "请立太子", "整顿盐法", "开科取士", "劝谏君王勿事游猎"]
+SCENES = ["游西山", "登岳阳楼", "夜泊瓜洲", "游虎丘", "观钱塘潮", "宿山寺", "游石钟山", "过三峡", "游雁荡山", "访隐者不遇",
+          "雪后游园", "泛舟太湖"]
+WENTI2 = [("墓志", PEOPLE, ["用文言为{t}写一篇墓志铭，有志有铭。", "仿照韩愈的笔法，为{t}写一篇墓志铭。"]),
+          ("表奏", AFFAIRS, ["用文言写一篇上皇帝的奏疏，奏请{t}。", "以臣子的口吻，写一篇关于{t}的表文。"]),
+          ("诏令", AFFAIRS, ["以皇帝的口吻，用文言写一道关于{t}的诏书。"]),
+          ("祭文", PEOPLE, ["用文言为{t}写一篇祭文，仿照《祭十二郎文》。", "写一篇祭奠{t}的文言祭文，四言韵文。"]),
+          ("游记", SCENES, ["用文言写一篇游记，记{t}。", "仿照柳宗元《永州八记》，写一篇《{t}记》。"]),
+          ("题跋", ["一幅山水画", "一卷古帖", "友人诗集", "一部旧书", "一方古砚", "一幅墨竹"], ["用文言为{t}写一篇题跋。"]),
+          ("家书", ["读书", "做人", "治家", "为官", "交友", "节俭"], ["仿照古人家书，用文言写一封告诫子弟{t}之道的家书。",
+                                                          "仿照《诫子书》，以父亲的口吻用文言写一封关于{t}的家书。"]),
+          ("寓言", ["守株待兔式的愚人", "学步的人", "养猴的人", "种树的老人", "射箭的人", "卖药的人", "渡河的人"],
+           ["仿照先秦诸子，用文言写一则关于{t}的寓言，并在末尾点明道理。"]),
+          ("世说", ["名士饮酒", "清谈", "雅量", "任诞", "言语机敏的孩童", "简傲"], ["仿照《世说新语》，用文言写几则关于{t}的小故事。"]),
+          ("志怪", ["狐仙", "书生遇鬼", "古镜", "龙女", "画中人", "老树成精", "还魂"],
+           ["仿照《聊斋志异》，用文言写一篇关于{t}的志怪故事，五百字左右。", "仿照《搜神记》，用文言写一则关于{t}的志怪短篇。"])]
+QUPAI = ["天净沙", "山坡羊", "沉醉东风", "折桂令", "水仙子", "清江引", "卖花声", "寿阳曲", "四块玉", "红绣鞋"]
+
 GENRES = [  # (genre, 题目池, 指令模板)
     ("jueju5", TRAD + MODERN, ["写一首五言绝句，题目是《{t}》。", "以{t}为题作一首五绝。", "帮我写一首关于{t}的五言绝句。"]),
     ("jueju7", TRAD + MODERN, ["写一首七言绝句，题目是《{t}》。", "以{t}为题作一首七绝，要押韵、讲平仄。", "帮我写一首关于{t}的七言绝句。"]),
@@ -46,6 +69,9 @@ GENRES = [  # (genre, 题目池, 指令模板)
     ("fu", TRAD[:40] + MODERN, ["写一篇《{t}赋》，仿照古人辞赋的格式。", "以{t}为题作一篇骈赋，四六对仗。", "帮我写一篇关于{t}的赋。"]),
     ("pianwen", TRAD[:40], ["用骈文写一段关于{t}的文字，对仗工整。"]),
     ("wenyan", TRAD + MODERN, None),
+    ("sao", TRAD[:40], ["仿照《离骚》《九歌》的楚辞体，以{t}为题写一首骚体诗，句中用“兮”字。"]),
+    ("yuefu", TRAD, ["仿照汉乐府民歌，写一首关于{t}的乐府诗。", "以{t}为题，拟一首汉魏乐府古辞。"]),
+    ("sanqu", TRAD + MODERN, ["用曲牌【{q}】写一首元曲小令，题目是{t}。", "以{t}为题写一支散曲【{q}】。"]),
     ("duilian", TRAD + MODERN, ["以{t}为题写三副对联。", "写一副关于{t}的长联，上下联各二十字以上。",
                                 "写一副七言对联，主题是{t}，只要上联和下联。", "以{t}为题写一副五言对联。",
                                 "为{t}写一副楹联，上下联字数相等、平仄相对。", "写一副春联，内容与{t}有关，只写上下联。",
@@ -104,6 +130,10 @@ def run(name, key, endpoints, n, t0, budget, lock):
             else:
                 for tpl in tpls:
                     jobs.append((genre, t, tpl))
+    for wt, topics2, tpls2 in WENTI2:
+        for t in topics2:
+            for tpl in tpls2:
+                jobs.append(("wenyan2-" + wt, t, tpl))
     only_g = [x for x in os.getenv("CL_GENRES", "").split(",") if x]
     if only_g:          # 只生成指定体裁（如 CL_GENRES=duilian）：对联另加名胜楹联题目
         jobs = [j for j in jobs if j[0].split("-")[0] in only_g]
@@ -117,7 +147,7 @@ def run(name, key, endpoints, n, t0, budget, lock):
         url, model = eps[i % len(eps)]
         if f"{t}|{genre}|{model}" in done:
             continue
-        prompt = tpl.format(t=t, p=rnd.choice(CIPAI)) + rnd.choice(STYLE_TAIL)
+        prompt = tpl.format(t=t, p=rnd.choice(CIPAI), q=rnd.choice(QUPAI)) + rnd.choice(STYLE_TAIL)
         text = g.chat(url, key, model, prompt, rnd.choice([0.7, 0.85, 1.0]), 1500)
         text = clean(text or "", genre)
         if len(re.findall(r"[一-鿿]", text)) >= (16 if genre.startswith("jueju") else 30):
@@ -137,7 +167,10 @@ def main():
     op = os.getenv("ONLY_PROVIDERS", "")
     if op.startswith("couplet:"):          # couplet:deepseek,qwen,… = 只生成对联
         os.environ["CL_GENRES"] = "duilian"
-    only = [x for x in op.replace("classical:", "").replace("couplet:", "").split(",") if x]
+    if op.startswith("classical+"):        # classical+wenyan2.sao.yuefu.sanqu:deepseek,qwen = 只生成指定体裁
+        os.environ["CL_GENRES"] = op.split(":", 1)[0].split("+", 1)[1].replace(".", ",")
+        op = "classical:" + op.split(":", 1)[1]
+    only = [x for x in op.replace("classical:", "", 1).replace("couplet:", "").split(",") if x]
     t0, lock, ths = time.time(), threading.Lock(), []
     for name, (env, eps) in g.PROVIDERS.items():
         if only and name not in only:
