@@ -50,6 +50,8 @@ EXTENDED_FEATURES = BASE_FEATURES + [
     "fastdetect_norm", "lrr", "log_rank", "entropy", "top10", "lp_burstiness",
     "style_cv", "style_phrases",
 ]
+# 逐 token 惊奇度的分布与起伏（DivEye，Basani & Chen 2026）：作为候选特征组参与评估比较，交叉验证更好才采用
+DIVEYE_FEATURES = ["div_std", "div_skew", "div_kurt", "div_d1_std", "div_d2_std"]
 _LEGACY_NAMES = {"logit(classifier)": "logit_classifier"}
 
 

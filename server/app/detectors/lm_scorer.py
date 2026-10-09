@@ -81,6 +81,8 @@ class LMScorer:
         entropy                   —— 执行者预测分布的平均熵
         top1 / top10              —— 实际 token 排在第 1 / 前 10 名的比例（GLTR，Gehrmann et al. 2019）
         lp_burstiness             —— 每 24 个 token 为一窗，窗内平均困惑度的变异系数（与 GPTZero 的 burstiness 思路相同）
+        div_*                     —— 逐 token 惊奇度（−log p）分布的多样性（DivEye，Basani & Chen，TMLR 2026）：
+                                     标准差、偏度、峰度，以及一阶 / 二阶差分的标准差（惊奇度起伏的节奏）
         """
         torch = self.torch
         if len(ids) < 16:
@@ -129,7 +131,9 @@ class LMScorer:
             m = sum(wins) / len(wins)
             sd = math.sqrt(sum((x - m) ** 2 for x in wins) / len(wins))
             burst = sd / m if m > 0 else None
+        div = _surprisal_diversity(nll_all)
         return {
+            **div,
             "binoculars": ppl / x_ppl if x_ppl > 0 else None,
             "fastdetect": fd,
             "fastdetect_norm": fd / math.sqrt(n_tok) if fd is not None else None,
@@ -143,3 +147,26 @@ class LMScorer:
             "lp_burstiness": burst,
             "tokens": n_tok,
         }
+
+
+def _surprisal_diversity(nll: list) -> dict:
+    """DivEye 特征：人写文字的"意外程度"起伏更大、更不规则；模型生成的文字惊奇度更平稳。"""
+    keys = ("div_std", "div_skew", "div_kurt", "div_d1_std", "div_d2_std")
+    if len(nll) < 16:
+        return dict.fromkeys(keys)
+
+    def moments(v):
+        n = len(v)
+        m = sum(v) / n
+        var = sum((x - m) ** 2 for x in v) / n
+        sd = math.sqrt(var)
+        if sd == 0:
+            return m, 0.0, 0.0, 0.0
+        skew = sum((x - m) ** 3 for x in v) / n / sd ** 3
+        kurt = sum((x - m) ** 4 for x in v) / n / sd ** 4 - 3
+        return m, sd, skew, kurt
+    _, sd, skew, kurt = moments(nll)
+    d1 = [b - a for a, b in zip(nll, nll[1:])]
+    d2 = [b - a for a, b in zip(d1, d1[1:])]
+    return {"div_std": sd, "div_skew": skew, "div_kurt": kurt,
+            "div_d1_std": moments(d1)[1], "div_d2_std": moments(d2)[1]}

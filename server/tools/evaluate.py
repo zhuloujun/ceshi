@@ -521,6 +521,8 @@ def fit_profile(prof, parts, target_fpr):
         tried = {}
         variants = [("全部特征", scoring.EXTENDED_FEATURES), ("三个主信号", scoring.BASE_FEATURES),
                     ("语言模型特征", [f for f in scoring.EXTENDED_FEATURES if f != "logit_classifier"])]
+        if all(scoring.feature_value(r, "div_std") is not None for r in hs[:20]):
+            variants.append(("全部特征 + 惊奇度多样性（DivEye）", scoring.EXTENDED_FEATURES + scoring.DIVEYE_FEATURES))
         if all(scoring.feature_value(r, "logit_classifier_mpu") is not None for r in hs[:20]):
             # 有专用分类器（如文言分类器）时，通用中文分类器作为第二意见一起参与比较
             variants.append(("全部特征 + 通用分类器", scoring.EXTENDED_FEATURES + ["logit_classifier_mpu"]))
