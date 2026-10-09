@@ -34,6 +34,7 @@ on:
       - "!server/tools/gen_chinese_ai.py"
       - "!server/tools/zh_doc_check.py"
       - "!server/tools/en_doc_check.py"
+      - "!server/tools/offline_check.py"
       - "!server/tools/data/gen_zh/**"
       - "!server/tools/data/*_doc_check.json"
       - ".github/workflows/evaluate.yml"
