@@ -106,6 +106,11 @@ def modern_ratio(text: str) -> float:
 _LIST_MARK = re.compile(r"^\s*(?:[（(]\s*\d{1,3}\s*[)）]|\d{1,3}\s*[)）]|\d{1,3}\s*[、．](?!\d))\s*[、，,.．]?\s*")
 
 
+def is_table_row(line: str) -> bool:
+    """网页从 .docx 表格提取的一行（单元格之间用" | "分隔），或制表符分隔的三栏以上的行。"""
+    return line.count(" | ") >= 1 and len(line.split(" | ")) >= 2 or line.count("\t") >= 2
+
+
 def strip_list_mark(line: str) -> str:
     return _LIST_MARK.sub("", line, count=1)
 
@@ -501,6 +506,12 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         if not buf.strip():
             buf = ""
             return
+        rows = [l for l in buf.splitlines() if l.strip()]
+        if rows and sum(is_table_row(l.strip()) for l in rows) >= 0.6 * len(rows):
+            reg = detect_register(buf.replace(" | ", "，"))
+            segments.append(Segment(len(segments), buf, buf_start, "table", ["表格（不是连贯正文），不计入"], reg, block, ""))
+            buf = ""
+            return
         reg = detect_register(buf)
         tgt = target_chars(reg)
         first = buf.strip().splitlines()[0].strip()
@@ -518,6 +529,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         buf = ""
 
     line_no = -1
+    in_table = False
     for line in text.splitlines(keepends=True):
         line_no += 1
         stripped = line.strip()
@@ -563,6 +575,17 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         if not stripped or _RULE_LINE.match(stripped) or is_drawing_line(stripped):
             if buf.strip():
                 pending_break = True
+            continue
+        # 表格：Turnitin 等平台只检测"连贯的正文"（qualifying prose），表格、列表不计入。表格行单独成段，标为 table
+        trow = is_table_row(stripped)
+        if trow != in_table:
+            if buf.strip():
+                flush()
+            in_table = trow
+        if trow:
+            if not buf:
+                buf_start = line_start
+            buf += line
             continue
         section = is_section_heading(stripped)
         title = stripped in paper_titles or (is_title(stripped) and not section)

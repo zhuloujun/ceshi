@@ -394,6 +394,7 @@ function renderResult(res){
     ].filter(Boolean).join(' · ');
     const kindTag = seg.kind === 'reference' ? '<span class="para-tag">参考文献 · 不计入</span>'
       : seg.kind === 'frontmatter' ? '<span class="para-tag">题目 / 作者信息 · 不计入</span>'
+      : seg.kind === 'table' ? '<span class="para-tag">表格 · 不计入</span>'
       : seg.kind === 'quotation' ? `<span class="para-tag">引文为主 · 不计入（${escapeHtml(seg.notes.join('；'))}）${seg.ref_prob!=null ? ' · 参考值 '+pct(seg.ref_prob) : ''}</span>`
       : seg.kind === 'reference_only' ? `<span class="para-tag">仅供参考 · 不计入${seg.ref_prob!=null ? ' · 参考值 '+pct(seg.ref_prob) : ''}</span>`
       : (seg.notes && seg.notes.length) ? `<span class="para-tag">${escapeHtml(seg.notes.join('；'))}</span>` : '';
@@ -740,14 +741,19 @@ async function docxPlainText(arrayBuffer){
   const xml = await f.async('string');
   const dec = (t)=>t.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'")
                    .replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&');
-  const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:t\s*\/>|<w:tab\/>|<w:br\b[^>]*\/>|<w:cr\/>|<\/w:p>|<w:p\b[^>]*\/>/g;
-  let out = '', m;
+  // 表格：同一行的单元格用" | "连起来、每行一行（服务器据此认出表格，表格不是连贯正文，不计入 AI 率）
+  const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:t\s*\/>|<w:tab\/>|<w:br\b[^>]*\/>|<w:cr\/>|<\/w:p>|<w:p\b[^>]*\/>|<w:tbl>|<\/w:tbl>|<\/w:tc>|<\/w:tr>/g;
+  let out = '', m, tbl = 0;
   while((m = re.exec(xml))){
     const tok = m[0];
     if(m[1] !== undefined) out += dec(m[1]);
+    else if(tok === '<w:tbl>'){ tbl++; out += '\n\n'; }
+    else if(tok === '</w:tbl>'){ tbl = Math.max(0, tbl - 1); out += '\n\n'; }
+    else if(tok === '</w:tc>') out += ' | ';
+    else if(tok === '</w:tr>') out = out.replace(/ \| $/, '') + '\n';
     else if(tok.startsWith('<w:tab')) out += '\t';
-    else if(tok.startsWith('<w:br') || tok.startsWith('<w:cr')) out += '\n';
-    else if(tok === '</w:p>' || tok.startsWith('<w:p')) out += '\n\n';
+    else if(tok.startsWith('<w:br') || tok.startsWith('<w:cr')) out += tbl ? ' ' : '\n';
+    else if(tok === '</w:p>' || tok.startsWith('<w:p')) out += tbl ? ' ' : '\n\n';
   }
   out = out.replace(/[ \t]+\n/g, '\n').replace(/\n{5,}/g, '\n\n\n\n').trim();
   if(!out) throw new Error('empty');
