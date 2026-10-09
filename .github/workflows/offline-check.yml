@@ -1,0 +1,118 @@
+# 离线验收：在 GitHub 免费 CPU 上加载与线上相同的模型，检测用户测试文档（压缩后通过触发参数传入，不提交进仓库）。
+# 不调用 Modal，不产生 Modal 费用（以前的"临时验收"直接调线上服务，每次几十分钟容器时间都计费）。
+# 与线上的区别：不叠加管理员的"标注校准"（只用内置校准）。只能手动运行。
+name: 离线验收（GitHub CPU，不花 Modal 的钱）
+
+on:
+  workflow_dispatch:
+    inputs:
+      payload:
+        description: "base64(xz(JSON 列表 [{name, text}]))"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+      - name: 安装依赖
+        run: |
+          sudo apt-get install -y -q fonts-wqy-zenhei >/dev/null
+          pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r server/requirements.txt
+      - name: 缓存模型
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-qwen05-mpu-zhv3-desklib
+      - name: 下载模型
+        working-directory: server
+        run: python download_models.py Qwen/Qwen2.5-0.5B Qwen/Qwen2.5-0.5B-Instruct yuchuantian/AIGC_detector_zhv3 desklib/ai-text-detector-v1.01
+      - name: 取出诗词分类器（仓库是私有的，Release 文件需要用本工作流的令牌下载）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 版本以内置校准里记录的为准（见 config._calibrated_classifier）
+          T=$(grep -oE '"poetry-classifier-v[0-9]+"' server/app/default_calibration.json | head -1 | tr -d '"'); T=${T:-poetry-classifier-v1}
+          if gh release download "$T" -p poetry-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
+            tar xzf /tmp/poetry-classifier.tar.gz -C server/
+            ls server/poetry-classifier
+          else
+            echo "::warning::没有找到诗词分类器（Release $T），诗词将改用通用中文分类器。"
+          fi
+      - name: 取出文言分类器（只在内置校准已按它拟合时使用，否则文言校准会因模型不一致被丢弃）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          T=$(grep -oE '"classical-classifier-v[0-9]+"' server/app/default_calibration.json | head -1 | tr -d '"')
+          if [ -n "$T" ]; then
+            gh release download "$T" -p classical-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
+            tar xzf /tmp/classical-classifier.tar.gz -C server/
+            ls server/classical-classifier
+          else
+            echo "内置校准的文言部分没有使用文言分类器，本次不部署它。"
+          fi
+      - name: 取出英文第二分类器（只在内置校准已按它拟合时使用）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 内置校准里写的是哪个版本（english-classifier-v1 / v2 …），就部署那个版本
+          TAG=$(grep -oE 'english-classifier-(exp-)?v[0-9]+' server/app/default_calibration.json | head -1 || true)
+          if [ -n "$TAG" ]; then
+            gh release download "$TAG" -p english-classifier.tar.gz -D /tmp -R "${{ github.repository }}"
+            tar xzf /tmp/english-classifier.tar.gz -C server/
+            ls server/english-classifier
+          else
+            echo "内置校准的英文部分没有使用英文第二分类器，本次不部署它。"
+          fi
+      - name: 取出中文第二分类器（版本见 server/app/config.py 的 ZH2_CLASSIFIER_ID）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(grep -oE 'chinese-classifier-[A-Za-z0-9.-]+' server/app/config.py | head -1 || true)
+          if [ -n "$TAG" ] && gh release download "$TAG" -p chinese-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
+            tar xzf /tmp/chinese-classifier.tar.gz -C server/
+            ls server/chinese-classifier
+          else
+            echo "::warning title=中文第二分类器::没有找到 Release $TAG，本次不部署它"
+          fi
+      - name: 取出英文整篇分类器（版本见 server/app/config.py 的 EN3_CLASSIFIER_ID）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(grep -oE 'EN3_CLASSIFIER_ID", "english-classifier-[A-Za-z0-9.-]+' server/app/config.py | grep -oE 'english-classifier-[A-Za-z0-9.-]+' || true)
+          if [ -n "$TAG" ] && gh release download "$TAG" -p english-classifier.tar.gz -D /tmp/en3 -R "${{ github.repository }}"; then
+            mkdir -p /tmp/en3x && tar xzf /tmp/en3/english-classifier.tar.gz -C /tmp/en3x
+            mv /tmp/en3x/english-classifier server/english-doc-classifier
+            ls server/english-doc-classifier
+          else
+            echo "::warning title=英文整篇分类器::没有找到 Release $TAG，本次不部署它"
+          fi
+      - name: 取出第二个英文整篇分类器（版本见 server/app/config.py 的 EN4_CLASSIFIER_ID）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(grep -oE 'EN4_CLASSIFIER_ID", "english-classifier-[A-Za-z0-9.-]+' server/app/config.py | grep -oE 'english-classifier-[A-Za-z0-9.-]+' || true)
+          if [ -n "$TAG" ] && gh release download "$TAG" -p english-classifier.tar.gz -D /tmp/en4 -R "${{ github.repository }}"; then
+            mkdir -p /tmp/en4x && tar xzf /tmp/en4/english-classifier.tar.gz -C /tmp/en4x
+            mv /tmp/en4x/english-classifier server/english-doc-classifier-2
+            ls server/english-doc-classifier-2
+          else
+            echo "::warning title=第二个英文整篇分类器::没有找到 Release $TAG，本次不部署它"
+          fi
+      - name: 检测
+        working-directory: server
+        env:
+          PAYLOAD: ${{ github.event.inputs.payload }}
+          TORCH_THREADS: "4"
+          TOKENIZERS_PARALLELISM: "false"
+        run: python -u tools/offline_check.py
