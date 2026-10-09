@@ -32,10 +32,9 @@ TRAIN_BOOKS = ["搜神后记", "新齐谐", "博物志", "神仙传", "西京杂
                "五代新说", "高士传", "洛阳伽蓝记", "清代名人轶事", "万历野获编", "龙川别志", "江南野史", "东观奏记",
                "南唐书", "唐才子传", "浮生六记", "小窗幽记", "岭外代答", "吴船录", "庐山记", "晋书", "旧唐书",
                "北史", "三国志", "后汉书", "随园诗话", "闲情偶寄", "列女传",
-               "文心雕龙", "艺文类聚", "训蒙骈句", "菜根谭",
-               # v7：名家书信、家训、语录、清言小品、乐府、戏曲曲文（用户文档里真人的书信、祭文、序、赋常被误判）
-               "曾国藩家书", "颜氏家训", "幽梦影", "围炉夜话", "呻吟语", "传习录", "韩诗外传", "说苑", "乐府诗集",
-               "桃花扇", "牡丹亭", "长生殿", "西厢记", "贞观政要"]  # 后四部：真人骈文 / 辞赋 / 对偶，防止把"赋体"本身学成 AI 特征
+               "文心雕龙", "艺文类聚", "训蒙骈句", "菜根谭"]
+# v7 曾加入书信、家训、戏曲等 14 部书（n_human_train 1400），独立测试反而变差（AUROC 0.992 → 0.984），已撤回；
+# v8 改为加入用户提供的名家古文选本（tools/data/human_cl/prose.jsonl：古文观止、文选、骈体文钞、辞赋、唐宋八大家……）  # 后四部：真人骈文 / 辞赋 / 对偶，防止把"赋体"本身学成 AI 特征
 
 
 def ai_rows():
@@ -68,6 +67,26 @@ def ai_rows():
 
 
 LONG_CHECK_BOOKS = ["聊斋志异", "唐传奇", "阅微草堂笔记", "太平广记", "搜神记", "剪灯新话", "资治通鉴", "世说新语"]
+
+
+def human_cl_rows(lengths, rnd):
+    """名家古文选本（用户提供的电子书，只保留古人原文，已去掉注释、译文、赏析，并剔除与所有评估集、用户测试文档重复的段落）。
+    按来源 + 开头的哈希每 5 段留 1 段作评估（"名家古文误判率"），其余参与训练；长度按 AI 样本的长度随机截取。"""
+    import hashlib
+    f = ev.DATA_DIR / "human_cl" / "prose.jsonl"
+    if not f.exists():
+        return [], []
+    train, test = [], []
+    for line in f.read_text("utf-8").split("\n"):
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        t = r["text"]
+        n = min(len(t), rnd.choice(lengths) if lengths else len(t))
+        st = rnd.randint(0, max(0, len(t) - n))
+        row = {"text": t[st:st + n], "y": 0, "model": "名家-" + r["source"]}
+        (test if int(hashlib.md5((r["source"] + t[:20]).encode("utf-8")).hexdigest(), 16) % 5 == 0 else train).append(row)
+    return train, test
 
 
 def long_passages(root, per_book=40):
@@ -105,10 +124,12 @@ def main():
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--max-len", type=int, default=256)
-    ap.add_argument("--n-human-train", type=int, default=1400)
+    ap.add_argument("--n-human-train", type=int, default=900)
     ap.add_argument("--n-human-test", type=int, default=400)
     ap.add_argument("--n-split-train", type=int, default=400, help="《聊斋志异》《唐传奇》训练一半篇目中取多少段")
     ap.add_argument("--time-budget-min", type=float, default=240)
+    ap.add_argument("--n-literary", type=int, default=1500, help="名家古文选本（human_cl/prose.jsonl）取多少段作人写训练样本")
+    ap.add_argument("--eval-model", default="", help="只评估这个已训练好的模型（同样的评估集），不训练")
     args = ap.parse_args()
 
     import torch
@@ -130,9 +151,16 @@ def main():
                                      lengths + [180] * len(lengths), half="train")
     h_test = ev.classical_passages(args.classical_dir, ev.CLASSICAL_TEST_BOOKS, args.n_human_test, 32, lengths)
     long_test = long_passages(args.classical_dir)
+    lit_train, lit_test = human_cl_rows(lengths, random.Random(5))
+    rnd_l = random.Random(6)
+    rnd_l.shuffle(lit_train)
+    h_train += lit_train[: args.n_literary]
+    rnd_l.shuffle(lit_test)
+    lit_test = lit_test[:800]
     h_train = [dict(r, text=normalize_classical(r["text"])) for r in h_train]
     h_test = [dict(r, text=normalize_classical(r["text"])) for r in h_test]
     long_test = [dict(r, text=normalize_classical(r["text"])) for r in long_test]
+    lit_test = [dict(r, text=normalize_classical(r["text"])) for r in lit_test]
     if len(h_train) < 60 or len(h_test) < 30:
         raise SystemExit(f"人写古籍段落太少（训练 {len(h_train)} / 评估 {len(h_test)}），请检查数据下载")
 
@@ -147,9 +175,13 @@ def main():
     print(f"训练：人写 {len(h_train)} / AI {len(ai_train)}（×{reps} 过采样）；开发：{len(dev_h)} / {len(dev_a)}；"
           f"评估：人写 {len(h_test)}（{len(ev.CLASSICAL_TEST_BOOKS)} 部书）/ AI {len(ai_test)}", flush=True)
 
-    tok = AutoTokenizer.from_pretrained(args.base)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.base, num_labels=2, id2label={0: "human", 1: "ai"}, label2id={"human": 0, "ai": 1})
+    if args.eval_model:
+        tok = AutoTokenizer.from_pretrained(args.eval_model)
+        model = AutoModelForSequenceClassification.from_pretrained(args.eval_model, dtype=torch.float32)
+    else:
+        tok = AutoTokenizer.from_pretrained(args.base)
+        model = AutoModelForSequenceClassification.from_pretrained(
+            args.base, num_labels=2, id2label={0: "human", 1: "ai"}, label2id={"human": 0, "ai": 1})
 
     def batches(data, bs, shuffle):
         idx = list(range(len(data)))
@@ -178,7 +210,9 @@ def main():
     t0 = time.time()
     step, best, best_state = 0, -1.0, None
     evals = sorted({int(total * f) for f in (0.25, 0.5, 0.75, 1.0)})
-    done = False
+    done = bool(args.eval_model)
+    if done:
+        best, best_state = -1.0, None
     while not done:
         for enc, y in batches(train, args.batch, True):
             loss = torch.nn.functional.cross_entropy(model(**enc).logits, y)
@@ -201,7 +235,8 @@ def main():
                 done = True
                 break
 
-    model.load_state_dict(best_state)
+    if best_state is not None:
+        model.load_state_dict(best_state)
     ph = predict(h_test)
     pa = predict(ai_test)
     by_ai, by_book = {}, {}
@@ -215,12 +250,21 @@ def main():
     by_long = {}
     for p, r in zip(pl, long_test):
         by_long.setdefault(r["model"], []).append(p)
+    plit = predict(lit_test) if lit_test else []
+    by_lit = {}
+    for p, r in zip(plit, lit_test):
+        by_lit.setdefault(r["model"], []).append(p)
     res = {"dev_auroc": round(best, 4), "test_auroc": round(auroc(pa, ph), 4),
+           "n_literary_train": len(lit_train[: args.n_literary]), "n_literary_test": len(lit_test),
            "test_auroc_by_ai_source": {m: round(auroc(v, ph), 4) for m, v in by_ai.items()},
            "reference_threshold_at_5pct_fpr": round(thr, 4),
            "ai_caught_at_ref_threshold": {m: round(sum(x >= thr for x in v) / len(v), 3) for m, v in by_ai.items()},
            "long_passages_flagged_at_ref_threshold": {b: round(sum(x >= thr for x in v) / len(v), 3) for b, v in by_long.items()},
            "long_passages_flagged_at_0.5": {b: round(sum(x >= 0.5 for x in v) / len(v), 3) for b, v in by_long.items()},
+           "literary_flagged_at_ref_threshold": round(sum(x >= thr for x in plit) / len(plit), 3) if plit else None,
+           "literary_flagged_at_0.5": round(sum(x >= 0.5 for x in plit) / len(plit), 3) if plit else None,
+           "literary_flagged_by_source_at_0.5": {b: round(sum(x >= 0.5 for x in v) / len(v), 3) for b, v in by_lit.items() if len(v) >= 10},
+           "ai_vs_literary_auroc": round(auroc(pa, plit), 4) if plit else None,
            "human_flagged_by_book_at_ref_threshold": {b: round(sum(x >= thr for x in v) / len(v), 3)
                                                      for b, v in by_book.items() if len(v) >= 5},
            "n_train_human": len(h_train), "n_train_ai": len(ai_train), "n_test_human": len(ph), "n_test_ai": len(pa),
@@ -229,7 +273,10 @@ def main():
     print(json.dumps(res, ensure_ascii=False, indent=1), flush=True)
     print("::notice title=文言分类器评估（没参与训练的古籍与 AI 样本）::" + json.dumps(
         {k: res[k] for k in ("test_auroc", "test_auroc_by_ai_source", "ai_caught_at_ref_threshold",
-                             "long_passages_flagged_at_ref_threshold")}, ensure_ascii=False), flush=True)
+                             "long_passages_flagged_at_ref_threshold", "literary_flagged_at_0.5", "ai_vs_literary_auroc",
+                             "literary_flagged_by_source_at_0.5")}, ensure_ascii=False), flush=True)
+    if args.eval_model:
+        return
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
