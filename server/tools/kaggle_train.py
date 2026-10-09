@@ -114,19 +114,19 @@ def main():
         "dataset_sources": [], "competition_sources": [], "kernel_sources": [], "model_sources": [],
     }), "utf-8")
     _, q = kaggle("quota", check=False)
-    print(f"::notice title=Kaggle 本周 GPU 额度::{q[:500]}", flush=True)
+    print(f"::notice title=Kaggle 本周 GPU 额度::{q[:800]}".replace("\n", "%0A"), flush=True)
 
     # 推送新版本：失败（常见原因是 Kaggle 同时运行的 GPU 会话已满）就每 5 分钟重试，最多 1 小时。
     # 必须确认推送成功：否则下面查到的是上一个版本的"complete"状态，会把上一次训练的结果当成这次的。
     pushed = False
-    for attempt in range(13):
+    for attempt in range(int(os.getenv("KAGGLE_PUSH_TRIES", "13"))):
         extra = ["--accelerator", "NvidiaTeslaT4"] if attempt % 2 == 0 else []
         code, out = kaggle("kernels", "push", "-p", str(d), *extra, check=False)
         print(out, flush=True)
         if code == 0 and "successfully" in out.lower() and "error" not in out.lower():
             pushed = True
             break
-        print(f"::warning title=Kaggle::第 {attempt + 1} 次推送失败，5 分钟后重试", flush=True)
+        print(f"::warning title=Kaggle::第 {attempt + 1} 次推送失败，5 分钟后重试：{out.strip()[-400:]}".replace("\n", "%0A"), flush=True)
         time.sleep(300)
     if not pushed:
         raise SystemExit("::error::Kaggle 推送一直失败（见上面的输出），没有开始训练")
