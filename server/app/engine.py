@@ -478,8 +478,12 @@ class Engine:
                     prof[s.index] = ({**pc, "threshold": round(tc, 4)}, ok)
         memo = {s.index for s in scored if memorized(results[s.index])}
         # 中文名篇原文（如朱自清《背影》）：困惑度极低说明语言模型逐字背过，不论分类器怎么判，都不计入 AI 率
-        famous = {s.index for s in counted if s.register == "zh" and results[s.index].get("ppl") is not None
-                  and math.exp(results[s.index]["ppl"]) < config.FAMOUS_PPL_ZH}
+        # 古诗文名篇同理（语言模型背熟了大量唐诗宋词、古文）：评估集里 1300 多段 AI 诗词文言困惑度低于 7 的只有 2 段，
+        # 而《唐诗三百首》《宋词三百首》有约 35%、东坡等名家古文也常低于 7
+        famous_ppl = {"zh": config.FAMOUS_PPL_ZH, "zh_classical": config.FAMOUS_PPL_CLASSICAL,
+                      "zh_poetry": config.FAMOUS_PPL_CLASSICAL}
+        famous = {s.index for s in counted if s.register in famous_ppl and results[s.index].get("ppl") is not None
+                  and math.exp(results[s.index]["ppl"]) < famous_ppl[s.register]}
         for s in segs:
             if s.index in famous:
                 s.kind = "quotation"
