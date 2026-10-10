@@ -347,7 +347,10 @@ function renderResult(res){
     $('errBody').innerHTML = `<table class="err-table"><thead><tr><th>文体</th><th>测试集（未参与训练和校准）</th><th>AI 检出率</th><th>人写误判率（95% 上限）</th></tr></thead><tbody>${rows}</tbody></table>`+
       `<ul class="err-guide"><li>AI 率是被判为疑似 AI 的文字所占比例，不是“由 AI 写成的概率”，更不是学术不端的概率。</li>`+
       `<li>即使误判率只有 1%，检测 1000 篇真人文章也会冤枉约 10 篇：单一分数不能作为定论。</li>`+
-      `<li>复核时请结合草稿与修改记录、引用资料核对，以及作者能否讲清文中的观点和方法。</li>${ppv}</ul>`;
+      `<li>复核时请结合草稿与修改记录、引用资料核对，以及作者能否讲清文中的观点和方法。</li>`+
+      `<li>各检测器共用相近的训练数据或打分模型，彼此一致不等于多份独立证据。</li>`+
+      (s.multiple_testing && s.multiple_testing.segments_judged ? `<li>本文 ${s.multiple_testing.segments_judged} 段分别判断：即使全是人写，按实测误判率平均约 ${s.multiple_testing.expected_false_flags} 段会被偶然误标；本次标出 ${s.multiple_testing.segments_flagged} 段。</li>` : '')+
+      `${ppv}</ul>`;
   }
   $('sumFlagged').textContent = `${flagged} / ${counted}`;
   $('sumExcluded').textContent = s.excluded_chars.toLocaleString();
