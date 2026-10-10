@@ -1153,3 +1153,20 @@ def test_two_column_reference_continuations_stay_references():
             "[14] N. Sankaran and C. V. Jawahar, “Recognition of printed devanagari text using blstm neural network,” in Proceedings\n")
     segs = segment_text("A BLSTM Network for Printed OCR\n\nAbstract\n\n" + body + "\n\nI. INTRODUCTION\n\n" + body + "\n\n" + refs)
     assert all(s.kind == "reference" for s in segs if "pp." in s.text), [(s.kind, s.text[:40]) for s in segs]
+
+
+def test_docx_no_break_hyphen_and_reference_head_with_note():
+    """2026-10 pol.docx：Word 的不间断连字符 <w:noBreakHyphen/> 不能丢（"AI-Generated" 不能变成 "AIGenerated"）；
+    "References (Representative Academic Sources)" 也是参考文献标题。"""
+    import io, zipfile
+    from app.docparse import _docx_text
+    xml = ('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p>'
+           '<w:r><w:t>AI</w:t></w:r><w:r><w:noBreakHyphen/><w:t>Generated text</w:t></w:r></w:p></w:body></w:document>')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", xml)
+    assert _docx_text(buf.getvalue()) == "AI-Generated text"
+    para = "Detection methods estimate how predictable a passage is under a reference language model. " * 6
+    segs = segment_text("Some Paper Title\n\nAbstract\n\n" + para + "\n\nReferences (Representative Academic Sources)\n"
+                        "Ippolito, D., et al. (2019). Research on distinguishing human and machine text.\n")
+    assert segs[-1].kind == "reference"

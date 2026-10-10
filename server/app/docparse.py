@@ -23,6 +23,8 @@ def _docx_text(data: bytes) -> str:
                 parts.append("\t")
             elif node.tag in (f"{W}br", f"{W}cr"):
                 parts.append("\n")
+            elif node.tag == f"{W}noBreakHyphen":
+                parts.append("-")          # 不间断连字符是单独的元素（"AI-Generated"），丢掉会把英文单词粘连
         # 跳过修订中被删除的文字（w:delText 不是 w:t，天然不会被收集）
         paras.append("".join(parts))
     return "\n".join(paras)

@@ -552,7 +552,10 @@ class Engine:
             lines = [l.strip() for l in s_.text.splitlines() if l.strip()][1:] or [""]
             # 清单 / 配料表（"Fine salt: 5 g"）行也很短，但不是诗：带冒号或数字的短行占三成以上就不算
             listy = sum(bool(re.search(r":\s|\d", l)) for l in lines) >= 0.3 * len(lines)
-            if len(lines) >= 4 and sorted(len(l) for l in lines)[len(lines) // 2] <= 80 and not listy:
+            # 夹着项目符号列表的论文段落（"Examples include:""Measure:"后面几行短语）也有很多短行，但有两行以上以冒号结尾、引出列表，
+            # 诗几乎不这样写（2026-10 用户的 pol.docx：两段这样的段落被当成诗，没有参与整篇判断）
+            prose_lines = 2 * (sum(l.endswith((":", "：")) for l in lines) >= 2)
+            if len(lines) >= 4 and sorted(len(l) for l in lines)[len(lines) // 2] <= 80 and not listy and prose_lines < 2:
                 en_verse.add(s_.index)
 
         paper_ai = set()
