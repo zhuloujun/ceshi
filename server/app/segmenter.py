@@ -32,6 +32,19 @@ def _looks_ref(t: str) -> bool:
     return bool(_REF_ENTRY.search(t[:160])) or bool(re.search(r"\bet al\.|\bJ\.|Press\b|出版社|学报", t))
 
 
+_REF_FRAGMENT = re.compile(
+    r"^\s*(?:(?:19|20)\d{2}\b|\d+\s*[–\-]\s*\d+)"                 # 以年份或页码范围开头（"2008, pp. 577–584."）
+    r"|\bpp?\.\s*\d|\bvol\.\s*\d|\bno\.\s*\d|doi[:.]|https?://|\[Online\]|Available:"
+    r"|\b(?:Proceedings|Conference|Workshop|Symposium|Transactions|Journal|Vol)\b", re.I)
+
+
+def _ref_fragment(s: str) -> bool:
+    """PDF 两栏参考文献换栏 / 换页处的续行（"2008, pp. 577–584."、"560 vol.2."、"2015 13th International
+    Conference on …"）：以数字开头，看起来像编号小标题，其实是上一条文献的续行。
+    2026-10 用户的孟加拉语 OCR 论文：参考文献在第一处续行就被截断，后面 11 段条目被当成正文、其中 3 段判为 AI。"""
+    return bool(_REF_FRAGMENT.search(s))
+
+
 def _ends_references(line: str, prev_lines: list) -> bool:
     """参考文献之后又开始了新的正文（例如一个文档里放了两篇论文）：
     出现章节标题（摘要 / Abstract / 引言…）；或一段不像参考文献条目的长段正文（≥ 250 字、含 2 句以上）；
@@ -43,7 +56,7 @@ def _ends_references(line: str, prev_lines: list) -> bool:
     # 2026-10 用户的 PDF 论文参考文献在第一个换页处被截断，后面的条目被当成正文检测
     if _RUNNING_HEAD.match(s):
         return False          # PDF 每页页眉（"12 M. Masoumi et al."），不是新的章节
-    if is_section_heading(s) and not re.fullmatch(r"[\d\s.,;:()（）\-–—]+", s):
+    if is_section_heading(s) and not re.fullmatch(r"[\d\s.,;:()（）\-–—]+", s) and not _ref_fragment(s):
         return True
     looks_ref = _looks_ref
     if len(s) >= 250 and not looks_ref(s):
@@ -268,6 +281,7 @@ _SECTION_NAMES = re.compile(
     r"data( and methods?)?|results?|findings|analysis|discussion|conclusions?|limitations|future work|keywords?|"
     r"acknowledge?ments?|appendix|materials?( and methods?)?|figures?( and tables?)?|tables?( and figures?)?|"
     r"conflicts? of interests?|competing interests?|declarations?|statements? and declarations|ethics statement|funding|data availability|author contributions?|supplementary|ethics|"
+    r"(generative )?ai(-| )(assistance|use|usage|tools?)( disclosure| statement| declaration)?|disclosures?( statement)?|use of (generative )?ai|declaration of (generative )?ai|"
     r"摘\s*要|关键词|引\s*言|绪\s*论|前\s*言|文献综述|研究方法|研究设计|结\s*论|结\s*语|讨\s*论|致\s*谢|附\s*录)"
     r"\b.{0,50}$", re.I)
 _ABSTRACT_HEAD = re.compile(r"^((摘\s*要|内容摘要|内容提要|abstract)\s*([:：.—–]|$|\s)|[【\[〔]\s*(摘\s*要|内容摘要|内容提要|abstract)\s*[】\]〕])", re.I)
@@ -619,6 +633,19 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                 zh_head = bool(_CJK.search(stripped))
                 sibling = any((l in iso_titles or (_short_title_like(l) and not _SECTION_NUM.match(l)))
                               and bool(_CJK.search(l)) == zh_head for l in after + before)   # 换了文字的是另一篇插入的作品，不是并列小标题
+                if not sibling:
+                    # 同一个编号章节里前面已经出现过不带编号的并列小标题（"3 … Mechanisms" 下的 "Probability Curvature …"
+                    # "Contrasting Models …" "Watermarking During Generation"）：最后一个也是小节，不是新作品
+                    # （2026-10 用户的 Academic_AI_Detection_2026：最后一个小标题和"AI Assistance Disclosure"被当成新作品，漏判）
+                    for k in range(li - 1, max(-1, li - 400), -1):
+                        l = lines_all[k]
+                        if not l:
+                            continue
+                        if _SECTION_NUM.match(l) and len(l) <= 90 and is_section_heading(l):
+                            break
+                        if l in iso_titles and not _SECTION_NUM.match(l) and bool(_CJK.search(l)) == zh_head:
+                            sibling = True
+                            break
                 numbered_paper = not (sub_of_dotted or sibling)
             iso_new = bool(_CJK.search(stripped)) != cur_zh or numbered_paper
         # 论文内部不带编号的英文小标题（"Risk Factors and Prevention"）是章节，不是新作品

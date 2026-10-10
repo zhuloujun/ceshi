@@ -1126,3 +1126,30 @@ def test_tables_and_masthead_not_counted():
                        para])
     kinds = [s.kind for s in segment_text(doc)]
     assert kinds[0] == "frontmatter" and "table" in kinds and kinds.count("body") >= 2
+
+
+def test_subheading_after_siblings_and_ai_disclosure_stay_in_paper():
+    """2026-10 Academic_AI_Detection_2026：编号章节"3 …"下的最后一个不带编号的小标题（前面已有同级小标题，后面紧跟"4 …"），
+    以及结论后的"AI Assistance Disclosure"，都是同一篇论文的小节，不是新作品。"""
+    para = "Statistical methods estimate how predictable a passage is under a reference language model. " * 6
+    doc = "\n\n".join(["Measuring Generated Content in Academic Papers", "Abstract", "This review surveys detection methods. " * 6,
+                       "1 Introduction", para, "2 Review Method", para, "3 Contemporary Detection Mechanisms",
+                       "Probability Curvature and Token Analysis", para, para, "Contrasting Models and Learned Representations", para, para,
+                       "Watermarking During Generation", para, para, "4 Empirical Findings", para, "5 Conclusion", para,
+                       "AI Assistance Disclosure", "Generative AI assisted the drafting and organization of this review. " * 3])
+    assert len({s.block for s in segment_text(doc) if s.kind == "body"}) == 1
+
+
+def test_two_column_reference_continuations_stay_references():
+    """2026-10 孟加拉语 OCR 论文（PDF 两栏）：参考文献换栏处的续行"2008, pp. 577–584."以数字开头，像编号小标题，
+    不能因此结束参考文献——否则后面的条目被当成正文，有的还被判为 AI。"""
+    body = "Optical character recognition of printed scripts has improved with recurrent networks and CTC decoding. " * 8
+    refs = ("REFERENCES\n[1] S. Hochreiter and J. Schmidhuber, “Long short-term memory,” Neural Comput., vol. 9, no. 8, pp. 1735–1780, 1997.\n"
+            "[5] A. Graves, M. Liwicki, and H. Bunke, “Unconstrained on-line handwriting recognition,” in Advances in Neural\n"
+            "Information Processing Systems 20, J. C. Platt, D. Koller,\n\n"
+            "Y. Singer, and S. T. Roweis, Eds. Curran Associates, Inc.,\n2008, pp. 577–584.\n"
+            "[6] B. B. Chaudhuri and U. Pal, “A complete printed bangla OCR system,” Pattern Recognition, vol. 31, no. 5, pp.\n"
+            "531–549, 1998.\n\nConference on Document Analysis and Recognition, Aug\n2013, pp. 1061–1065.\n"
+            "[14] N. Sankaran and C. V. Jawahar, “Recognition of printed devanagari text using blstm neural network,” in Proceedings\n")
+    segs = segment_text("A BLSTM Network for Printed OCR\n\nAbstract\n\n" + body + "\n\nI. INTRODUCTION\n\n" + body + "\n\n" + refs)
+    assert all(s.kind == "reference" for s in segs if "pp." in s.text), [(s.kind, s.text[:40]) for s in segs]

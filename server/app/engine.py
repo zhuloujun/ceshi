@@ -860,6 +860,35 @@ class Engine:
                          "被排除的引文段落仍给出“参考值”。如需计入，请取消勾选“引文为主的段落不计入”。")
         if not (self.lm and self.lm.ready):
             notes.append("语言模型未就绪，本次只使用了分类器。")
+        # 多次检验（Academic_AI_Detection_2026 一文："短窗口提供的信息更少，筛查的窗口越多，偶然误标的机会越多"）：
+        # 一篇文章分成很多段分别判断时，即使全是人写，也会按各文体的误判率"期望"误标若干段。标出的段数与偶然误标的
+        # 期望数相当时（泊松分布下 P(≥ 标出段数) ≥ 5%），提示不宜据此下结论。
+        erates = known_error_rates(used_profiles)
+        fpr_of = {}
+        for g in erates:
+            v = next((e["human_flagged"] for e in g["sets"] if e.get("human_flagged") is not None), None)
+            if v is not None:
+                fpr_of[g["profile"]] = max(float(v), 0.002)
+        expected_false, n_judged, n_flagged = 0.0, 0, 0
+        for s_ in counted:
+            if smoothed.get(s_.index) is None:
+                continue
+            r_ = s_.register
+            if r_ == "zh" and has_short and len(score_text(s_)) < config.SHORT_SEGMENT_CHARS:
+                r_ = "zh_short"
+            if r_ == "en" and s_.block in paper_blocks:
+                r_ = "en_paper"
+            n_judged += 1
+            expected_false += fpr_of.get(r_, fpr_of.get(s_.register, 0.02))
+        n_flagged = sum(1 for x in seg_out if x["prob"] is not None and x["level"] in ("high", "mid", "light"))
+        p_chance = None
+        if n_flagged and n_judged:
+            lam = expected_false
+            p_chance = 1.0 - sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(n_flagged))
+            if p_chance >= 0.05 and n_flagged <= 0.5 * n_judged:
+                notes.append(f"本文共 {n_judged} 段参与判断。即使全部是人写，按各文体的实测误判率，平均也会有约 "
+                             f"{expected_false:.1f} 段被误标；本次标出 {n_flagged} 段，与偶然误标的数量相当"
+                             f"（纯属偶然的概率约 {p_chance:.0%}），不宜据此认定使用了 AI，请逐段复核。")
         missing_cls = {REGISTER_NAMES.get(r, r) for r in chars_by_register if not self.classifier_for(r)}
         if missing_cls:
             notes.append("、".join(sorted(missing_cls)) + "分类器未就绪，这部分只用了语言模型特征。")
@@ -893,7 +922,10 @@ class Engine:
                 "smoothing": config.SMOOTHING,
                 "mode": mode,
                 "genre": genre,
-                "error_rates": known_error_rates(used_profiles),
+                "error_rates": erates,
+                "multiple_testing": {"segments_judged": n_judged, "segments_flagged": n_flagged,
+                                     "expected_false_flags": round(expected_false, 2),
+                                     "p_chance": None if p_chance is None else round(p_chance, 4)},
                 # 检测记录（模型版本、各文体阈值）：便于事后复核与复现，见 tools 评估报告
                 "record": {"lm": [config.OBSERVER_MODEL, config.PERFORMER_MODEL],
                            "classifiers": {p_: config.classifier_for(p_.replace("_short", "").replace("_paper", ""))
