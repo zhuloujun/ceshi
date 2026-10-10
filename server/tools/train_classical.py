@@ -115,6 +115,20 @@ def long_passages(root, per_book=40):
     return out
 
 
+def load_user_docs(path, register):
+    """用户提供的已标注文档（chalw2、gw 这类"单数 AI、双数真人"的测试文档里，与评估文档不重复的段落）：
+    {text, y, register, doc}。只在训练时通过私有 Kaggle 脚本传入，不进公开仓库。"""
+    rows = []
+    if not path:
+        return rows
+    for line in Path(path).read_text("utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            if r.get("register") == register:
+                rows.append({"text": r["text"], "y": int(r["y"]), "model": "user-doc-" + r.get("doc", "?")})
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--classical-dir", required=True)
@@ -130,6 +144,8 @@ def main():
     ap.add_argument("--time-budget-min", type=float, default=240)
     ap.add_argument("--n-literary", type=int, default=1500, help="名家古文选本（human_cl/prose.jsonl）取多少段作人写训练样本")
     ap.add_argument("--eval-model", default="", help="只评估这个已训练好的模型（同样的评估集），不训练")
+    ap.add_argument("--user-docs", default="", help="用户提供的已标注文档段落（jsonl，见 load_user_docs）")
+    ap.add_argument("--user-docs-reps", type=int, default=6, help="用户文档段落在训练集里重复几次")
     args = ap.parse_args()
 
     import torch
@@ -165,12 +181,14 @@ def main():
         raise SystemExit(f"人写古籍段落太少（训练 {len(h_train)} / 评估 {len(h_test)}），请检查数据下载")
 
     # AI 样本少：每个 epoch 里按人写数量过采样 AI，使两类权重相当
+    ud = [dict(r, text=normalize_classical(r["text"])) for r in load_user_docs(args.user_docs, "zh_classical")]
+    print(f"用户已标注文档（文言）：AI {sum(r['y'] for r in ud)} / 人写 {sum(1 - r['y'] for r in ud)}，各重复 {args.user_docs_reps} 次", flush=True)
     rnd.shuffle(h_train); rnd.shuffle(ai_train)
     dev_h, h_train = h_train[: len(h_train) // 8], h_train[len(h_train) // 8:]
     dev_a, ai_train = ai_train[: max(8, len(ai_train) // 8)], ai_train[max(8, len(ai_train) // 8):]
     dev = dev_h + dev_a
     reps = max(1, round(len(h_train) / max(1, len(ai_train))))
-    train = h_train + ai_train * reps
+    train = h_train + ai_train * reps + ud * args.user_docs_reps
     rnd.shuffle(train)
     print(f"训练：人写 {len(h_train)} / AI {len(ai_train)}（×{reps} 过采样）；开发：{len(dev_h)} / {len(dev_a)}；"
           f"评估：人写 {len(h_test)}（{len(ev.CLASSICAL_TEST_BOOKS)} 部书）/ AI {len(ai_test)}", flush=True)

@@ -167,6 +167,20 @@ def auroc(pos, neg):
     return (rank_sum - n1 * (n1 + 1) / 2) / (n1 * n0)
 
 
+def load_user_docs(path, register):
+    """用户提供的已标注文档（chalw2、gw 这类"单数 AI、双数真人"的测试文档里，与评估文档不重复的段落）：
+    {text, y, register, doc}。只在训练时通过私有 Kaggle 脚本传入，不进公开仓库。"""
+    rows = []
+    if not path:
+        return rows
+    for line in Path(path).read_text("utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            if r.get("register") == register:
+                rows.append({"text": r["text"], "y": int(r["y"]), "model": "user-doc-" + r.get("doc", "?")})
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--changan", required=True)
@@ -187,6 +201,8 @@ def main():
     ap.add_argument("--n-couplets", type=int, default=2500)
     ap.add_argument("--n-literary", type=int, default=3000, help="名家诗曲、楹联选本取多少段作人写训练样本")
     ap.add_argument("--eval-model", default="", help="只评估这个已训练好的模型（同样的评估集，用于新旧版本对比），不训练")
+    ap.add_argument("--user-docs", default="", help="用户提供的已标注文档段落（jsonl，见 load_user_docs）")
+    ap.add_argument("--user-docs-reps", type=int, default=6, help="用户文档段落在训练集里重复几次")
     args = ap.parse_args()
 
     import torch
@@ -231,6 +247,9 @@ def main():
     rnd.shuffle(base)
     dev = base[: min(max(200, len(base) // 20), len(base) // 5)]
     train = base[len(dev):]
+    ud = load_user_docs(args.user_docs, "zh_poetry")
+    print(f"用户已标注文档（诗词）：AI {sum(r['y'] for r in ud)} / 人写 {sum(1 - r['y'] for r in ud)}，各重复 {args.user_docs_reps} 次", flush=True)
+    train += ud * args.user_docs_reps
     # 国产新模型样本少：过采样到约占 AI 训练样本的 user_share（开发集里的不再复制，避免泄漏）
     ut = [r for r in train if r.get("split") == "fit" and r["y"] == 1 and r.get("model", "").startswith("repo-ai-")]
     n_ai = sum(r["y"] == 1 for r in train)

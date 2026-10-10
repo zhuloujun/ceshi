@@ -13,6 +13,9 @@ on:
       args:
         description: "传给训练脚本的额外参数（可留空）"
         default: ""
+      user_docs:
+        description: "可选：base64(xz(jsonl)) 用户提供的已标注文档段落（只写进私有 Kaggle 脚本，不进仓库）"
+        default: ""
 
 permissions:
   contents: write
@@ -36,6 +39,7 @@ jobs:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          USER_DOCS_B64: ${{ github.event.inputs.user_docs }}
         run: |
           python -u server/tools/kaggle_train.py --lang "${{ github.event.inputs.kind }}" --sha "$GITHUB_SHA" --args "${{ github.event.inputs.args }}"
           N="${{ github.event.inputs.kind }}-classifier"
