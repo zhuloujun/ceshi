@@ -361,6 +361,20 @@ def is_poetry(text: str) -> bool:
     return sd <= 2.0 and len(_POETRY_FUNC.findall(t)) / cjk <= 0.05 and modern_ratio(t) <= 0.02
 
 
+def classical_weight(text: str) -> float:
+    """文言程度（0 = 现代汉语，1 = 文言），用于半文半白文字的加权判断：文言常用字占比 5% → 0、10% → 1，
+    再乘以白话标志词的折扣（1% 以下不折扣，4% 以上为 0）。测定：真人现代散文 / 现代文约 98–99% 为 0，
+    真人文言约 69% 为 1、28% 在中间，《三言二拍》等半文半白的 66% 在中间。"""
+    c = len(_CJK.findall(text))
+    if c < 30:
+        return 0.0 if modern_ratio(text) > 0.02 else 1.0
+    e = len(_CLASSICAL_EXT.findall(text)) / c
+    m = modern_ratio(text)
+    a = min(1.0, max(0.0, (e - 0.05) / 0.05))
+    b = min(1.0, max(0.0, 1 - (m - 0.01) / 0.03))
+    return round(a * b, 3)
+
+
 def detect_register(text: str) -> str:
     """zh（现代汉语）/ zh_classical（文言）/ zh_poetry（诗词、对联）/ en（英文及其他拉丁字母语言）。"""
     raw = "\n".join(strip_list_mark(l) for l in text.splitlines())

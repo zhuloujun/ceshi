@@ -1170,3 +1170,16 @@ def test_docx_no_break_hyphen_and_reference_head_with_note():
     segs = segment_text("Some Paper Title\n\nAbstract\n\n" + para + "\n\nReferences (Representative Academic Sources)\n"
                         "Ippolito, D., et al. (2019). Research on distinguishing human and machine text.\n")
     assert segs[-1].kind == "reference"
+
+
+def test_semi_classical_text_is_judged_by_both_models(client):
+    """半文半白的文字不硬性二选一：文言模型和现代汉语模型都判断、按文言程度加权，段落备注里说明。"""
+    from app.segmenter import classical_weight
+    text = ("姊之子来，眉目肖姊，坐下先问众人饭足否。弟几欲呼之为姊，话至口而复止。今日所祭，不欲尽以辛苦概姊一生，"
+            "姊亦有笑时，春日折了一枝桃花，插在空瓶里，说这屋子也该有点颜色。")
+    assert 0 < classical_weight(text) < 1
+    H = {"Authorization": "Bearer " + issue(client)}
+    r = client.post("/v1/detect", json={"text": text, "wait": True}, headers=H)
+    assert r.status_code == 200, r.text
+    segs = r.json()["result"]["segments"]
+    assert any("半文半白" in n for s_ in segs for n in s_["notes"]), [s_["notes"] for s_ in segs]

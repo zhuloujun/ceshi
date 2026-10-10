@@ -16,7 +16,7 @@ from . import config, scoring
 from .detectors import stylometry
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (REGISTER_NAMES, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (REGISTER_NAMES, classical_weight, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -436,6 +436,27 @@ class Engine:
             idx = [k for k, r in enumerate(sc_regs) if r == "en"]
             for k, p in zip(idx, self.cls_en4.predict([sc_texts[k] for k in idx]) if idx else []):
                 results[scored[k].index]["classifier_en4"] = p
+        # 半文半白（两种文体之间）：不硬性二选一，文言模型和现代汉语模型都判断，按"文言程度"加权（见下方 dual）。
+        # 2026-10 用户指出：很多人写作半文半白、夹四六句式，不能非此即彼；AI 写的浅近文言（gdwx.docx）也正落在这一带。
+        mixed = {}
+        for k, s in enumerate(scored):
+            if s.register in ("zh", "zh_classical") and s.counted:
+                w = classical_weight(score_text(s))
+                if 0 < w < 1:
+                    mixed[s.index] = (w, "zh" if s.register == "zh_classical" else "zh_classical", k)
+        alt_cls = {}
+        if mixed:
+            to_cl = [i for i, (w, alt, k) in mixed.items() if alt == "zh_classical"]
+            to_zh = [i for i, (w, alt, k) in mixed.items() if alt == "zh"]
+            det = self.classifier_for("zh_classical")
+            if det and to_cl:
+                for i, p in zip(to_cl, det.predict([sc_texts[mixed[i][2]] for i in to_cl])):
+                    alt_cls[i] = {"classifier": p, "classifier_mpu": results[i].get("classifier")}
+            if to_zh:
+                zh2 = (self.cls_zh2.predict([sc_texts[mixed[i][2]] for i in to_zh])
+                       if self.cls_zh2 and self.cls_zh2.ready else [None] * len(to_zh))
+                for i, p in zip(to_zh, zh2):
+                    alt_cls[i] = {"classifier": results[i].get("classifier_mpu"), "classifier_zh2": p}
         # 语言模型较慢：快速模式下抽样
         if self.lm and self.lm.ready:
             done = 0
@@ -500,6 +521,8 @@ class Engine:
         memo |= famous
         counted = [s for s in segs if s.counted]
 
+        segs_by_idx0 = {s.index: s for s in segs}
+
         def for_combine(i):
             if i in memo:
                 return {k: v for k, v in results[i].items() if k not in LM_KEYS}
@@ -507,6 +530,25 @@ class Engine:
         combos = {s.index: (scoring.combine(for_combine(s.index), prof[s.index][0]) if s.index in scored_ids
                             else {"prob": None, "signals": {}})
                   for s in segs}
+        for i, (w, alt, k) in mixed.items():
+            if i not in alt_cls or combos[i]["prob"] is None:
+                continue
+            base = {kk: v for kk, v in for_combine(i).items() if not kk.startswith("classifier")}
+            ares = {**base, **{kk: v for kk, v in alt_cls[i].items() if v is not None}}
+            areg = alt
+            if areg == "zh" and has_short and len(score_text(segs_by_idx0[i])) < config.SHORT_SEGMENT_CHARS:
+                areg = "zh_short"
+            aprof = scoring.profile_for(cal, areg)
+            acomb = scoring.combine(ares, aprof[0])
+            if acomb["prob"] is None:
+                continue
+            w_main = w if segs_by_idx0[i].register == "zh_classical" else 1 - w      # 当前文体所占的权重
+            pthr, athr = float(prof[i][0].get("threshold", 0.5)), float(aprof[0].get("threshold", 0.5))
+            combos[i] = {**combos[i], "prob": w_main * combos[i]["prob"] + (1 - w_main) * acomb["prob"],
+                         "signals": {**combos[i]["signals"], "dual_alt_prob": acomb["prob"]}}
+            prof[i] = ({**prof[i][0], "threshold": round(w_main * pthr + (1 - w_main) * athr, 4)}, prof[i][1])
+            s_ = segs_by_idx0[i]
+            s_.notes = list(s_.notes) + [f"半文半白：文言与现代汉语两种模型都判断，按文言程度 {w:.0%} 加权"]
         # 2) 与相邻正文段落平滑：只在同一篇作品、同一文体的正文段落之间进行（标题行分开的作品互不影响）
         smoothed = {}
         segs_by_idx = {s.index: s for s in segs}
