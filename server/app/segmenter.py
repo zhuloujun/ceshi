@@ -71,6 +71,7 @@ _LATIN = re.compile(r"[A-Za-z]")
 # 文言常用虚词 / 现代汉语标志词（用于区分文言与白话；阈值用 NLPCC 现代文与 NiuTrans 古文语料测定：
 # 现代文误判为文言约 0.7%，文言识别率约 94%）
 _CLASSICAL = re.compile(r"[之乎者也矣焉哉曰兮盖乃遂耶欤其而于以]")
+_CLASSICAL_EXT = re.compile(r"[之乎者也矣焉哉曰兮盖乃遂耶欤其而于以尝皆亦吾汝尔未勿毋弗卒谓故所若既已犹必甚颇辄俱悉余岂奚宜盍夫则]")
 _MODERN = re.compile(r"[的了们这那吗呢着么]|他们|我们|就是|因为|但是|没有|一个|进行|通过|发展|问题")
 _QUOTED = re.compile(r"“[^”]{4,}”|「[^」]{4,}」|『[^』]{4,}』")
 # 英文分句：句末标点后接空白、下一句以大写/引号/括号开头
@@ -386,6 +387,12 @@ def detect_register(text: str) -> str:
         return "zh_classical"
     if cjk >= 12 and is_ci(t):
         return "zh_poetry"
+    # 浅近文言（虚词少、偶有一两个白话字）：2026-10 用户的 gdwx.docx 里 AI 写的墓志、家书、游记有三成被当成现代汉语，
+    # 用的是现代文分类器，几乎全部漏检。扩充的文言常用字（尝、皆、亦、吾、汝、未、勿、卒、谓……）占 8% 以上、
+    # 白话标志词不超过 3% 时按文言处理。用 NLPCC / HC3 等 1.7 万段现代文（含古文的现代译文）测定：现代文被改判为文言
+    # 从 0.46% 升到 0.48%；AI 文言识别率 89% → 90%，gdwx 57% → 66%。
+    if cjk >= 30 and mr <= 0.03 and len(_CLASSICAL_EXT.findall(t)) / cjk >= 0.08:
+        return "zh_classical"
     return "zh"
 
 
