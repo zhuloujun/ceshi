@@ -69,34 +69,34 @@
 ## 文言
 - 数据：NiuTrans 古文语料（人写）+ 大语言模型生成的文言样本
 - 校准集 236 人写 / 80 AI；阈值 0.5；交叉验证 AUROC 1.0；特征 fastdetect, binoculars, logit_classifier
-- **文言保留集（另一组古籍 + 未参与校准的 AI 文言）**（40 AI / 143 人写）：AUROC 0.9876；检出率 92.5%；误判率 1.4%
-  - 各来源检出率：llm-classical 92%
-  - 各来源误判率：入蜀记 0%，唐传奇 0%，困学纪闻 0%，幽明录 0%，搜神记 0%，新唐书 0%，旧五代史 0%，明夷待访录 0%，武林旧事 0%，聊斋志异 0%，西湖梦寻 18%，资治通鉴 0%，金史 0%，陶庵梦忆 0%
-  - 各特征 AUROC：fastdetect 0.8934，binoculars 0.103，logit_classifier 0.9902，fastdetect_norm 0.8892，lrr 0.9318，log_rank 0.0675，entropy 0.1315，top10 0.914，lp_burstiness 0.5708，style_cv 0.4562，style_phrases 0.4965，logit_classifier_mpu 0.7397
+- **文言保留集（另一组古籍 + 未参与校准的 AI 文言）**（40 AI / 143 人写）：AUROC 0.9925；检出率 90.0%；误判率 0.7%
+  - 各来源检出率：llm-classical 90%
+  - 各来源误判率：入蜀记 0%，唐传奇 0%，困学纪闻 0%，幽明录 0%，搜神记 0%，新唐书 9%，旧五代史 0%，明夷待访录 0%，武林旧事 0%，聊斋志异 0%，西湖梦寻 0%，资治通鉴 0%，金史 0%，陶庵梦忆 0%
+  - 各特征 AUROC：fastdetect 0.8934，binoculars 0.103，logit_classifier 0.9953，fastdetect_norm 0.8892，lrr 0.9318，log_rank 0.0675，entropy 0.1315，top10 0.914，lp_burstiness 0.5708，style_cv 0.4562，style_phrases 0.4965，logit_classifier_mpu 0.7397
 - **国产新模型 AI 文言故事（DeepSeek / Kimi / 文心一言；不参与校准，但其中 2/3 用于训练文言分类器，没见过的那 1/3 见分类器训练报告）**（50 AI / 0 人写）：AUROC None；检出率 98.0%
-  - 各来源检出率：repo-ai-deepseek 96%，repo-ai-kimi 100%，repo-ai-wenxin 100%
+  - 各来源检出率：repo-ai-deepseek 100%，repo-ai-kimi 92%，repo-ai-wenxin 100%
   - 各特征 AUROC：
 
 ## 诗词
 - 数据：ChangAn 当代旧体诗词（人写）+ DeepSeek / 豆包 / GPT-4.1 生成诗词；诗词专用分类器（ChangAn 训练集微调）
-- 校准集 400 人写 / 399 AI；阈值 0.8704；交叉验证 AUROC 0.9718；特征 logit_classifier
+- 校准集 400 人写 / 399 AI；阈值 0.8351；交叉验证 AUROC 0.972；特征 logit_classifier
 - 特征组合比较（四种独立对照的 AUROC，按最差情况选）：
-  - 只用诗词分类器：ChangAn 保留集 0.9581，故事诗 vs 当代人写 0.6606，ChangAn AI vs 唐宋名篇 0.9719，故事诗 vs 唐宋名篇 0.7151，国产新模型诗 vs 当代人写 0.9492，国产新模型诗 vs 唐宋名篇 0.9636（最差 0.6606）
-  - 诗词分类器 + 语言模型：ChangAn 保留集 0.9505，故事诗 vs 当代人写 0.7084，ChangAn AI vs 唐宋名篇 0.8469，故事诗 vs 唐宋名篇 0.442，国产新模型诗 vs 当代人写 0.9671，国产新模型诗 vs 唐宋名篇 0.8751（最差 0.442）
-  - 诗词分类器 + 通用分类器 + 语言模型：ChangAn 保留集 0.952，故事诗 vs 当代人写 0.679，ChangAn AI vs 唐宋名篇 0.8102，故事诗 vs 唐宋名篇 0.3983，国产新模型诗 vs 当代人写 0.9526，国产新模型诗 vs 唐宋名篇 0.8078（最差 0.3983）
+  - 只用诗词分类器：ChangAn 保留集 0.9582，故事诗 vs 当代人写 0.682，ChangAn AI vs 唐宋名篇 0.9739，故事诗 vs 唐宋名篇 0.7429，国产新模型诗 vs 当代人写 0.9509，国产新模型诗 vs 唐宋名篇 0.9667（最差 0.682）
+  - 诗词分类器 + 语言模型：ChangAn 保留集 0.9543，故事诗 vs 当代人写 0.7275，ChangAn AI vs 唐宋名篇 0.8802，故事诗 vs 唐宋名篇 0.4676，国产新模型诗 vs 当代人写 0.9705，国产新模型诗 vs 唐宋名篇 0.9086（最差 0.4676）
+  - 诗词分类器 + 通用分类器 + 语言模型：ChangAn 保留集 0.9541，故事诗 vs 当代人写 0.693，ChangAn AI vs 唐宋名篇 0.8454，故事诗 vs 唐宋名篇 0.413，国产新模型诗 vs 当代人写 0.9596，国产新模型诗 vs 唐宋名篇 0.8526（最差 0.413）
   - 通用分类器 + 语言模型：ChangAn 保留集 0.8769，故事诗 vs 当代人写 0.5923，ChangAn AI vs 唐宋名篇 0.3359，故事诗 vs 唐宋名篇 0.1325，国产新模型诗 vs 当代人写 0.8361，国产新模型诗 vs 唐宋名篇 0.3113（最差 0.1325）
   - 只用语言模型：ChangAn 保留集 0.8379，故事诗 vs 当代人写 0.676，ChangAn AI vs 唐宋名篇 0.2267，故事诗 vs 唐宋名篇 0.1128，国产新模型诗 vs 当代人写 0.9366，国产新模型诗 vs 唐宋名篇 0.3101（最差 0.1128）
 - 选用：只用诗词分类器
-- **国产新模型 AI 诗词（DeepSeek / Kimi / 文心一言，用户提供，不参与校准）**（70 AI / 0 人写）：AUROC None；检出率 78.6%
-  - 各来源检出率：repo-ai-deepseek 83%，repo-ai-kimi 65%，repo-ai-wenxin 87%
+- **国产新模型 AI 诗词（DeepSeek / Kimi / 文心一言，用户提供，不参与校准）**（70 AI / 0 人写）：AUROC None；检出率 80.0%
+  - 各来源检出率：repo-ai-deepseek 86%，repo-ai-kimi 65%，repo-ai-wenxin 87%
   - 各特征 AUROC：
-- **ChangAn 保留集（另一批作者 + 没见过的 Kimi-K2 与其他模型的新诗词）**（300 AI / 300 人写）：AUROC 0.9581；检出率 71.0%；误判率 2.7%
-  - 各来源检出率：Deepseek 63%，gpt-4.1 87%，kimi-k2 59%，seed 76%
+- **ChangAn 保留集（另一批作者 + 没见过的 Kimi-K2 与其他模型的新诗词）**（300 AI / 300 人写）：AUROC 0.9582；检出率 75.0%；误判率 3.0%
+  - 各来源检出率：Deepseek 71%，gpt-4.1 87%，kimi-k2 65%，seed 77%
   - 各来源误判率：human 3%
-  - 各特征 AUROC：fastdetect 0.7596，binoculars 0.2502，logit_classifier 0.9581，fastdetect_norm 0.7519，lrr 0.8175，log_rank 0.1699，entropy 0.2499，top10 0.7724，lp_burstiness 0.5953，style_cv 0.4707，style_phrases 0.5，logit_classifier_mpu 0.7237
-- **复述故事情节的 AI 诗词（本仓库自带，40 首）**（40 AI / 0 人写）：AUROC None；检出率 2.5%
-  - 各来源检出率：repo-ai-story-poem 2%
+  - 各特征 AUROC：fastdetect 0.7595，binoculars 0.2502，logit_classifier 0.9582，fastdetect_norm 0.7519，lrr 0.8175，log_rank 0.1699，entropy 0.2499，top10 0.7724，lp_burstiness 0.5953，style_cv 0.4707，style_phrases 0.5，logit_classifier_mpu 0.7237
+- **复述故事情节的 AI 诗词（本仓库自带，40 首）**（40 AI / 0 人写）：AUROC None；检出率 5.0%
+  - 各来源检出率：repo-ai-story-poem 5%
   - 各特征 AUROC：
-- **唐诗三百首 + 宋词三百首（人写名篇，检查误判）**（0 AI / 646 人写）：AUROC None；误判率 1.4%
+- **唐诗三百首 + 宋词三百首（人写名篇，检查误判）**（0 AI / 646 人写）：AUROC None；误判率 1.1%
   - 各来源误判率：唐诗三百首 2%，宋词三百首 0%
   - 各特征 AUROC：
