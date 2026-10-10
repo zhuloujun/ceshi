@@ -23,6 +23,7 @@ from pathlib import Path
 KERNEL = r'''
 import os, subprocess, sys, tarfile, time
 REPO, SHA, LANG, ARGS = {repo!r}, {sha!r}, {lang!r}, {args!r}
+USER_DOCS = {user_docs!r}
 def sh(*cmd, **kw):
     print("$", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True, **kw)
@@ -68,6 +69,10 @@ else:
     hf_hub_download("yaful/MAGE", "valid.csv", repo_type="dataset", local_dir="/tmp/mage")
     cmd = ["tools/train_english.py", "--mage-dir", "/tmp/mage", "--out", "/tmp/english-classifier"]
     name = "english-classifier"
+if USER_DOCS:   # 用户提供的已标注文档（只放在这个私有 Kaggle 脚本里，不进公开仓库）
+    import base64, lzma
+    open("/tmp/user_docs.jsonl", "wb").write(lzma.decompress(base64.b64decode(USER_DOCS)))
+    cmd += ["--user-docs", "/tmp/user_docs.jsonl"]
 sh(sys.executable, "-u", *cmd, *ARGS, cwd="/tmp/ceshi/server")
 with tarfile.open(f"/kaggle/working/{{name}}.tar.gz", "w:gz") as t:
     t.add(f"/tmp/{{name}}", arcname=name)
@@ -90,6 +95,8 @@ def main():
     ap.add_argument("--repo", default=os.getenv("GITHUB_REPOSITORY", "zhuloujun/ceshi"))
     ap.add_argument("--args", default="")
     ap.add_argument("--max-hours", type=float, default=5.5)
+    ap.add_argument("--user-docs-b64", default=os.getenv("USER_DOCS_B64", ""),
+                    help="base64(xz(jsonl))：用户提供的已标注文档段落 {text, y, register, doc}，只写进私有 Kaggle 脚本")
     a = ap.parse_args()
     for k in [k for k, v in os.environ.items() if k.startswith("KAGGLE_") and not v.strip()]:
         del os.environ[k]          # 没设置的 Secret 在工作流里是空字符串，删掉以免干扰 Kaggle 的登录方式判断
@@ -107,7 +114,7 @@ def main():
             "classical": "classical-classifier"}[a.lang]
 
     d = Path(tempfile.mkdtemp())
-    (d / "train.py").write_text(KERNEL.format(repo=a.repo, sha=a.sha, lang=a.lang, args=a.args.split()), "utf-8")
+    (d / "train.py").write_text(KERNEL.format(repo=a.repo, sha=a.sha, lang=a.lang, args=a.args.split(), user_docs=a.user_docs_b64.strip()), "utf-8")
     (d / "kernel-metadata.json").write_text(json.dumps({
         "id": ref, "title": slug, "code_file": "train.py", "language": "python", "kernel_type": "script",
         "is_private": True, "enable_gpu": True, "enable_internet": True,
