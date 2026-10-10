@@ -745,9 +745,11 @@ async function docxPlainText(arrayBuffer){
   if(!f) throw new Error('未找到 word/document.xml');
   const xml = await f.async('string');
   const dec = (t)=>t.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'")
-                   .replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&');
+                   .replace(/&#(\d+);/g,(m,n)=>String.fromCodePoint(+n)).replace(/&#x([0-9a-fA-F]+);/g,(m,n)=>String.fromCodePoint(parseInt(n,16))).replace(/&amp;/g,'&');
   // 表格：同一行的单元格用" | "连起来、每行一行（服务器据此认出表格，表格不是连贯正文，不计入 AI 率）
-  const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:t\s*\/>|<w:tab\/>|<w:br\b[^>]*\/>|<w:cr\/>|<\/w:p>|<w:p\b[^>]*\/>|<w:tbl>|<\/w:tbl>|<\/w:tc>|<\/w:tr>/g;
+  const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:t\s*\/>|<w:tab\/>|<w:br\b[^>]*\/>|<w:cr\/>|<w:noBreakHyphen\/>|<\/w:p>|<w:p\b[^>]*\/>|<w:tbl>|<\/w:tbl>|<\/w:tc>|<\/w:tr>/g;
+  // <w:noBreakHyphen/>（Word 的"不间断连字符"）是单独的元素，不在 <w:t> 里：以前被丢掉，"AI-Generated"变成"AIGenerated"，
+  // 英文单词被粘连，语言模型和分类器的分数都随之失真（2026-10 用户的 pol.docx 只检出 67%）
   let out = '', m, tbl = 0;
   while((m = re.exec(xml))){
     const tok = m[0];
@@ -756,6 +758,7 @@ async function docxPlainText(arrayBuffer){
     else if(tok === '</w:tbl>'){ tbl = Math.max(0, tbl - 1); out += '\n\n'; }
     else if(tok === '</w:tc>') out += ' | ';
     else if(tok === '</w:tr>') out = out.replace(/ \| $/, '') + '\n';
+    else if(tok === '<w:noBreakHyphen/>') out += '-';
     else if(tok.startsWith('<w:tab')) out += '\t';
     else if(tok.startsWith('<w:br') || tok.startsWith('<w:cr')) out += tbl ? ' ' : '\n';
     else if(tok === '</w:p>' || tok.startsWith('<w:p')) out += tbl ? ' ' : '\n\n';
