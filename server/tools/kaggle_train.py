@@ -70,14 +70,37 @@ else:
     cmd = ["tools/train_english.py", "--mage-dir", "/tmp/mage", "--out", "/tmp/english-classifier"]
     name = "english-classifier"
 if USER_DOCS:   # 用户提供的已标注文档（只放在这个私有 Kaggle 脚本里，不进公开仓库）
-    import base64, lzma
-    open("/tmp/user_docs.jsonl", "wb").write(lzma.decompress(base64.b64decode(USER_DOCS)))
+    import base64, lzma, urllib.request
+    if USER_DOCS.startswith("enc:"):
+        # 数据太大放不进工作流输入时：加密文件放在临时分支上，密钥只在这个私有脚本里
+        url, key = USER_DOCS[4:].rsplit("#", 1)
+        urllib.request.urlretrieve(url, "/tmp/ud.enc")
+        open("/tmp/ud.key", "w").write(key)
+        raw = subprocess.run(["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-iter", "200000", "-pass", "file:/tmp/ud.key",
+                              "-in", "/tmp/ud.enc"], capture_output=True, check=True).stdout
+        os.remove("/tmp/ud.key")
+    else:
+        raw = base64.b64decode(USER_DOCS)
+    open("/tmp/user_docs.jsonl", "wb").write(lzma.decompress(raw))
+    print("用户文档段落", sum(1 for _ in open("/tmp/user_docs.jsonl", encoding="utf-8")), flush=True)
     cmd += ["--user-docs", "/tmp/user_docs.jsonl"]
 sh(sys.executable, "-u", *cmd, *ARGS, cwd="/tmp/ceshi/server")
 with tarfile.open(f"/kaggle/working/{{name}}.tar.gz", "w:gz") as t:
     t.add(f"/tmp/{{name}}", arcname=name)
 print(f"完成，用时 {{(time.time() - t0) / 60:.0f}} 分钟", flush=True)
 '''
+
+
+def _event_input(name):
+    """直接从触发事件读取工作流输入（不经过环境变量，避免出现在公开的运行日志里）"""
+    p = os.getenv("GITHUB_EVENT_PATH", "")
+    try:
+        v = (json.load(open(p, encoding="utf-8")).get("inputs") or {}).get(name, "") if p else ""
+    except Exception:  # noqa: BLE001
+        v = ""
+    if v:
+        print("::add-mask::" + v[v.rfind("#") + 1:] if v.startswith("enc:") else "::add-mask::" + v[:64], flush=True)
+    return v
 
 
 def kaggle(*args, check=True):
@@ -95,7 +118,7 @@ def main():
     ap.add_argument("--repo", default=os.getenv("GITHUB_REPOSITORY", "zhuloujun/ceshi"))
     ap.add_argument("--args", default="")
     ap.add_argument("--max-hours", type=float, default=5.5)
-    ap.add_argument("--user-docs-b64", default=os.getenv("USER_DOCS_B64", ""),
+    ap.add_argument("--user-docs-b64", default=os.getenv("USER_DOCS_B64", "") or _event_input("user_docs"),
                     help="base64(xz(jsonl))：用户提供的已标注文档段落 {text, y, register, doc}，只写进私有 Kaggle 脚本")
     a = ap.parse_args()
     for k in [k for k, v in os.environ.items() if k.startswith("KAGGLE_") and not v.strip()]:
