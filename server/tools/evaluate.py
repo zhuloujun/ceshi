@@ -343,7 +343,52 @@ def classical_parts(args):
     h_cal = classical_passages(args.classical_dir, CLASSICAL_CAL_BOOKS, args.n_cl_human, 21, lengths)
     h_test = classical_passages(args.classical_dir, CLASSICAL_TEST_BOOKS, args.n_cl_human_test, 22, lengths)
     conv = lambda ts: [{"text": t, "y": 1, "model": "llm-classical"} for t in ts]
-    return {"cl_cal": h_cal + conv(ai_cal), "cl_test": h_test + conv(ai_test)}
+    g_cal, g_test, n_cal, n_test = classical_holdout_extra(lengths)
+    return {"cl_cal": h_cal + n_cal + conv(ai_cal) + g_cal, "cl_test": h_test + n_test + conv(ai_test) + g_test}
+
+
+def classical_holdout_extra(lengths, n_ai_each=160, n_h_each=160):
+    """校准只用旧的 120 篇 AI 文言时，分类器对它们几乎都打满分，人写与 AI 之间空出一大段，
+    阈值落在空档中间（等于没按"误判率"来定），新一代模型写的克制、具体的文言（如用户的 gdwx）大多落在空档下方被漏掉。
+    所以再加入：五家模型 + Claude 写的文言里分类器训练时留出的那 1/5（gen_cl，按题目 + 体裁哈希，与训练一致），
+    以及名家古文选本里训练时留出的那 1/5（human_cl/prose，按来源 + 开头哈希，与训练一致）。两者都没参与分类器训练。
+    各自再按哈希一半进校准、一半进保留集。"""
+    import json as _json
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from app.segmenter import detect_register
+    rnd = random.Random(23)
+    h5 = lambda s: int(hashlib.md5(s.encode("utf-8")).hexdigest(), 16)
+    ai_rows = []
+    for f in sorted((DATA_DIR / "gen_cl").glob("ai_*.jsonl")):
+        for line in f.read_text("utf-8").split("\n"):
+            if not line.strip():
+                continue
+            r = _json.loads(line)
+            key = f"{r['title']}|{r['genre']}"
+            if h5(key) % 5 != 0 or detect_register(r["text"]) != "zh_classical":
+                continue
+            ai_rows.append({"text": r["text"], "y": 1, "model": f"gen-{f.stem[3:]}", "_h": h5(key + "#half") % 2})
+    h_rows = []
+    f = DATA_DIR / "human_cl" / "prose.jsonl"
+    if f.exists():
+        for line in f.read_text("utf-8").split("\n"):
+            if not line.strip():
+                continue
+            r = _json.loads(line)
+            if h5(r["source"] + r["text"][:20]) % 5 != 0:
+                continue
+            t = r["text"].lstrip("，。；：、！？　 ")
+            target = rnd.choice(lengths) if lengths else 200
+            cut = t[:target]
+            m = list(re.finditer(r"[。！？」”]", cut))
+            if m and m[-1].end() >= 60:
+                cut = cut[:m[-1].end()]
+            if len(cut) < 60:
+                continue
+            h_rows.append({"text": cut, "y": 0, "model": "名家-" + r["source"], "_h": h5(r["text"][:30] + "#half") % 2})
+    pick = lambda rows, half, n: balanced_sample([{k: v for k, v in r.items() if k != "_h"} for r in rows if r["_h"] == half],
+                                                 n, lambda r: r["model"], 24 + half)
+    return pick(ai_rows, 0, n_ai_each), pick(ai_rows, 1, n_ai_each), pick(h_rows, 0, n_h_each), pick(h_rows, 1, n_h_each)
 
 
 def user_ai_rows(kind):
