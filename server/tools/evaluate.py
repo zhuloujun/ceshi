@@ -538,7 +538,7 @@ def evaluate_rows(rows, cal, name):
 # 所以预先定得更严（与 Turnitin 对短文本从严的做法一致）。诗词同理：宁可少抓，也不冤枉写诗的人。
 # 英文 0.035：英文第二分类器 v2（加入 Kimi 数据）按 3.5% 拟合时，MAGE 新领域 96% / 误判 7.3%、改写 74% / 13.3%，
 # 都比 v1（94.7% / 8.7%、73.4% / 14.7%）检出多且误判少；国产模型论文段落 86%（含 Kimi 71%）/ arXiv 误判 3%。
-PROFILE_TARGET_FPR = {"zh_short": 0.01, "zh_poetry": 0.03, "zh_classical": 0.03, "en": 0.035, "en_paper": 0.01}
+PROFILE_TARGET_FPR = {"zh_short": 0.01, "zh_poetry": 0.03, "zh_classical": 0.02, "en": 0.035, "en_paper": 0.01}
 # 自动选特征时，其他组合要比"全部特征"高出这么多才换（避免被交叉验证的随机波动带偏）
 SELECTION_MARGIN = 0.005
 
