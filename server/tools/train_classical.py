@@ -202,6 +202,10 @@ def main():
         model = AutoModelForSequenceClassification.from_pretrained(
             args.base, num_labels=2, id2label={0: "human", 1: "ai"}, label2id={"human": 0, "ai": 1})
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"设备：{device}", flush=True)
+    model.to(device)
+
     def batches(data, bs, shuffle):
         idx = list(range(len(data)))
         if shuffle:
@@ -209,12 +213,12 @@ def main():
         for i in range(0, len(idx), bs):
             chunk = [data[j] for j in idx[i:i + bs]]
             enc = tok([r["text"] for r in chunk], truncation=True, max_length=args.max_len, padding=True, return_tensors="pt")
-            yield enc, torch.tensor([r["y"] for r in chunk])
+            yield {k: v.to(device) for k, v in enc.items()}, torch.tensor([r["y"] for r in chunk], device=device)
 
     def predict(data):
         model.eval()
         out = []
-        with torch.inference_mode():
+        with torch.inference_mode(), torch.autocast(device, enabled=device == "cuda"):
             for enc, _ in batches(data, 64, False):
                 out.extend(torch.softmax(model(**enc).logits.float(), -1)[:, 1].tolist())
         model.train()
@@ -225,6 +229,7 @@ def main():
     total = max(1, int(steps_per_epoch * args.epochs))
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     sched = get_linear_schedule_with_warmup(opt, int(total * 0.06), total)
+    scaler = torch.amp.GradScaler(enabled=device == "cuda")
     model.train()
     t0 = time.time()
     step, best, best_state = 0, -1.0, None
@@ -234,10 +239,13 @@ def main():
         best, best_state = -1.0, None
     while not done:
         for enc, y in batches(train, args.batch, True):
-            loss = torch.nn.functional.cross_entropy(model(**enc).logits, y)
-            loss.backward()
+            with torch.autocast(device, enabled=device == "cuda"):
+                logits = model(**enc).logits
+            loss = torch.nn.functional.cross_entropy(logits.float(), y)
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step(); sched.step(); opt.zero_grad()
+            scaler.step(opt); scaler.update(); sched.step(); opt.zero_grad()
             step += 1
             if step % 50 == 0:
                 el = time.time() - t0
@@ -288,7 +296,7 @@ def main():
                                                      for b, v in by_book.items() if len(v) >= 5},
            "n_train_human": len(h_train), "n_train_ai": len(ai_train), "n_test_human": len(ph), "n_test_ai": len(pa),
            "base": args.base, "epochs": args.epochs, "lr": args.lr, "steps": step,
-           "minutes": round((time.time() - t0) / 60, 1)}
+           "minutes": round((time.time() - t0) / 60, 1), "device": device}
     print(json.dumps(res, ensure_ascii=False, indent=1), flush=True)
     print("::notice title=文言分类器评估（没参与训练的古籍与 AI 样本）::" + json.dumps(
         {k: res[k] for k in ("test_auroc", "test_auroc_by_ai_source", "ai_caught_at_ref_threshold",
