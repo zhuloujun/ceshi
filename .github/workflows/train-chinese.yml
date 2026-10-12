@@ -13,6 +13,9 @@ on:
       tag:
         description: "发布到哪个 Release"
         default: "chinese-classifier-v1"
+      user_docs:
+        description: "（自动填写）用户提供的已标注段落，加密传入，不进公开仓库"
+        default: ""
 
 permissions:
   contents: write
