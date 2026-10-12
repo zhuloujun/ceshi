@@ -171,6 +171,8 @@ jobs:
                       j = call("/v1/detect", {"text": d["text"], "wait": False, "genre": d.get("genre", "auto")}, H)
                       jid = j.get("job_id") or j.get("id")
               res = j.get("result") or {}
+              if j.get("status") == "error" or not res:
+                  print(f"::error title={d['name']} 检测出错::{str(j.get('error') or j)[:3000]}", flush=True)
               s = res.get("summary") or {}
               works = " ； ".join(f"{w['title'][:24]} {'—' if w.get('ai_rate') is None else round(w['ai_rate'] * 100)}%"
                                  for w in res.get("works", []))
