@@ -57,6 +57,26 @@ WENTI2 = [("墓志", PEOPLE, ["用文言为{t}写一篇墓志铭，有志有铭�
           ("世说", ["名士饮酒", "清谈", "雅量", "任诞", "言语机敏的孩童", "简傲"], ["仿照《世说新语》，用文言写几则关于{t}的小故事。"]),
           ("志怪", ["狐仙", "书生遇鬼", "古镜", "龙女", "画中人", "老树成精", "还魂"],
            ["仿照《聊斋志异》，用文言写一篇关于{t}的志怪故事，五百字左右。", "仿照《搜神记》，用文言写一则关于{t}的志怪短篇。"])]
+# v3（2026-10，对照用户用 ChatGPT / Gemini / DeepSeek 写的"文白夹杂、像真人写、降低 AI 率"样本）：
+# 半文半白的书信、日记、随笔、序跋、悼文、碑记、题跋、家书、寓言、笔记、游记；指令里带"去 AI 味"的要求
+WB_TOPICS = ["老屋", "故乡的河", "外祖母", "旧书摊", "一场秋雨", "早年的同窗", "病中", "迁居", "雪夜读书", "庭前一株桂树",
+             "亡友", "先师", "江南梅雨", "茶", "老街的裁缝", "旅途", "中年", "灯下", "儿时的私塾", "父亲的砚台",
+             "一只老猫", "山中寺院", "退休的老教师", "渡口", "离乱", "旧日记", "菜园", "夜航船", "母亲的针线", "城墙"]
+WB_TYPES = [("书信", "用文白夹杂的笔调写一封给{t}相关之人的书信，像民国文人的尺牍。"),
+            ("日记", "用半文半白的语言写三则日记，内容与{t}有关，像清末民初读书人的日记。"),
+            ("随笔", "用文白夹杂的笔法写一篇关于{t}的随笔小品，六百字左右。"),
+            ("序跋", "用半文半白的语言为一本关于{t}的小书写一篇序。"),
+            ("悼文", "用文白夹杂的语言写一篇悼念文章，悼念与{t}有关的一位故人。"),
+            ("碑记", "用半文半白的笔调写一篇碑记，记{t}的来历。"),
+            ("题跋", "用文白夹杂的语言为一幅画着{t}的旧画写一则题跋。"),
+            ("家书", "以长辈口吻，用半文半白的语言写一封家书，提到{t}。"),
+            ("寓言", "用文白夹杂的语言写一则寓言，借{t}说一个道理。"),
+            ("笔记", "仿照清人笔记，用浅近文言夹白话写两三则关于{t}的见闻。"),
+            ("游记", "用半文半白的语言写一篇游记，写{t}一带的风物。")]
+WB_TAIL = ["", "写得像真人写的，不要有 AI 味。", "要求降低 AI 检测率：句子长短不一，偶尔用口语，不要排比和总结句。",
+           "模仿周作人、俞平伯那样的文白夹杂笔调，不要华丽辞藻。", "不要用“总之”“由此可见”之类的词，结尾不要升华。",
+           "加入一些具体的人名、地名、年份和琐碎细节，显得真实。"]
+
 QUPAI = ["天净沙", "山坡羊", "沉醉东风", "折桂令", "水仙子", "清江引", "卖花声", "寿阳曲", "四块玉", "红绣鞋"]
 
 GENRES = [  # (genre, 题目池, 指令模板)
@@ -134,6 +154,9 @@ def run(name, key, endpoints, n, t0, budget, lock):
         for t in topics2:
             for tpl in tpls2:
                 jobs.append(("wenyan2-" + wt, t, tpl))
+    for wt, tpl in WB_TYPES:
+        for t in WB_TOPICS:
+            jobs.append(("wenbai-" + wt, t, tpl + "{wb}"))
     only_g = [x for x in os.getenv("CL_GENRES", "").split(",") if x]
     if only_g:          # 只生成指定体裁（如 CL_GENRES=duilian）：对联另加名胜楹联题目
         jobs = [j for j in jobs if j[0].split("-")[0] in only_g]
@@ -147,7 +170,9 @@ def run(name, key, endpoints, n, t0, budget, lock):
         url, model = eps[i % len(eps)]
         if f"{t}|{genre}|{model}" in done:
             continue
-        prompt = tpl.format(t=t, p=rnd.choice(CIPAI), q=rnd.choice(QUPAI)) + rnd.choice(STYLE_TAIL)
+        prompt = tpl.format(t=t, p=rnd.choice(CIPAI), q=rnd.choice(QUPAI), wb=rnd.choice(WB_TAIL))
+        if not genre.startswith("wenbai"):
+            prompt += rnd.choice(STYLE_TAIL)
         text = g.chat(url, key, model, prompt, rnd.choice([0.7, 0.85, 1.0]), 1500)
         text = clean(text or "", genre)
         if len(re.findall(r"[一-鿿]", text)) >= (16 if genre.startswith("jueju") else 30):
