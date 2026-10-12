@@ -887,7 +887,10 @@ class Engine:
         p_chance = None
         if n_flagged and n_judged:
             lam = expected_false
-            p_chance = 1.0 - sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(n_flagged))
+            # 泊松分布 P(X >= n_flagged)；在对数空间里算，长文标出几百段时 k! 不会溢出（以前会报 OverflowError）
+            p_chance = 1.0 - sum(math.exp(-lam + (k * math.log(lam) if lam > 0 else (0.0 if k == 0 else -math.inf))
+                                          - math.lgamma(k + 1)) for k in range(n_flagged))
+            p_chance = min(1.0, max(0.0, p_chance))
             if p_chance >= 0.05 and n_flagged <= 0.5 * n_judged:
                 notes.append(f"本文共 {n_judged} 段参与判断。即使全部是人写，按各文体的实测误判率，平均也会有约 "
                              f"{expected_false:.1f} 段被误标；本次标出 {n_flagged} 段，与偶然误标的数量相当"
