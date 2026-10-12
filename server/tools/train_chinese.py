@@ -77,6 +77,21 @@ def build(args, rnd):
             t = r["text"].strip()
             docs.append({"doc": t[:30], "y": y, "src": f"nlpcc-{src}-{'human' if y == 0 else model}",
                          "split": split_of(t[:60]), "segs": [(t, len(t))]})
+    # 用户提供的已标注段落（私有 Kaggle 脚本传入，不进公开仓库）：紧凑格式 {t, y, r:'z', d}，只取现代汉语
+    if getattr(args, "user_docs", ""):
+        n_ud = 0
+        for line in Path(args.user_docs).read_text("utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if (r.get("register") or {"z": "zh"}.get(r.get("r"), "")) != "zh":
+                continue
+            t = r.get("text", r.get("t", "")).strip()
+            for _ in range(max(1, args.user_docs_reps)):
+                docs.append({"doc": "ud:" + t[:30], "y": int(r["y"]), "src": f"user-doc-{r.get('doc', r.get('d', '?')).split('-')[0]}-{int(r['y'])}",
+                             "split": "train", "segs": [(t, len(t))]})
+            n_ud += 1
+        print(f"用户文档段落（现代汉语）{n_ud}", flush=True)
     for t in ev.read_blocks(ev.DATA_DIR / "ai_zh_essays.txt"):
         docs.append({"doc": t[:30], "y": 1, "src": "repo-ai-zh-essay", "split": "train", "segs": [(t, len(t))]})
     return [d for d in docs if d["segs"]]
@@ -96,6 +111,8 @@ def main():
     ap.add_argument("--max-segs", type=int, default=6, help="每篇长文最多取多少段训练")
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--time-budget-min", type=float, default=150)
+    ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='z' 为现代汉语）")
+    ap.add_argument("--user-docs-reps", type=int, default=1, help="用户段落在训练集里重复几次")
     args = ap.parse_args()
 
     import torch
