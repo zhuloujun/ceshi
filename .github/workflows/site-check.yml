@@ -68,5 +68,8 @@ jobs:
                   r = urllib.request.urlopen(urllib.request.Request(site + "/v1/detect", body, {**ck, "Content-Type": "application/json", "Origin": site}), timeout=600)
                   j = json.loads(r.read()); out["登录后检测"] = (r.status, j.get("status"), (j.get("result") or {}).get("summary", {}).get("ai_rate"))
               except urllib.error.HTTPError as e: out["登录后检测"] = (e.code, e.read()[:200])
-          for k, v in out.items(): print(f"::notice title={k}::{v}")
+          # 每一步最多显示 10 条提示：合并成两条
+          keys = list(out)
+          print("::warning title=检测服务与登录后检测::" + " ｜ ".join(f"{k}: {out[k]}" for k in keys if not k.startswith("/") and k != "captcha"))
+          print("::notice title=网站页面::" + " ｜ ".join(f"{k}: {out[k]}" for k in keys if k.startswith("/") or k == "captcha"))
           PY
