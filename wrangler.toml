@@ -6,6 +6,9 @@ main = "worker.js"
 account_id = "79eda91d8a514fb3ca5e9ba166851dc6"
 compatibility_date = "2026-09-01"
 
+# 部署时保留在 Cloudflare 网页上手动添加的变量
+keep_vars = true
+
 # 每次部署前自动把 pages-static/ 里的网页打包进 worker.js
 [build]
 command = "node build.mjs"
@@ -15,3 +18,18 @@ watch_dir = "pages-static"
 # 删掉这两行则恢复为只提供轻量版。
 [vars]
 BACKEND_URL = "https://zhuloujun--ai-text-checker-web.modal.run"
+# 注册登录用的管理员邮箱（只有这个邮箱能登录管理后台；验证码会发到这里）
+ADMIN_EMAIL = "orgxyz@hotmail.com"
+# 验证码邮件的发件人（域名已在 Resend 验证）
+RESEND_FROM_EMAIL = "审读 AI 文本检测 <noreply@1258099.xyz>"
+
+# 用户、会话、订单等数据（Cloudflare D1，免费额度内使用）
+[[d1_databases]]
+binding = "DB"
+database_name = "ai_text_checker_db"
+database_id = "d16fa6ef-a795-47ee-9798-ba3e08d8a10e"
+
+# 以下是 Secret（不写在这里）：由"部署到 Cloudflare"工作流从 GitHub Secrets 自动写入
+#   RESEND_API_KEY        发验证码邮件（GitHub Secrets 里添加 RESEND_API_KEY）
+#   KEY_SIGNING_SECRET    由 ADMIN_TOKEN 自动算出，用来给登录用户签发检测 Key
+#   TURNSTILE_SECRET_KEY  可选：Cloudflare Turnstile 人机验证（同时在上面 [vars] 加 TURNSTILE_SITE_KEY）

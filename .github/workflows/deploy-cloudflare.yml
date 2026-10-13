@@ -46,3 +46,31 @@ jobs:
             exit 0
           fi
           npx -y wrangler@4 deploy
+      - name: 写入 Worker 的 Secret（注册登录功能用）
+        if: github.event_name != 'pull_request'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+        run: |
+          [ -z "$CLOUDFLARE_API_TOKEN" ] && exit 0
+          # 只写入有值的项；内容不会出现在日志里
+          python3 - <<'PY'
+          import hashlib, hmac, json, os
+          out = {}
+          if os.environ.get("ADMIN_TOKEN"):
+              # 与后端 keys.py 相同的推导方式：Worker 用它给登录用户签发检测 Key
+              out["KEY_SIGNING_SECRET"] = hmac.new(os.environ["ADMIN_TOKEN"].encode(), b"ai-text-checker/key-secret/v1", hashlib.sha256).hexdigest()
+          for k in ("RESEND_API_KEY", "TURNSTILE_SECRET_KEY"):
+              if os.environ.get(k, "").strip():
+                  out[k] = os.environ[k].strip()
+          json.dump(out, open("/tmp/worker-secrets.json", "w"))
+          print("::notice title=Worker Secret::将写入：" + ("、".join(sorted(out)) or "（无）"))
+          if "RESEND_API_KEY" not in out:
+              print("::warning title=注册登录功能尚未启用::GitHub Secrets 里还没有 RESEND_API_KEY（发验证码邮件用）。添加后重新运行本工作流，网站会自动切换为需要注册登录。")
+          PY
+          if [ "$(cat /tmp/worker-secrets.json)" != "{}" ]; then
+            npx -y wrangler@4 secret bulk /tmp/worker-secrets.json > /tmp/secret.log 2>&1 || { tail -5 /tmp/secret.log; exit 1; }
+          fi
+          rm -f /tmp/worker-secrets.json
