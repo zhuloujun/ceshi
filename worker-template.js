@@ -31,18 +31,19 @@ import { landingPage, authPage, accountPage, adminLoginPage, adminLinkRequestPag
 const INDEX_HTML = __INDEX_HTML__;
 const STYLE_CSS = __STYLE_CSS__;
 const APP_JS = __APP_JS__;
+const BACKEND_STATIC = __BACKEND_STATIC__;
 
 const GPTZERO_ENDPOINT = 'https://api.gptzero.me/v2/predict/text';
 const MAX_CHARS_PER_CALL = 48000; // GPTZero 单次约 5 万字符上限，留出余量
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     // 注册登录功能需要：D1 数据库、Resend 邮件密钥、签发检测 Key 的密钥。三样都设置好后自动启用；
     // 紧急情况下可以把变量 AUTH_DISABLED 设为 1 临时关闭（恢复成原来的公开访问方式）。
     if (url.pathname === '/__i18n.js') return i18nResponse();      // 中英文界面切换脚本
     if (url.pathname === '/api/setup/secret') return withSecurity(await handleSetupSecret(request, env));
-    env = await withStoredSecrets(env);
+    env = Object.assign({}, await withStoredSecrets(env), { CTX: ctx });
     const resp = authEnabled(env) ? await gated(request, env, url) : await legacy(request, env, url);
     return withSecurity(injectI18n(resp));
   }
@@ -78,7 +79,12 @@ async function legacy(request, env, url) {
     }
     if (url.pathname === '/lite') return Response.redirect(url.origin + '/lite/', 301);
     if (url.pathname.startsWith('/lite/')) return serveLite(request, url.pathname.slice('/lite'.length));
-    return proxy(request, env, url);
+    const pg = backendPage(request, url);
+    if (pg) return pg;
+    if (url.pathname === '/health' && request.method === 'GET' && !url.searchParams.has('live')) return cachedHealth(request, env, url, null);
+    const r = await proxy(request, env, url);
+    afterBackend(env, url, request, r);
+    return r;
   }
   return serveLite(request, url.pathname);
 }
@@ -127,8 +133,9 @@ async function gated(request, env, url) {
     if (!s.isAdmin) return html(notFoundPage(), 404);
     if (p === '/admin/api/labels' && request.method === 'GET' && url.searchParams.get('v') !== '2')
       return json({ error: 'stale_page', message: '管理页版本过旧，请刷新页面。' }, 410);
+    if (p === '/admin' && isGet) return injectBar(backendPage(request, url), s);
     const r = await proxy(request, env, url);
-    return p === '/admin' ? injectBar(r, s) : r;
+    return r;
   }
   if (p === '/api/detect') {
     if (request.method !== 'POST') return json({ error: 'method_not_allowed', message: '此接口只接受 POST 请求' }, 405);
@@ -137,6 +144,11 @@ async function gated(request, env, url) {
   if (p === '/lite') return Response.redirect(url.origin + '/lite/', 301);
   if (p.startsWith('/lite/')) return serveLite(request, p.slice('/lite'.length));
   if (!env.BACKEND_URL) return serveLite(request, p);
+
+  // 页面和静态文件由 Worker 直接返回；状态信息用缓存回答：只有真正提交检测时才唤醒 Modal
+  const pg = backendPage(request, url);
+  if (pg) return (p === '/' || p === '/index.html') ? injectBar(pg, s) : pg;
+  if (p === '/health' && isGet && !url.searchParams.has('live')) return cachedHealth(request, env, url, s);
 
   // 检测服务（Modal）：Worker 代用户带上检测 Key，并在提交检测时核对、扣减额度
   const headers = new Headers(request.headers);
@@ -152,6 +164,7 @@ async function gated(request, env, url) {
     if (!charge.ok) return sjson({ error: 'quota_exceeded', message: charge.message }, 402);
     const r = await proxy(new Request(request.url, { method: 'POST', headers, body: raw }), env, url);
     if (r.status < 400) await recordCharge(env, s, n, charge);
+    afterBackend(env, url, request, r);
     return r;
   }
   if (p === '/v1/detect/file' && request.method === 'POST') {
@@ -166,12 +179,72 @@ async function gated(request, env, url) {
   const r = await proxy(new Request(request.url, { method: request.method, headers,
     body: isGet ? undefined : request.body, duplex: 'half' }), env, url);
   if (p.startsWith('/v1/jobs/') && r.ok) { try { await settleFileJob(env, s, await r.clone().json(), false); } catch { /* 非 JSON */ } }
+  afterBackend(env, url, request, r);
   if (p === '/health' && r.ok) {
     // 登录用户不需要在页面上填 Key
     try { const h = await r.json(); return sjson({ ...h, requires_key: false, login: { email: s.email, admin: s.isAdmin } }); } catch { return r; }
   }
   if (isGet && (p === '/' || p === '/index.html')) return injectBar(r, s);
   return r;
+}
+
+// ---------- 省 Modal 费用：页面由 Worker 返回，/health 用缓存 ----------
+// 以前每次有人打开检测页（包括搜索引擎爬虫），页面和 /health 都要转发给 Modal，把休眠的服务叫醒：
+// 加载模型约 1–2 分钟 + 闲置 3 分钟才关机，即使不检测也要计费。现在只有提交检测、查询结果、管理操作才会唤醒它。
+const STATIC_TYPES = { js: 'application/javascript; charset=utf-8', css: 'text/css; charset=utf-8', html: 'text/html; charset=utf-8' };
+
+function backendPage(request, url) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return null;
+  const p = url.pathname;
+  let name = null;
+  if (p === '/' || p === '/index.html') name = 'index.html';
+  else if (p === '/admin') name = 'admin.html';
+  else if (p.startsWith('/static/')) name = p.slice('/static/'.length);
+  const f = name && BACKEND_STATIC[name];
+  if (!f) return null;
+  const ext = name.split('.').pop();
+  const cache = ext === 'html' ? 'no-cache' : (url.searchParams.get('v') === f.v ? 'public, max-age=31536000, immutable' : 'public, max-age=300');
+  return new Response(f.body, { headers: { 'Content-Type': STATIC_TYPES[ext] || 'application/octet-stream', 'Cache-Control': cache } });
+}
+
+const HEALTH_KEY = 'backend_health';
+
+async function cachedHealth(request, env, url, s) {
+  let h = null;
+  try { const v = env.DB && await env.DB.prepare(`SELECT value FROM settings WHERE key = ?1`).bind(HEALTH_KEY).first(); h = v ? JSON.parse(v.value) : null; } catch { /* 没有缓存 */ }
+  if (!h) {
+    // 第一次（还没有缓存）：真正问一次检测服务并记下来
+    try {
+      const r = await fetch(env.BACKEND_URL.replace(/\/+$/, '') + '/health');
+      if (r.ok) { h = await r.json(); await saveHealth(env, h); }
+    } catch { /* 连不上 */ }
+  }
+  if (!h) return sjson({ ok: false, error: 'backend_unreachable', message: '检测服务暂时连不上，请稍后再试。' }, 502);
+  // 缓存里的状态只表示"服务能用哪些模型"；服务可能正在休眠，提交检测后会自动启动（约 1–2 分钟）
+  const out = { ...h, loading: false, cached: true, queue: 0 };
+  if (s) Object.assign(out, { requires_key: false, login: { email: s.email, admin: s.isAdmin } });
+  return sjson(out);
+}
+
+async function saveHealth(env, h) {
+  if (!env.DB || !h || h.loading) return;
+  const keep = { ...h }; delete keep.queue;
+  await env.DB.prepare(`INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2`)
+    .bind(HEALTH_KEY, JSON.stringify(keep)).run();
+}
+
+// 检测服务刚被用过（已经醒着）：顺便更新一次状态缓存，不会额外唤醒它
+function afterBackend(env, url, request, r) {
+  try {
+    if (!env.CTX || !env.BACKEND_URL || !r || r.status >= 400) return;
+    const p = url.pathname;
+    if (!(p === '/v1/detect' || p === '/v1/detect/file' || p.startsWith('/v1/jobs/'))) return;
+    // 只在检测完成时更新（查询进度时页面每隔几秒请求一次，不必每次都更新）
+    env.CTX.waitUntil(r.clone().json().then((j) => {
+      if (!j || j.status !== 'done') return null;
+      return fetch(env.BACKEND_URL.replace(/\/+$/, '') + '/health').then((x) => x.ok ? x.json() : null).then((h) => h && saveHealth(env, h));
+    }).catch(() => {}));
+  } catch { /* 忽略 */ }
 }
 
 function injectBar(resp, s) {
