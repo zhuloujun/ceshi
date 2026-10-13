@@ -7,6 +7,9 @@ on:
       site:
         description: "网站地址"
         default: "https://ai-text-checker.agi001.workers.dev"
+      session:
+        description: "（维护者用）临时测试会话，用于检查登录后的检测流程"
+        default: ""
 
 permissions:
   contents: read
@@ -19,6 +22,7 @@ jobs:
       - name: 检查
         env:
           SITE: ${{ github.event.inputs.site }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
         run: |
           python3 - <<'PY'
           import os, urllib.request, json
@@ -36,5 +40,33 @@ jobs:
               c, h, b = get(p)
               out[p] = f"{c} {h.get('Location') or ''} {len(b)}B"
           c, h, b = get("/api/auth/captcha"); out["captcha"] = f"{c} {'ok' if b'image' in b else b[:80]}"
+          # 检测服务（Modal）是否只接受本站转发：旧地址应已失效，新地址不带通行证应返回 404
+          import hmac, hashlib
+          at = os.environ.get("ADMIN_TOKEN", "").encode()
+          lab = "atc-" + hmac.new(at, b"ai-text-checker/modal-label/v1", hashlib.sha256).hexdigest()[:20]
+          print("::add-mask::" + lab, flush=True)
+          px = hmac.new(at, b"ai-text-checker/worker-proxy/v1", hashlib.sha256).hexdigest()
+          def raw(u, h=None):
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(u, headers=h or {}), timeout=300); return r.status, r.read()[:80]
+              except urllib.error.HTTPError as e: return e.code, e.read()[:80]
+              except Exception as e: return 0, str(e)[:80].encode()
+          out["旧地址 /health"] = raw("https://zhuloujun--ai-text-checker-web.modal.run/health")
+          out["新地址 无通行证"] = raw(f"https://zhuloujun--{lab}.modal.run/health")
+          out["新地址 /docs 无通行证"] = raw(f"https://zhuloujun--{lab}.modal.run/docs")
+          c, b = raw(f"https://zhuloujun--{lab}.modal.run/health", {"X-ATC-Proxy": px}); out["新地址 带通行证"] = (c, b[:20])
+          ev = json.load(open(os.environ["GITHUB_EVENT_PATH"])); sess = (ev.get("inputs") or {}).get("session", "")
+          if sess:
+              print("::add-mask::" + sess, flush=True)
+              ck = {"Cookie": "atc_session=" + sess, "User-Agent": "site-check"}
+              c, h, b = None, None, None
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(site + "/health", headers=ck), timeout=60); out["登录后 /health"] = (r.status, r.read()[:60])
+              except urllib.error.HTTPError as e: out["登录后 /health"] = (e.code, e.read()[:60])
+              body = json.dumps({"text": "这是一段用于检查网站检测流程是否正常的测试文字。" * 6, "wait": True}).encode()
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(site + "/v1/detect", body, {**ck, "Content-Type": "application/json", "Origin": site}), timeout=600)
+                  j = json.loads(r.read()); out["登录后检测"] = (r.status, j.get("status"), (j.get("result") or {}).get("summary", {}).get("ai_rate"))
+              except urllib.error.HTTPError as e: out["登录后检测"] = (e.code, e.read()[:200])
           for k, v in out.items(): print(f"::notice title={k}::{v}")
           PY
