@@ -163,15 +163,19 @@ jobs:
             echo "::error title=$2::$MSG"
             exit 1
           }
+          # 检测服务的网址名字由管理员密码算出（不公开），日志里也遮住；只接受本站 Worker 转发的请求
+          LABEL=$(python3 -c "import hmac,hashlib,os;print('atc-'+hmac.new(os.environ['ADMIN_TOKEN'].encode(),b'ai-text-checker/modal-label/v1',hashlib.sha256).hexdigest()[:20])")
+          echo "::add-mask::$LABEL"
+          printf '%s' "$LABEL" > .web_label
           # 管理员密码、校准参数、作废列表都从 GitHub 传给 Modal
-          ARGS=("ADMIN_TOKEN=$ADMIN_TOKEN")
+          ARGS=("ADMIN_TOKEN=$ADMIN_TOKEN" "REQUIRE_PROXY_SECRET=1")
           [ -n "$CALIBRATION_JSON" ] && ARGS+=("CALIBRATION_JSON=$CALIBRATION_JSON")
           [ -n "$REVOKED_KEY_IDS" ] && ARGS+=("REVOKED_KEY_IDS=$REVOKED_KEY_IDS")
           modal secret create ai-text-checker "${ARGS[@]}" --force > /tmp/secret.log 2>&1 || report /tmp/secret.log "创建 Modal Secret 失败（常见原因：MODAL_TOKEN_ID / MODAL_TOKEN_SECRET 填错）"
-          modal deploy modal_app.py > /tmp/deploy.log 2>&1 || report /tmp/deploy.log "部署到 Modal 失败"
-          cat /tmp/deploy.log
-          URL=$(grep -oE 'https://[a-zA-Z0-9-]+--ai-text-checker-web\.modal\.run' /tmp/deploy.log | head -1)
-          if [ -n "$URL" ]; then
-            echo "::notice title=检测网站地址::$URL （管理页：$URL/admin）"
-            echo "### 部署完成：[$URL]($URL)  ·  管理页：[$URL/admin]($URL/admin)" >> "$GITHUB_STEP_SUMMARY"
+          modal deploy modal_app.py > /tmp/deploy.log 2>&1 || { sed -i "s/$LABEL/***/g" /tmp/deploy.log; report /tmp/deploy.log "部署到 Modal 失败"; }
+          # 公开仓库的日志谁都能看：不打印检测服务的真实地址
+          sed -e "s/$LABEL/***/g" -e 's#https://[a-zA-Z0-9-]*\.modal\.run#https://***.modal.run#g' /tmp/deploy.log
+          if grep -q "$LABEL" /tmp/deploy.log; then
+            echo "::notice title=部署完成::检测服务已更新（地址保密，只能经本站 Cloudflare Worker 访问）"
           fi
+          rm -f .web_label

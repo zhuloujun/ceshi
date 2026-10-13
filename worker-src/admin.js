@@ -132,6 +132,11 @@ export async function handleAdminApi(req, env, path, s) {
         if (!Number.isInteger(n) || n < 0 || n > 1e8) return json({ ok: false, message: '每日免费字数不正确。' }, 400);
         await setSetting(env, 'free_daily_chars', n); ch.push(`免费额度 ${n}`);
       }
+      if (body.site_daily_chars !== undefined) {
+        const n = parseInt(body.site_daily_chars, 10);
+        if (!Number.isInteger(n) || n < 0 || n > 1e9) return json({ ok: false, message: '全站每日字数上限不正确。' }, 400);
+        await setSetting(env, 'site_daily_chars', n); ch.push(`全站上限 ${n}`);
+      }
       if (body.plans !== undefined) {
         const e = validatePlans(body.plans);
         if (e) return json({ ok: false, message: e }, 400);

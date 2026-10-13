@@ -18,6 +18,8 @@ const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_WINDOW_MS = 10 * 60 * 1000;
 const LOCK_MS = 30 * 60 * 1000;
 
+const DUMMY_HASH = 'pbkdf2:100000:00000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000';
+
 export const adminEmail = (env) => normEmail(env.ADMIN_EMAIL || '');
 
 // ---------- 人机验证：算术题（答案只存哈希在 D1，用一次即作废） ----------
@@ -53,11 +55,12 @@ function captchaSvg(text) {
 async function newCaptcha(env, req) {
   const rl = await hitRateLimit(env, 'cap:' + clientIp(req), ...LIMITS.captchaPerIp);
   if (!rl.ok) return json({ ok: false, message: `操作太频繁，请 ${waitText(rl.retryAfter)}后再试。` }, 429);
+  // 答案范围约 0–200，乱猜一次只有约 1/150 的机会；每题只能答一次
   const kind = randomInt(3);
-  let a = 2 + randomInt(18), b = 2 + randomInt(9), q, ans;
+  let a = 11 + randomInt(89), b = 11 + randomInt(89), q, ans;
   if (kind === 0) { q = `${a} + ${b} = ?`; ans = a + b; }
   else if (kind === 1) { if (b > a) [a, b] = [b, a]; q = `${a} - ${b} = ?`; ans = a - b; }
-  else { a = 2 + randomInt(8); b = 2 + randomInt(8); q = `${a} × ${b} = ?`; ans = a * b; }
+  else { a = 3 + randomInt(17); b = 3 + randomInt(7); q = `${a} × ${b} = ?`; ans = a * b; }
   const id = randomToken(16);
   await env.DB.prepare(`INSERT INTO captchas (id, answer_hash, expires_at, used) VALUES (?1, ?2, ?3, 0)`)
     .bind(id, await sha256Hex(id + ':' + ans), Date.now() + 5 * 60 * 1000).run();
@@ -124,7 +127,8 @@ export async function requestOtp(env, req, email, purpose) {
     .bind(email, purpose).first();
   if (recent && now - recent.created_at < OTP_COOLDOWN_MS)
     throw new OtpError(`请等待 ${Math.ceil((OTP_COOLDOWN_MS - (now - recent.created_at)) / 1000)} 秒后再重新发送验证码。`);
-  for (const [k, rule] of [[`otp-e:${purpose}:${email}`, LIMITS.otpPerEmail], [`otp-ip:${clientIp(req)}`, LIMITS.otpPerIp]]) {
+  for (const [k, rule] of [[`otp-e:${purpose}:${email}`, LIMITS.otpPerEmail], [`otp-ip:${clientIp(req)}`, LIMITS.otpPerIp],
+    ['otp-all-h', LIMITS.otpGlobalHour], ['otp-all-d', LIMITS.otpGlobalDay]]) {
     const rl = await hitRateLimit(env, k, ...rule);
     if (!rl.ok) throw new OtpError(`发送验证码过于频繁，请 ${waitText(rl.retryAfter)}后再试。`);
   }
@@ -254,6 +258,8 @@ export async function handleAuthApi(req, env, path) {
         if (e) return json({ ok: false, message: e }, 400);
         if (await env.DB.prepare(`SELECT 1 FROM users WHERE email = ?1`).bind(email).first())
           return json({ ok: false, message: '该邮箱已注册。' }, 409);
+        const rlr = await hitRateLimit(env, 'reg:' + ip, ...LIMITS.registerPerIp);
+        if (!rlr.ok) return json({ ok: false, message: '这个网络今天注册的账户太多了，请明天再试。' }, 429);
         const id = crypto.randomUUID();
         await env.DB.prepare(`INSERT INTO users (id, email, password_hash, is_admin, status, created_at, last_login_at, last_login_ip)
            VALUES (?1, ?2, ?3, 0, 'active', ?4, ?4, ?5)`).bind(id, email, await hashPassword(body.password), Date.now(), ip).run();
@@ -271,6 +277,8 @@ export async function handleAuthApi(req, env, path) {
         if (locked) return json({ ok: false, message: `尝试次数过多，请 ${locked} 分钟后再试，或用"找回密码"重设密码。` }, 423);
         const n = await countAttempt(env, key);
         const u = await env.DB.prepare(`SELECT id, password_hash, status FROM users WHERE email = ?1 AND is_admin = 0`).bind(email).first();
+        // 邮箱不存在时也算一次哈希，响应时间一样，别人无法据此判断某个邮箱是否注册过
+        if (!u) await verifyPassword(body.password, DUMMY_HASH);
         if (!u || !await verifyPassword(body.password, u.password_hash))
           return json({ ok: false, message: `邮箱或密码错误（第 ${n} / ${MAX_LOGIN_ATTEMPTS} 次）。` }, 401);
         if (u.status !== 'active') return json({ ok: false, message: '该账户已被停用，如有疑问请联系管理员。' }, 403);

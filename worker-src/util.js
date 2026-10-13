@@ -23,6 +23,24 @@ export const PAGE_CSP = [
   "form-action 'self'",
 ].join('; ');
 
+// 检测页 / 检测服务管理页（由 Worker 返回的 server/static 页面）：脚本只允许本站和固定版本的 cdnjs 库；
+// pdf.js 的后台线程来自 cdnjs，字体与字符映射表来自 jsDelivr
+export const BACKEND_PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'self' https://cdnjs.cloudflare.com",
+  "worker-src 'self' blob: https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
+  "img-src 'self' data: blob:",
+  "connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join('; ');
+// 轻量版（pages-static）有一小段内联脚本
+export const LITE_CSP = BACKEND_PAGE_CSP.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'");
+
 export function json(obj, status = 200, extra = {}) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -185,6 +203,9 @@ export const LIMITS = {
   authPerIp: [60, 600],      // 登录 / 注册 / 找回密码接口，每个 IP 每 10 分钟
   captchaPerIp: [120, 600],
   detectPerUser: [600, 3600], // 每个账户每小时最多提交检测的次数
+  registerPerIp: [5, 86400],  // 每个 IP 每天最多注册几个账户（防批量注册薅免费额度）
+  otpGlobalHour: [40, 3600],  // 全站每小时最多发多少封验证码邮件（Resend 免费版每天 100 封，防被刷光）
+  otpGlobalDay: [95, 86400],
 };
 
 export async function audit(env, actor, action, detail, ip) {
@@ -210,7 +231,9 @@ export const today = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().
 // ---------- 存在 D1 里的密钥（由 GitHub 工作流"写入网站密钥"自动写入，不经过聊天、不进公开仓库） ----------
 // Cloudflare 后台里设置的同名 Secret 优先；没有时用 D1 settings 表里 secret:<名称> 的值。每个实例缓存 60 秒。
 let _secCache = null, _secAt = 0;
-export const SETTABLE_SECRETS = ['KEY_SIGNING_SECRET', 'RESEND_API_KEY', 'TURNSTILE_SECRET_KEY'];
+export const SETTABLE_SECRETS = ['KEY_SIGNING_SECRET', 'RESEND_API_KEY', 'TURNSTILE_SECRET_KEY', 'BACKEND_URL', 'BACKEND_PROXY_SECRET'];
+// 这几项以 D1 里的值为准（wrangler.toml 里的旧值是公开的，只作后备）
+const STORED_WINS = ['BACKEND_URL'];
 export async function withStoredSecrets(env) {
   if (!env.DB) return env;
   if (!_secCache || Date.now() - _secAt > 60_000) {
@@ -221,7 +244,7 @@ export async function withStoredSecrets(env) {
     } catch (e) { console.error('[secrets]', e); _secCache = _secCache || {}; }
   }
   const extra = {};
-  for (const k of SETTABLE_SECRETS) if (!env[k] && _secCache[k]) extra[k] = _secCache[k];
+  for (const k of SETTABLE_SECRETS) if ((!env[k] || STORED_WINS.includes(k)) && _secCache[k]) extra[k] = _secCache[k];
   return Object.keys(extra).length ? Object.assign({}, env, extra) : env;
 }
 export const resetSecretCache = () => { _secCache = null; };
@@ -239,6 +262,7 @@ export async function handleSetupSecret(req, env) {
   const done = [];
   for (const [k, v] of Object.entries(body.secrets || {})) {
     if (!SETTABLE_SECRETS.includes(k) || typeof v !== 'string' || !v.trim() || v.length > 500) continue;
+    if (k === 'BACKEND_URL' && !/^https:\/\/[a-z0-9-]+\.modal\.run$/.test(v.trim())) continue;
     await setSetting(env, 'secret:' + k, v.trim());
     done.push(k);
   }

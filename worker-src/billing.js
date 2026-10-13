@@ -18,6 +18,7 @@ export async function billingConfig(env) {
   return {
     billing_enabled: (await getSetting(env, 'billing_enabled', '0')) === '1',
     free_daily_chars: parseInt(await getSetting(env, 'free_daily_chars', '50000'), 10) || 0,
+    site_daily_chars: parseInt(await getSetting(env, 'site_daily_chars', '1000000'), 10) || 0,
     register_open: (await getSetting(env, 'register_open', '1')) === '1',
     plans,
     payment_ready: Object.keys(PAYMENT_PROVIDERS).some((k) => PAYMENT_PROVIDERS[k].configured(env)),
@@ -81,6 +82,12 @@ export async function usageToday(env, userId) {
 export async function planCharge(env, s, n) {
   if (s.isAdmin) return { ok: true, fromDaily: n, fromBalance: 0 };
   const cfg = await billingConfig(env);
+  // 全站每日总字数上限（防止大量账户一起刷，把 Modal 费用用光）；0 = 不限
+  if (cfg.site_daily_chars > 0) {
+    const t = await env.DB.prepare(`SELECT COALESCE(SUM(chars), 0) AS n FROM usage_daily WHERE day = ?1`).bind(today()).first();
+    if ((t?.n || 0) + n > cfg.site_daily_chars)
+      return { ok: false, message: '今天全站的检测量已达到上限，请明天再试（北京时间零点恢复）。' };
+  }
   const used = (await usageToday(env, s.user_id)).chars;
   const planActive = s.plan_until > Date.now();
   const cap = planActive ? (s.plan_daily_chars || Infinity) : (cfg.billing_enabled ? cfg.free_daily_chars : (cfg.free_daily_chars || Infinity));
@@ -113,7 +120,8 @@ export async function detectRateOk(env, s) {
 // ---------- 给检测服务用的 Key：登录用户不用再手动填 Key，由 Worker 代为签发（与后端 keys.py 同一套签名） ----------
 export async function mintBackendKey(env, s) {
   const now = Math.floor(Date.now() / 1000);
-  const payload = { i: (s.isAdmin ? 'adm' : 'u') + s.user_id.replace(/-/g, '').slice(0, 7), n: String(s.email).slice(0, 40),
+  if (!env.KEY_SIGNING_SECRET) throw new Error('KEY_SIGNING_SECRET not configured');
+  const payload = { i: (s.isAdmin ? 'adm' : 'u') + s.user_id.replace(/-/g, '').slice(0, 20), n: String(s.email).slice(0, 40),
     e: now + 3600, q: 0, t: now };
   const p64 = b64urlText(JSON.stringify(payload));
   const sig = b64url((await hmacBytes(fromHex(env.KEY_SIGNING_SECRET), p64)).slice(0, 24));

@@ -21,8 +21,8 @@
  * 注意：此文件由 build.mjs 生成，请修改 pages-static/ 下的源文件后重新生成。
  */
 
-import { json as sjson, html, SECURITY_HEADERS, readJson, clientIp, withStoredSecrets, handleSetupSecret } from './worker-src/util.js';
-import { handleAuthApi, getSession, adminSlug, SESSION_COOKIE } from './worker-src/auth.js';
+import { json as sjson, html, SECURITY_HEADERS, readJson, clientIp, sameOrigin, BACKEND_PAGE_CSP, LITE_CSP, withStoredSecrets, handleSetupSecret } from './worker-src/util.js';
+import { handleAuthApi, getSession, adminSlug, SESSION_COOKIE, clearCookie } from './worker-src/auth.js';
 import { handleBillingApi, planCharge, recordCharge, detectRateOk, mintBackendKey, hasAnyQuota, settleFileJob } from './worker-src/billing.js';
 import { handleAdminApi } from './worker-src/admin.js';
 import { i18nResponse, injectI18n } from './worker-src/i18n.js';
@@ -44,13 +44,25 @@ export default {
     if (url.pathname === '/__i18n.js') return i18nResponse();      // 中英文界面切换脚本
     if (url.pathname === '/api/setup/secret') return withSecurity(await handleSetupSecret(request, env));
     env = Object.assign({}, await withStoredSecrets(env), { CTX: ctx });
-    const resp = authEnabled(env) ? await gated(request, env, url) : await legacy(request, env, url);
+    let resp;
+    if (authEnabled(env)) {
+      // 登录模式下缺少密钥（例如数据库暂时读不到）时暂停服务，而不是退回"无需登录"的公开模式
+      if (!env.RESEND_API_KEY || !env.KEY_SIGNING_SECRET) resp = maintenance(url);
+      else resp = await gated(request, env, url);
+    } else resp = await legacy(request, env, url);
     return withSecurity(injectI18n(resp));
   }
 };
 
+// 绑定了数据库并设置了管理员邮箱，就是登录模式（AUTH_DISABLED=1 可在紧急情况下临时关闭）
 function authEnabled(env) {
-  return !!(env.DB && env.RESEND_API_KEY && env.KEY_SIGNING_SECRET && env.ADMIN_EMAIL) && env.AUTH_DISABLED !== '1';
+  return !!(env.DB && env.ADMIN_EMAIL) && env.AUTH_DISABLED !== '1';
+}
+
+function maintenance(url) {
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/v1/') || url.pathname === '/health')
+    return sjson({ error: 'maintenance', message: '网站正在维护，请稍后再试。' }, 503, { 'Retry-After': '120' });
+  return html(notFoundPage().replace('页面不存在</h1>', '网站正在维护，请稍后再试。</h1>'), 503, { 'Retry-After': '120' });
 }
 
 function withSecurity(resp) {
@@ -107,6 +119,11 @@ async function gated(request, env, url) {
     return html(authPage(p.slice(1)));
   }
   if (isGet && p === '/admin-link') return html(adminLinkRequestPage());
+  if (isGet && p === '/logout') {
+    // 检测页顶部的"退出"链接（检测页的安全策略不允许内联脚本，所以用普通链接）
+    if (s) await env.DB.prepare(`DELETE FROM sessions WHERE id = ?1`).bind(s.sid).run();
+    return new Response(null, { status: 302, headers: { Location: url.origin + '/home', 'Set-Cookie': clearCookie, 'Cache-Control': 'no-store' } });
+  }
   if (isGet && p.startsWith('/login/')) {
     const slug = p.slice('/login/'.length);
     if (slug && slug === await adminSlug(env)) return html(adminLoginPage(slug), 200, { 'Cache-Control': 'no-store' });
@@ -151,9 +168,9 @@ async function gated(request, env, url) {
   if (p === '/health' && isGet && !url.searchParams.has('live')) return cachedHealth(request, env, url, s);
 
   // 检测服务（Modal）：Worker 代用户带上检测 Key，并在提交检测时核对、扣减额度
-  const headers = new Headers(request.headers);
-  headers.delete('Cookie');                                   // 本站登录凭证不发给后端
-  if (!headers.get('Authorization') && !headers.get('X-API-Key')) headers.set('Authorization', 'Bearer ' + await mintBackendKey(env, s));
+  if (!isGet && !sameOrigin(request)) return sjson({ error: 'bad_origin', message: '请求来源不正确。' }, 403);
+  let headers;
+  try { headers = await backendRequestHeaders(request, env, s); } catch { return maintenance(url); }
   if (p === '/v1/detect' && request.method === 'POST') {
     const bad = await detectRateOk(env, s);
     if (bad) return sjson({ error: 'rate_limited', message: bad }, 429);
@@ -204,10 +221,13 @@ function backendPage(request, url) {
   if (!f) return null;
   const ext = name.split('.').pop();
   const cache = ext === 'html' ? 'no-cache' : (url.searchParams.get('v') === f.v ? 'public, max-age=31536000, immutable' : 'public, max-age=300');
-  return new Response(f.body, { headers: { 'Content-Type': STATIC_TYPES[ext] || 'application/octet-stream', 'Cache-Control': cache } });
+  const h = { 'Content-Type': STATIC_TYPES[ext] || 'application/octet-stream', 'Cache-Control': cache };
+  if (ext === 'html') h['Content-Security-Policy'] = BACKEND_PAGE_CSP;
+  return new Response(f.body, { headers: h });
 }
 
 const HEALTH_KEY = 'backend_health';
+const backendHeaders = (env) => (env.BACKEND_PROXY_SECRET ? { 'X-ATC-Proxy': env.BACKEND_PROXY_SECRET } : {});
 
 async function cachedHealth(request, env, url, s) {
   let h = null;
@@ -215,7 +235,7 @@ async function cachedHealth(request, env, url, s) {
   if (!h) {
     // 第一次（还没有缓存）：真正问一次检测服务并记下来
     try {
-      const r = await fetch(env.BACKEND_URL.replace(/\/+$/, '') + '/health');
+      const r = await fetch(env.BACKEND_URL.replace(/\/+$/, '') + '/health', { headers: backendHeaders(env) });
       if (r.ok) { h = await r.json(); await saveHealth(env, h); }
     } catch { /* 连不上 */ }
   }
@@ -242,9 +262,18 @@ function afterBackend(env, url, request, r) {
     // 只在检测完成时更新（查询进度时页面每隔几秒请求一次，不必每次都更新）
     env.CTX.waitUntil(r.clone().json().then((j) => {
       if (!j || j.status !== 'done') return null;
-      return fetch(env.BACKEND_URL.replace(/\/+$/, '') + '/health').then((x) => x.ok ? x.json() : null).then((h) => h && saveHealth(env, h));
+      return fetch(env.BACKEND_URL.replace(/\/+$/, '') + '/health', { headers: backendHeaders(env) }).then((x) => x.ok ? x.json() : null).then((h) => h && saveHealth(env, h));
     }).catch(() => {}));
   } catch { /* 忽略 */ }
+}
+
+async function backendRequestHeaders(request, env, s) {
+  const headers = new Headers(request.headers);
+  headers.delete('Cookie');                                   // 本站登录凭证不发给后端
+  // 一律用 Worker 为当前账户签发的 Key（不采用用户自己带的 Key，避免绕过本站的额度统计）
+  headers.delete('X-API-Key');
+  headers.set('Authorization', 'Bearer ' + await mintBackendKey(env, s));
+  return headers;
 }
 
 function injectBar(resp, s) {
@@ -259,7 +288,7 @@ function serveLite(request, path) {
   switch (path) {
     case '/':
     case '/index.html':
-      return asset(INDEX_HTML, 'text/html; charset=utf-8');
+      { const r = asset(INDEX_HTML, 'text/html; charset=utf-8'); r.headers.set('Content-Security-Policy', LITE_CSP); return r; }
     case '/style.css':
       return asset(STYLE_CSS, 'text/css; charset=utf-8');
     case '/app.js':
@@ -274,6 +303,8 @@ async function proxy(request, env, url) {
   const target = backend + url.pathname + url.search;
   const headers = new Headers(request.headers);
   headers.delete('host');
+  headers.delete('X-ATC-Proxy');
+  if (env.BACKEND_PROXY_SECRET) headers.set('X-ATC-Proxy', env.BACKEND_PROXY_SECRET);   // 证明请求来自本站 Worker
   headers.set('X-Forwarded-Host', url.host);
   headers.set('X-Forwarded-Proto', 'https');
   const ip = request.headers.get('CF-Connecting-IP');

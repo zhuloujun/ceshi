@@ -20,7 +20,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gen_english_ai as g  # noqa: E402
 
 DATA = Path(__file__).resolve().parent / "data"
-BASE = "https://zhuloujun--ai-text-checker-web.modal.run"
+import hmac as _h, hashlib as _hl  # 检测服务地址保密、只接受本站转发：地址和通行证都由管理员密码算出
+_at = __import__("os").environ.get("ADMIN_TOKEN", "").encode()
+_lab = "atc-" + _h.new(_at, b"ai-text-checker/modal-label/v1", _hl.sha256).hexdigest()[:20]
+print("::add-mask::" + _lab, flush=True)
+BASE = "https://zhuloujun--" + _lab + ".modal.run"
+_o = urllib.request.build_opener(); _o.addheaders = [("X-ATC-Proxy", _h.new(_at, b"ai-text-checker/worker-proxy/v1", _hl.sha256).hexdigest())]
+urllib.request.install_opener(_o)
 HUMAN_SOURCES = [  # (数据集, 配置, 文本字段, 名称)——均为 ChatGPT 之前的真人中文
     ("pleisto/wikipedia-cn-20230720-filtered", None, "completion", "维基百科"),
     ("wangrui6/Zhihu-KOL", None, "RESPONSE", "知乎长回答"),

@@ -1,5 +1,7 @@
 """运行配置：全部来自环境变量（由部署平台注入：Modal 的 Secret、Hugging Face Space 的 Variables and secrets 等）。"""
 import json
+import hashlib
+import hmac
 import os
 from pathlib import Path
 
@@ -155,6 +157,11 @@ JOB_TTL_SECONDS = _int("JOB_TTL_SECONDS", 3600)
 # KEY_SECRET：签发 Key 的签名密钥；ADMIN_TOKEN：管理页面密码。两者都应设为 Secret。
 KEY_SECRET = os.getenv("KEY_SECRET", "")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+# 只接受经本站 Cloudflare Worker 转发的请求：Worker 在每个请求头里带上 X-ATC-Proxy（由 ADMIN_TOKEN 算出），
+# 直接访问 Modal 地址的请求一律当作不存在（防止绕过登录、防止有人反复访问把服务叫醒、伪造来源 IP 猜管理员密码）。
+# 部署工作流会设 REQUIRE_PROXY_SECRET=1；本地测试不设，照常可用。
+REQUIRE_PROXY_SECRET = os.getenv("REQUIRE_PROXY_SECRET", "") == "1"
+PROXY_SECRET = hmac.new(ADMIN_TOKEN.encode(), b"ai-text-checker/worker-proxy/v1", hashlib.sha256).hexdigest() if ADMIN_TOKEN else ""
 REVOKED_KEY_IDS = {k.strip() for k in os.getenv("REVOKED_KEY_IDS", "").split(",") if k.strip()}
 REQUIRE_KEY = _bool("REQUIRE_KEY", True)               # False = 网页和接口都无需 Key（不建议公开 Space 这样做）
 DEFAULT_DAILY_CHARS = _int("DEFAULT_DAILY_CHARS", 1_000_000)

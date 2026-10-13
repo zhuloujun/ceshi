@@ -51,6 +51,16 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 @app.middleware("http")
+async def _only_via_worker(request, call_next):
+    # 必须经本站 Worker 转发（见 config.REQUIRE_PROXY_SECRET）；否则一律 404，不暴露这里是什么服务
+    if config.REQUIRE_PROXY_SECRET:
+        got = request.headers.get("x-atc-proxy", "")
+        if not config.PROXY_SECRET or not hmac.compare_digest(got.encode(), config.PROXY_SECRET.encode()):
+            return JSONResponse({"error": "not_found"}, status_code=404)
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def _no_stale_assets(request, call_next):
     # 让浏览器每次都向服务器确认网页和脚本是否更新（未更新时只返回 304，很快），
     # 避免浏览器继续用旧版 app.js，导致新功能（如本地文稿库）不生效
@@ -74,6 +84,7 @@ def _versioned_html(name: str) -> HTMLResponse:
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 _admin_fail: dict[str, list[float]] = {}
+_admin_fail_all: list[float] = []          # 所有来源合计：防止换 IP / 伪造 IP 反复猜管理员密码
 
 
 def err(status: int, code: str, message: str):
@@ -105,18 +116,21 @@ def require_key(authorization: str | None, x_api_key: str | None) -> dict:
 
 
 def require_admin(request: Request, token: str | None):
-    # 经 Cloudflare Worker 转发时，真实访客 IP 在 X-Forwarded-For 的第一个
-    fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    # 经 Cloudflare Worker 转发时，真实访客 IP 在 X-Forwarded-For 的第一个；
+    # 只有确认是 Worker 转发的请求才相信这个头（否则谁都能伪造它来绕过次数限制）
+    fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() if config.REQUIRE_PROXY_SECRET else ""
     ip = fwd or (request.client.host if request.client else "?")
     now = time.time()
     fails = [t for t in _admin_fail.get(ip, []) if now - t < 600]
-    if len(fails) >= 10:
+    _admin_fail_all[:] = [t for t in _admin_fail_all if now - t < 600]
+    if len(fails) >= 10 or len(_admin_fail_all) >= 30:
         err(429, "too_many_attempts", "管理员密码错误次数过多，请 10 分钟后再试。")
     if not config.ADMIN_TOKEN:
         err(503, "not_configured", "未设置 ADMIN_TOKEN。请在 GitHub 仓库 Settings → Secrets and variables → Actions 里添加 HF_ADMIN_TOKEN 后重新部署。")
     if not token or not hmac.compare_digest(token.encode(), config.ADMIN_TOKEN.encode()):
         fails.append(now)
         _admin_fail[ip] = fails
+        _admin_fail_all.append(now)
         err(401, "bad_admin_token", "管理员密码不正确。")
 
 

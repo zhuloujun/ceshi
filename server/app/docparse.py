@@ -9,9 +9,25 @@ from xml.etree import ElementTree as ET
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 
+MAX_DOCX_XML = 200 * 1024 * 1024        # 解压后的正文 XML 最大 200 MB（防"压缩炸弹"把内存撑爆）
+MAX_PDF_PAGES = 2000
+
+
 def _docx_text(data: bytes) -> str:
     with zipfile.ZipFile(io.BytesIO(data)) as z:
-        xml = z.read("word/document.xml")
+        try:
+            info = z.getinfo("word/document.xml")
+        except KeyError:
+            raise ValueError("不是有效的 .docx 文件（缺少 word/document.xml）")
+        if info.file_size > MAX_DOCX_XML or (info.compress_size and info.file_size / info.compress_size > 400):
+            raise ValueError("文档内容异常（解压后过大），请检查文件")
+        with z.open(info) as f:
+            xml = f.read(MAX_DOCX_XML + 1)
+    if len(xml) > MAX_DOCX_XML:
+        raise ValueError("文档内容异常（解压后过大），请检查文件")
+    # Word 正文里不会有 DTD / 实体定义；有的话可能是"实体膨胀"攻击，直接拒绝
+    if b"<!DOCTYPE" in xml[:4096].upper() or b"<!ENTITY" in xml.upper():
+        raise ValueError("文档格式异常，请用 Word 另存为 .docx 后再上传")
     root = ET.fromstring(xml)
     paras = []
     for p in root.iter(f"{W}p"):
@@ -32,7 +48,7 @@ def _docx_text(data: bytes) -> str:
 
 def _pdf_text(data: bytes) -> str:
     from pdfminer.high_level import extract_text
-    return extract_text(io.BytesIO(data))
+    return extract_text(io.BytesIO(data), maxpages=MAX_PDF_PAGES)
 
 
 def _txt(data: bytes) -> str:
