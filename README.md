@@ -51,19 +51,17 @@ Cloudflare 后台 → **Workers 和 Pages** → `ai-text-checker` → **设置**
 
 **费用**：Modal 只在服务运行时计费（8 核 CPU、12 GB 内存约 $0.47/小时）。没人访问时 10 分钟后自动关闭、不计费；下次打开自动启动（约 1 分钟加载模型）。20 万字完整检测约 $0.1，每月 $30 免费额度对个人使用绰绰有余。用量可在 Modal 的 **Settings → Usage / Billing** 页面查看。
 
-### C. 注册登录、邮箱验证码、管理后台（需要添加两个 GitHub Secret）
+### C. 注册登录、邮箱验证码、管理后台（只需添加一个 GitHub Secret）
 
-代码已经部署好；添加下面两个 Secret 并重新运行一次"部署到 Cloudflare"后，网站会自动切换为"注册登录后才能使用"。没添加之前，网站照旧公开访问。
+数据库（Cloudflare D1 `ai_text_checker_db`）和签发检测 Key 的密钥都已配好。只差发验证码邮件用的 Resend 密钥；添加后网站自动切换为"注册登录后才能使用"，没添加之前照旧公开访问。
 
-1. **Resend 邮件密钥**：登录 <https://resend.com/api-keys> → **Create API Key** → Name 填 `ai-text-checker`，Permission 选 **Sending access**，Domain 选 `1258099.xyz` → **Add**。复制显示的 `re_…`（只显示一次）。
-   打开 <https://github.com/zhuloujun/ceshi/settings/secrets/actions> → **New repository secret** → Name 填 `RESEND_API_KEY`，Secret 粘贴 `re_…` → **Add secret**。
-2. **Cloudflare 部署令牌**：登录 <https://dash.cloudflare.com/profile/api-tokens> → **Create Token** → 模板 **Edit Cloudflare Workers** → **Use template** → Account Resources 选你的账户、Zone Resources 选 **All zones** → **Continue to summary** → **Create Token**，复制令牌。
-   同样在 GitHub Secrets 添加：Name `CLOUDFLARE_API_TOKEN`，Secret 粘贴令牌。
-3. 打开 <https://github.com/zhuloujun/ceshi/actions> → 左侧 **部署到 Cloudflare** → **Run workflow**。
+1. 登录 <https://resend.com/api-keys>（账户 orgxyz）→ **Create API Key** → Name 填 `ai-text-checker`，Permission 选 **Sending access**，Domain 选 `9369369.xyz`（需要在 <https://resend.com/domains> 显示 Verified）→ **Add**，复制 `re_…`（只显示一次）。
+2. 打开 <https://github.com/zhuloujun/ceshi/settings/secrets/actions> → **New repository secret** → Name 填 `RESEND_API_KEY`，Secret 粘贴 `re_…` → **Add secret**。
+3. 由维护者运行"写入网站密钥"工作流（需要一次性设置令牌），网站会给管理员邮箱发一封测试邮件。
 
 完成后：
-- 首页 `/home`，注册 `/register`，登录 `/login`，我的账户 `/account`。
-- 管理员登录地址是保密的：打开 `/admin-link`，填管理员邮箱 `orgxyz@hotmail.com`，登录地址会发到这个邮箱。第一次登录时点"设置管理员密码"。管理后台里可以修改登录地址。
+- 首页 `/home`，注册 `/register`，登录 `/login`，我的账户 `/account`（修改密码在这里）。
+- 管理员登录地址是保密的：打开 `/admin-link`，填管理员邮箱 `orgxyz@hotmail.com`，登录地址会发到这个邮箱。第一次登录时点"设置管理员密码"。管理后台里可以管理注册用户、修改登录地址。
 - 右上角按钮切换中文 / 英文，默认英文。
 
 ---
