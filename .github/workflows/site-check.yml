@@ -1,0 +1,40 @@
+# 检查网站（Cloudflare Worker）的注册登录模式是否已开启：不访问 Modal，不花 Modal 额度
+name: 网站登录功能检查
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "网站地址"
+        default: "https://ai-text-checker.agi001.workers.dev"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 检查
+        env:
+          SITE: ${{ github.event.inputs.site }}
+        run: |
+          python3 - <<'PY'
+          import os, urllib.request, json
+          site = os.environ["SITE"].rstrip("/")
+          class NR(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *a, **k): return None
+          op = urllib.request.build_opener(NR())
+          def get(p):
+              try:
+                  r = op.open(urllib.request.Request(site + p, headers={"User-Agent": "site-check"}), timeout=30); return r.status, r.headers, r.read()
+              except urllib.error.HTTPError as e: return e.code, e.headers, e.read()
+          out = {}
+          c, h, b = get("/health"); out["/health"] = f"{c} {b[:120].decode('utf-8','ignore')}"
+          for p in ["/", "/home", "/login", "/register", "/forgot", "/admin", "/account", "/admin-link", "/__i18n.js"]:
+              c, h, b = get(p)
+              out[p] = f"{c} {h.get('Location') or ''} {len(b)}B"
+          c, h, b = get("/api/auth/captcha"); out["captcha"] = f"{c} {'ok' if b'image' in b else b[:80]}"
+          for k, v in out.items(): print(f"::notice title={k}::{v}")
+          PY
