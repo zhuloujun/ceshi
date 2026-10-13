@@ -242,7 +242,20 @@ export async function handleSetupSecret(req, env) {
     await setSetting(env, 'secret:' + k, v.trim());
     done.push(k);
   }
+  // 令牌只能用一次：写入后立即作废
+  await env.DB.prepare(`DELETE FROM settings WHERE key IN ('setup_token_hash', 'setup_token_until')`).run();
   resetSecretCache();
   await audit(env, 'setup', 'secrets_written', done.join(','), clientIp(req));
-  return json({ ok: true, written: done });
+  // 写入了邮件密钥时，顺便给管理员邮箱发一封测试邮件，确认发件域名已在 Resend 验证通过
+  let mail = null;
+  const key = body.secrets?.RESEND_API_KEY || env.RESEND_API_KEY;
+  if (key && env.ADMIN_EMAIL) {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST', headers: { Authorization: `Bearer ${String(key).trim()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: env.RESEND_FROM_EMAIL, to: env.ADMIN_EMAIL, subject: 'AI Text Detection · email test / 邮件测试',
+        html: '<p>The site can now send verification emails.</p><p>网站已经可以发送验证码邮件。</p>' }),
+    }).catch((e) => ({ ok: false, status: 0, text: async () => String(e) }));
+    mail = r.ok ? 'sent' : `failed (${r.status}): ${(await r.text().catch(() => '')).slice(0, 300)}`;
+  }
+  return json({ ok: true, written: done, test_email: mail });
 }
