@@ -231,7 +231,7 @@ export const today = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().
 // ---------- 存在 D1 里的密钥（由 GitHub 工作流"写入网站密钥"自动写入，不经过聊天、不进公开仓库） ----------
 // Cloudflare 后台里设置的同名 Secret 优先；没有时用 D1 settings 表里 secret:<名称> 的值。每个实例缓存 60 秒。
 let _secCache = null, _secAt = 0;
-export const SETTABLE_SECRETS = ['KEY_SIGNING_SECRET', 'RESEND_API_KEY', 'TURNSTILE_SECRET_KEY', 'BACKEND_URL', 'BACKEND_PROXY_SECRET'];
+export const SETTABLE_SECRETS = ['KEY_SIGNING_SECRET', 'RESEND_API_KEY', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'BACKEND_URL', 'BACKEND_PROXY_SECRET'];
 // 这几项以 D1 里的值为准（wrangler.toml 里的旧值是公开的，只作后备）
 const STORED_WINS = ['BACKEND_URL'];
 export async function withStoredSecrets(env) {
