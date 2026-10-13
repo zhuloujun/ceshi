@@ -4,6 +4,10 @@ name: 线上诊断
 on:
   workflow_dispatch:
 
+
+permissions:
+  contents: read
+
 jobs:
   probe:
     runs-on: ubuntu-latest

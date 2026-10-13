@@ -19,6 +19,10 @@ concurrency:
   group: deploy-cloudflare
   cancel-in-progress: false
 
+
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: 检查并部署
