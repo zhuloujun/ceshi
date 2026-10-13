@@ -4,6 +4,10 @@ name: 校准诊断
 on:
   workflow_dispatch:
 
+
+permissions:
+  contents: read
+
 jobs:
   diag:
     runs-on: ubuntu-latest

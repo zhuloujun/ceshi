@@ -5,6 +5,10 @@ name: 线上验收检测
 on:
   workflow_dispatch:
 
+
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest

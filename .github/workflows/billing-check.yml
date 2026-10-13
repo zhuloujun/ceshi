@@ -8,6 +8,10 @@ on:
         description: "从哪天开始（UTC）"
         default: "2026-09-20"
 
+
+permissions:
+  contents: read
+
 jobs:
   billing:
     runs-on: ubuntu-latest

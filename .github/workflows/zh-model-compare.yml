@@ -12,6 +12,9 @@ on:
         description: "base64(xz(JSON 列表 [{name, text}]))，可留空"
         default: ""
 
+permissions:
+  contents: read
+
 jobs:
   compare:
     runs-on: ubuntu-latest
