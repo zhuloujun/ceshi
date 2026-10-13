@@ -1,0 +1,21 @@
+# 计算网页引用的第三方脚本的完整性校验值（SRI），用来防止 CDN 上的文件被篡改
+name: 计算第三方脚本校验值
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sri:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          for u in https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js \
+                   https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js \
+                   https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js; do
+            h=$(curl -sfL "$u" | openssl dgst -sha384 -binary | openssl base64 -A)
+            echo "::notice title=$u::sha384-$h"
+          done
