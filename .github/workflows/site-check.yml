@@ -39,7 +39,10 @@ jobs:
           for p in ["/", "/home", "/login", "/register", "/forgot", "/admin", "/account", "/admin-link", "/__i18n.js"]:
               c, h, b = get(p)
               out[p] = f"{c} {h.get('Location') or ''} {len(b)}B"
-          c, h, b = get("/api/auth/captcha"); out["captcha"] = f"{c} {'ok' if b'image' in b else b[:80]}"
+          c, h, b = get("/api/auth/captcha")
+          try: cj = json.loads(b)
+          except Exception: cj = {}
+          out["captcha"] = f"{c} {'ok' if cj.get('image') else b[:80]} · Turnstile {'已启用' if cj.get('turnstile_site_key') else '未启用'}"
           # 检测服务（Modal）是否只接受本站转发：旧地址应已失效，新地址不带通行证应返回 404
           import hmac, hashlib
           at = os.environ.get("ADMIN_TOKEN", "").encode()
