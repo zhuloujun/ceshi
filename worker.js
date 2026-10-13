@@ -21,7 +21,7 @@
  * 注意：此文件由 build.mjs 生成，请修改 pages-static/ 下的源文件后重新生成。
  */
 
-import { json as sjson, html, SECURITY_HEADERS, readJson, clientIp } from './worker-src/util.js';
+import { json as sjson, html, SECURITY_HEADERS, readJson, clientIp, withStoredSecrets, handleSetupSecret } from './worker-src/util.js';
 import { handleAuthApi, getSession, adminSlug, SESSION_COOKIE } from './worker-src/auth.js';
 import { handleBillingApi, planCharge, recordCharge, detectRateOk, mintBackendKey, hasAnyQuota, settleFileJob } from './worker-src/billing.js';
 import { handleAdminApi } from './worker-src/admin.js';
@@ -41,6 +41,8 @@ export default {
     // 注册登录功能需要：D1 数据库、Resend 邮件密钥、签发检测 Key 的密钥。三样都设置好后自动启用；
     // 紧急情况下可以把变量 AUTH_DISABLED 设为 1 临时关闭（恢复成原来的公开访问方式）。
     if (url.pathname === '/__i18n.js') return i18nResponse();      // 中英文界面切换脚本
+    if (url.pathname === '/api/setup/secret') return withSecurity(await handleSetupSecret(request, env));
+    env = await withStoredSecrets(env);
     const resp = authEnabled(env) ? await gated(request, env, url) : await legacy(request, env, url);
     return withSecurity(injectI18n(resp));
   }

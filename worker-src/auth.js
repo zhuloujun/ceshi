@@ -110,7 +110,7 @@ export async function sendEmail(env, to, subject, htmlBody) {
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: env.RESEND_FROM_EMAIL || 'AI 文本检测 <noreply@1258099.xyz>', to, subject, html: htmlBody }),
+    body: JSON.stringify({ from: env.RESEND_FROM_EMAIL || 'Shendu AI Text Detection <noreply@9369369.xyz>', to, subject, html: htmlBody }),
   });
   if (!r.ok) throw new Error(`邮件发送失败（${r.status}）：${(await r.text().catch(() => '')).slice(0, 200)}`);
 }
