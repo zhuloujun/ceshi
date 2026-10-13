@@ -251,6 +251,7 @@ export function adminConsolePage() {
 <label class="row"><input type="checkbox" id="sBill"> 开启收费（关闭时网站免费使用，只受每日免费额度限制）</label>
 <label class="row" style="margin-top:8px"><input type="checkbox" id="sReg"> 开放新用户注册</label>
 <label class="f">每个用户每天免费字数（0 = 收费关闭时不限；收费开启时没有免费额度）</label><input class="i" id="sFree" type="number" min="0" style="max-width:220px">
+<label class="f">全站每天最多检测多少字（所有用户合计，防止被刷光 Modal 额度；0 = 不限）</label><input class="i" id="sSite" type="number" min="0" style="max-width:220px">
 <label class="f">套餐列表（JSON）：price_cents 价格（分）、chars 字数、days 会员天数、daily_chars 会员每日字数、per_unit 按份购买、max_qty 最多份数</label>
 <textarea class="i" id="sPlans" spellcheck="false"></textarea>
 <p class="hint" id="payInfo"></p>
@@ -273,7 +274,7 @@ async function overview(){ ov=await api('/api/admin/overview'); if(!ov.ok){ loca
   const s=ov.stats; $('stats').innerHTML=[['注册用户',s.users],['近 7 天新增',s.users_week],['今日活跃',s.today_users],['今日检测字数',(s.today_chars||0).toLocaleString()],['已付款订单',s.paid_orders+' 笔 / ¥'+((s.paid_cents||0)/100).toFixed(2)],['待支付订单',s.pending_orders]]
     .map(x=>'<div class="card stat"><span class="hint">'+x[0]+'</span><b>'+x[1]+'</b></div>').join('');
   $('curUrl').textContent=ov.login_url;
-  const c=ov.settings; $('sBill').checked=c.billing_enabled; $('sReg').checked=c.register_open; $('sFree').value=c.free_daily_chars; $('sPlans').value=JSON.stringify(c.plans,null,2);
+  const c=ov.settings; $('sBill').checked=c.billing_enabled; $('sReg').checked=c.register_open; $('sFree').value=c.free_daily_chars; $('sSite').value=c.site_daily_chars; $('sPlans').value=JSON.stringify(c.plans,null,2);
   $('payInfo').textContent=c.payment_ready?'已接入在线支付。':'尚未接入在线支付平台：用户下单后生成"待支付"订单，你确认收款后在"订单"里点"标记已付款"即可自动开通。';
 }
 async function act(path,body){ const j=await api(path,body); if(j.need_elevate){ $('elev').classList.remove('hidden'); $('elev').scrollIntoView({behavior:'smooth'}); }
@@ -296,7 +297,7 @@ async function orders(){ const j=await api('/api/admin/orders?status='+$('ost').
 async function oact(id,a){ const b={id,action:a}; if(a==='mark_paid'){ const r=prompt('确认已收到这笔款？可填写收款流水号（可留空）',''); if(r===null) return; b.ref=r; }
   const j=await act('/api/admin/orders/update',b); alert(j.message); orders(); overview(); }
 $('sSave').onclick=async()=>{ let plans; try{ plans=JSON.parse($('sPlans').value);}catch(e){ say($('sMsg'),'套餐 JSON 格式有误：'+e.message); return; }
-  const j=await act('/api/admin/settings',{billing_enabled:$('sBill').checked,register_open:$('sReg').checked,free_daily_chars:parseInt($('sFree').value,10)||0,plans}); say($('sMsg'),j.message,j.ok); };
+  const j=await act('/api/admin/settings',{billing_enabled:$('sBill').checked,register_open:$('sReg').checked,free_daily_chars:parseInt($('sFree').value,10)||0,site_daily_chars:parseInt($('sSite').value,10)||0,plans}); say($('sMsg'),j.message,j.ok); };
 $('rand').onclick=()=>{ const a=new Uint8Array(24); crypto.getRandomValues(a); $('slug').value=Array.from(a,b=>'abcdefghijkmnpqrstuvwxyz23456789'[b%32]).join(''); };
 $('slugGo').onclick=async()=>{ const j=await act('/api/admin/login-url',{slug:$('slug').value.trim()}); say($('slugMsg'),j.message+(j.url?' 新地址：'+j.url:''),j.ok); if(j.ok) overview(); };
 $('outAll').onclick=async()=>{ if(!confirm('退出所有设备（包括当前）？')) return; await api('/api/admin/logout-everywhere',{}); location.href='/home'; };
@@ -317,6 +318,6 @@ export function notFoundPage() {
 export function userBarHtml(email, isAdmin) {
   return `<div id="atc-userbar" style="display:flex;justify-content:flex-end;gap:12px;align-items:center;flex-wrap:wrap;font:13px/1.6 'Noto Sans SC',sans-serif;padding:8px 16px;border-bottom:1px solid rgba(0,0,0,.08)">
 <span style="opacity:.7">${esc(email)}</span>${isAdmin ? '<a href="/admin/console">管理后台</a>' : '<a href="/account">我的账户</a>'}<a href="/home">首页</a>
-<a href="#" onclick="fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(()=>location.href='/home');return false;">退出</a></div>
+<a href="/logout">退出</a></div>
 <style>.key-zone{display:none!important}</style>`;
 }

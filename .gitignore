@@ -7,3 +7,4 @@ tiny_models/
 .DS_Store
 
 server/poetry-classifier/
+server/.web_label

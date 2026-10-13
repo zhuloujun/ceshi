@@ -1,7 +1,7 @@
 """在 Modal（https://modal.com）上运行检测服务。
 
 部署：modal deploy modal_app.py （GitHub Actions 会自动执行，见仓库根目录 README）
-网址：https://zhuloujun--ai-text-checker-web.modal.run
+网址：由部署工作流用管理员密码算出（保密，只接受本站 Cloudflare Worker 转发的请求）
 
 计费说明：Modal 每月送 $30 免费额度（需绑定付款方式；未绑定时为 $1），只在容器运行时计费。
 没人访问时容器会在 scaledown_window（3 分钟）后自动关闭，不再计费；
@@ -42,6 +42,10 @@ EN4_LOCAL = Path(__file__).resolve().parent / "english-doc-classifier-2"
 EN4_DIR = "/models/english-doc-classifier-2"
 HAS_EN4 = (EN4_LOCAL / "config.json").exists()
 CPU_CORES = 4
+# 网址里的名字（https://<用户名>--<名字>.modal.run）：部署工作流用管理员密码算出一个随机名字写进 .web_label，
+# 不写在公开代码里，别人猜不到检测服务的地址（只能经本站 Worker 访问）。没有这个文件时用旧名字。
+_LABEL_FILE = Path(__file__).resolve().parent / ".web_label"
+WEB_LABEL = (_LABEL_FILE.read_text().strip() if _LABEL_FILE.exists() else "") or "ai-text-checker-web"
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -74,6 +78,8 @@ image = (
     # 各文体在独立测试集上的检出率 / 误判率（报告里的"已知误差"一节）
     .add_local_file("tools/eval_result.json", "/root/tools/eval_result.json")
 )
+if _LABEL_FILE.exists():
+    image = image.add_local_file(str(_LABEL_FILE), "/root/.web_label")
 if HAS_POETRY:
     image = image.add_local_dir(str(POETRY_LOCAL), POETRY_DIR)
 if HAS_CLASSICAL:
@@ -105,7 +111,7 @@ calib_volume = modal.Volume.from_name(CALIB_VOLUME_NAME, create_if_missing=True)
     secrets=[modal.Secret.from_name("ai-text-checker")],   # 含 ADMIN_TOKEN
 )
 @modal.concurrent(max_inputs=100)
-@modal.asgi_app()
+@modal.asgi_app(label=WEB_LABEL)
 def web():
     import sys
     sys.path.insert(0, "/root")
