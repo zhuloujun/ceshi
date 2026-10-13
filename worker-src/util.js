@@ -206,3 +206,43 @@ export async function setSetting(env, key, value) {
 }
 
 export const today = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); // 按北京时间计日
+
+// ---------- 存在 D1 里的密钥（由 GitHub 工作流"写入网站密钥"自动写入，不经过聊天、不进公开仓库） ----------
+// Cloudflare 后台里设置的同名 Secret 优先；没有时用 D1 settings 表里 secret:<名称> 的值。每个实例缓存 60 秒。
+let _secCache = null, _secAt = 0;
+export const SETTABLE_SECRETS = ['KEY_SIGNING_SECRET', 'RESEND_API_KEY', 'TURNSTILE_SECRET_KEY'];
+export async function withStoredSecrets(env) {
+  if (!env.DB) return env;
+  if (!_secCache || Date.now() - _secAt > 60_000) {
+    try {
+      const { results } = await env.DB.prepare(`SELECT key, value FROM settings WHERE key LIKE 'secret:%'`).all();
+      _secCache = Object.fromEntries(results.map((r) => [r.key.slice(7), r.value]));
+      _secAt = Date.now();
+    } catch (e) { console.error('[secrets]', e); _secCache = _secCache || {}; }
+  }
+  const extra = {};
+  for (const k of SETTABLE_SECRETS) if (!env[k] && _secCache[k]) extra[k] = _secCache[k];
+  return Object.keys(extra).length ? Object.assign({}, env, extra) : env;
+}
+export const resetSecretCache = () => { _secCache = null; };
+
+// 一次性写入密钥：管理员在 D1 里放一个"设置令牌"的哈希（30 分钟有效），GitHub 工作流带着令牌把密钥写进来
+export async function handleSetupSecret(req, env) {
+  if (req.method !== 'POST' || !env.DB) return json({ ok: false }, 404);
+  const body = await readJson(req);
+  if (!body || typeof body.token !== 'string' || body.token.length < 32) return json({ ok: false }, 404);
+  const rl = await hitRateLimit(env, 'setup:' + clientIp(req), 20, 3600);
+  if (!rl.ok) return json({ ok: false, message: 'rate limited' }, 429);
+  const h = await getSetting(env, 'setup_token_hash');
+  const until = parseInt(await getSetting(env, 'setup_token_until', '0'), 10);
+  if (!h || Date.now() > until || !constEq(h, await sha256Hex(body.token))) return json({ ok: false }, 404);
+  const done = [];
+  for (const [k, v] of Object.entries(body.secrets || {})) {
+    if (!SETTABLE_SECRETS.includes(k) || typeof v !== 'string' || !v.trim() || v.length > 500) continue;
+    await setSetting(env, 'secret:' + k, v.trim());
+    done.push(k);
+  }
+  resetSecretCache();
+  await audit(env, 'setup', 'secrets_written', done.join(','), clientIp(req));
+  return json({ ok: true, written: done });
+}

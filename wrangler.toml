@@ -21,7 +21,7 @@ BACKEND_URL = "https://zhuloujun--ai-text-checker-web.modal.run"
 # 注册登录用的管理员邮箱（只有这个邮箱能登录管理后台；验证码会发到这里）
 ADMIN_EMAIL = "orgxyz@hotmail.com"
 # 验证码邮件的发件人（域名已在 Resend 验证）
-RESEND_FROM_EMAIL = "审读 AI 文本检测 <noreply@1258099.xyz>"
+RESEND_FROM_EMAIL = "Shendu AI Text Detection <noreply@9369369.xyz>"
 
 # 用户、会话、订单等数据（Cloudflare D1，免费额度内使用）
 [[d1_databases]]
