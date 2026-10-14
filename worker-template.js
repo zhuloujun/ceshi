@@ -26,7 +26,9 @@ import { handleAuthApi, getSession, adminSlug, SESSION_COOKIE, clearCookie } fro
 import { handleBillingApi, planCharge, recordCharge, detectRateOk, mintBackendKey, hasAnyQuota, settleFileJob } from './worker-src/billing.js';
 import { handleAdminApi } from './worker-src/admin.js';
 import { i18nResponse, injectI18n } from './worker-src/i18n.js';
-import { landingPage, authPage, accountPage, adminLoginPage, adminLinkRequestPage, adminConsolePage, notFoundPage, userBarHtml } from './worker-src/pages.js';
+import { landingPage, authPage, accountPage, adminLoginPage, adminLinkRequestPage, adminConsolePage, notFoundPage, userBarHtml, legalPage, setSiteContacts, siteFooterHtml } from './worker-src/pages.js';
+import { LEGAL_PAGES, LEGAL_TITLES, legalConfig, legalText, renderLegal } from './worker-src/legal.js';
+import { langOf } from './worker-src/i18n.js';
 
 const INDEX_HTML = __INDEX_HTML__;
 const STYLE_CSS = __STYLE_CSS__;
@@ -113,6 +115,12 @@ async function gated(request, env, url) {
   if (p.startsWith('/api/admin/')) return handleAdminApi(request, env, p, s);
 
   // 公开页面
+  const lc = await legalConfig(env);
+  setSiteContacts(lc.contacts);
+  if (isGet && LEGAL_PAGES.includes(p.slice(1))) {
+    const pg = p.slice(1), lang = langOf(request);
+    return html(legalPage(LEGAL_TITLES[pg][lang], renderLegal(await legalText(env, pg, lang), lc), !!s));
+  }
   if (isGet && p === '/home') return html(landingPage(!!s));
   if (isGet && (p === '/login' || p === '/register' || p === '/forgot')) {
     if (s) return Response.redirect(url.origin + (s.isAdmin ? '/admin/console' : '/'), 302);
@@ -129,7 +137,7 @@ async function gated(request, env, url) {
     if (slug && slug === await adminSlug(env)) return html(adminLoginPage(slug), 200, { 'Cache-Control': 'no-store' });
     return html(notFoundPage(), 404);
   }
-  if (p === '/robots.txt') return new Response('User-agent: *\nAllow: /home\nDisallow: /\n', { headers: { 'Content-Type': 'text/plain' } });
+  if (p === '/robots.txt') return new Response('User-agent: *\nAllow: /home\nAllow: /terms\nAllow: /privacy\nAllow: /cookies\nDisallow: /\n', { headers: { 'Content-Type': 'text/plain' } });
   if (p === '/favicon.ico') return new Response(null, { status: 204 });
 
   // 没登录：首页显示介绍页；/health 由 Worker 自己回答（不叫醒 Modal）；其他一律要求登录
@@ -278,7 +286,7 @@ async function backendRequestHeaders(request, env, s) {
 
 function injectBar(resp, s) {
   if (!(resp.headers.get('Content-Type') || '').includes('text/html')) return resp;
-  return new HTMLRewriter().on('body', { element(el) { el.prepend(userBarHtml(s.email, s.isAdmin), { html: true }); } }).transform(resp);
+  return new HTMLRewriter().on('body', { element(el) { el.prepend(userBarHtml(s.email, s.isAdmin), { html: true }); el.append(siteFooterHtml(), { html: true }); } }).transform(resp);
 }
 
 function serveLite(request, path) {

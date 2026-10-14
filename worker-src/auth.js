@@ -240,6 +240,7 @@ export async function handleAuthApi(req, env, path) {
         if ((await getSetting(env, 'register_open', '1')) !== '1') return json({ ok: false, message: '网站暂时关闭了新用户注册。' }, 403);
         const email = normEmail(body.email);
         if (!EMAIL_RE.test(email)) return json({ ok: false, message: '请输入有效的邮箱地址。' }, 400);
+        if (body.agree !== true) return json({ ok: false, message: '请先阅读并勾选同意用户条款、隐私政策和 Cookie 政策。' }, 400);
         const h = await checkHuman(env, req, body);
         if (h) return json({ ok: false, message: h, captcha_failed: true }, 400);
         if (email === adminEmail(env)) return json({ ok: false, message: '该邮箱不能注册普通账户。' }, 400);
@@ -253,6 +254,7 @@ export async function handleAuthApi(req, env, path) {
         const email = normEmail(body.email);
         const bad = passwordProblem(body.password, email);
         if (bad) return json({ ok: false, message: bad }, 400);
+        if (body.agree !== true) return json({ ok: false, message: '请先阅读并勾选同意用户条款、隐私政策和 Cookie 政策。' }, 400);
         if (email === adminEmail(env)) return json({ ok: false, message: '该邮箱不能注册普通账户。' }, 400);
         const e = await verifyOtp(env, email, 'register', body.code);
         if (e) return json({ ok: false, message: e }, 400);
@@ -263,7 +265,8 @@ export async function handleAuthApi(req, env, path) {
         const id = crypto.randomUUID();
         await env.DB.prepare(`INSERT INTO users (id, email, password_hash, is_admin, status, created_at, last_login_at, last_login_ip)
            VALUES (?1, ?2, ?3, 0, 'active', ?4, ?4, ?5)`).bind(id, email, await hashPassword(body.password), Date.now(), ip).run();
-        await audit(env, email, 'register', null, ip);
+        // 记录用户同意条款的时间和当时的条款版本（更新日期）
+        await audit(env, email, 'register', 'agreed to terms/privacy/cookies, version ' + (await getSetting(env, 'legal:updated', '2026-10-14')), ip);
         return json({ ok: true, message: '注册成功。' }, 200, { 'Set-Cookie': await createSession(env, id, false) });
       }
       case '/api/auth/login': {
