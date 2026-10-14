@@ -9,7 +9,7 @@ export function setSiteContacts(c) { if (c) SITE_CONTACTS = c; }
 export function footerHtml() {
   return `<div class="foot-links"><a href="/terms">用户条款与免责声明</a> · <a href="/privacy">隐私政策</a> · <a href="/cookies">Cookie 政策</a></div>
 <div>联系我们：${contactLinks(SITE_CONTACTS)}</div>
-<div>审读 · AI 文本检测。检测结果只供参考，不能作为学术不端的判定依据。</div>`;
+<div>审读 · AI 文本检测。任何AI都可能出错，检测结果只供参考。</div>`;
 }
 
 const CSS = `
