@@ -1,5 +1,16 @@
 // Worker 自己生成的页面：首页、登录 / 注册 / 找回密码、我的账户、管理员登录、管理后台。
 import { esc } from './util.js';
+import { contactLinks, DEFAULT_CONTACTS } from './legal.js';
+
+// 页脚里的联系邮箱（每个请求开始时由 Worker 从后台设置里读出；全站相同）
+let SITE_CONTACTS = DEFAULT_CONTACTS;
+export function setSiteContacts(c) { if (c) SITE_CONTACTS = c; }
+
+export function footerHtml() {
+  return `<div class="foot-links"><a href="/terms">用户条款与免责声明</a> · <a href="/privacy">隐私政策</a> · <a href="/cookies">Cookie 政策</a></div>
+<div>联系我们：${contactLinks(SITE_CONTACTS)}</div>
+<div>审读 · AI 文本检测。检测结果只供参考，不能作为学术不端的判定依据。</div>`;
+}
 
 const CSS = `
 :root{--paper:#f7f3ea;--card:#fffdf8;--ink:#2b2620;--soft:#6b6257;--line:#e3dccd;--red:#b0413e;--red-soft:#f3e2df;--teal:#2f6f6a;--gold:#8a6d3b;
@@ -31,7 +42,10 @@ p.sub{color:var(--soft);margin:0 0 16px}
 .price small{font-size:14px;color:var(--soft)}
 .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;background:var(--red-soft);color:var(--red)}
 .tag.ok{background:transparent;border:1px solid var(--teal);color:var(--teal)}
-footer{color:var(--soft);font-size:13px;padding:30px 0;border-top:1px solid var(--line);margin-top:40px}
+footer{color:var(--soft);font-size:13px;padding:30px 0;border-top:1px solid var(--line);margin-top:40px;display:grid;gap:6px}
+footer a{color:var(--soft)}
+.legal{max-width:760px;margin:30px auto}.legal h1{font-family:var(--font-d);font-size:28px;margin:0 0 10px}.legal h2{font-family:var(--font-d);font-size:19px;margin:26px 0 6px}.legal p,.legal li{color:var(--ink);font-size:15px}
+.agree{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--soft);margin-top:14px}.agree input{margin-top:4px}
 .auth{max-width:420px;margin:40px auto}
 .auth h1{font-family:var(--font-d);font-size:26px;margin:0 0 4px}
 label.f{display:block;font-size:13px;color:var(--soft);margin:14px 0 4px}
@@ -88,7 +102,7 @@ function layout(title, body, { nav = '', script = '' } = {}) {
 <style>${CSS}</style></head><body>
 <div class="wrap"><header class="top"><a class="brand" href="/home"><span class="seal">审</span><b>审读</b></a><nav class="links"><button class="btn small" id="atc-lang" type="button"></button>${nav}</nav></header>
 ${body}
-<footer>审读 · AI 文本检测。检测结果只供参考，不能作为学术不端的判定依据。</footer></div>
+<footer>${footerHtml()}</footer></div>
 <script>${CLIENT}${script}</script></body></html>`;
 }
 
@@ -129,7 +143,9 @@ export function authPage(mode) {
 <label class="f" for="email">邮箱</label><input class="i" id="email" type="email" autocomplete="email" maxlength="120">
 ${mode === 'login' ? '<label class="f" for="pw">密码</label><input class="i" id="pw" type="password" autocomplete="current-password" maxlength="128">' : ''}
 <div id="cap"></div>
+${mode === 'register' ? '<label class="agree"><input type="checkbox" id="agree"><span>我已阅读并同意<a href="/terms" target="_blank">《用户条款与免责声明》</a>、<a href="/privacy" target="_blank">《隐私政策》</a>和<a href="/cookies" target="_blank">《Cookie 政策》</a></span></label>' : ''}
 <button class="btn primary" style="width:100%;margin-top:16px" id="go1">${mode === 'login' ? '登录' : '发送邮箱验证码'}</button>
+${mode === 'login' ? '<p class="hint" style="margin-top:10px">继续操作即表示您同意本平台的<a href="/terms" target="_blank">用户条款与免责声明</a>、<a href="/privacy" target="_blank">隐私政策</a>和<a href="/cookies" target="_blank">Cookie 政策</a>。</p>' : ''}
 ${mode === 'login' ? '<p class="hint" style="margin-top:10px"><a href="/forgot">忘记密码？</a></p>' : ''}
 </div>
 <div id="step2" class="hidden">
@@ -147,13 +163,14 @@ $('go1').onclick=async()=>{ const email=$('email').value.trim(); if(!email){say(
   $('go1').disabled=true; say(msg,'请稍候……',true);
   let j;
   if(mode==='login'){ j=await api('/api/auth/login',{email,password:$('pw').value,...cap.fields()}); if(j.ok){location.href='/';return;} }
-  else { j=await api(mode==='register'?'/api/auth/register/request-otp':'/api/auth/forgot/request-otp',{email,...cap.fields()});
+  else { if(mode==='register' && !$('agree').checked){ say(msg,'请先阅读并勾选同意用户条款、隐私政策和 Cookie 政策。'); $('go1').disabled=false; return; }
+    j=await api(mode==='register'?'/api/auth/register/request-otp':'/api/auth/forgot/request-otp',{email,agree:mode==='register'?true:undefined,...cap.fields()});
     if(j.ok){ $('em').textContent=email; $('step1').classList.add('hidden'); $('step2').classList.remove('hidden'); say(msg,j.message,true); $('go1').disabled=false; return; } }
   say(msg,j.message); cap.reload(); $('go1').disabled=false; };
 $('back').onclick=(e)=>{e.preventDefault(); $('step2').classList.add('hidden'); $('step1').classList.remove('hidden'); cap.reload(); say(msg,'');};
 if($('go2')) $('go2').onclick=async()=>{ if($('pw1').value!==$('pw2').value){say(msg,'两次输入的密码不一样。');return;}
   $('go2').disabled=true;
-  const j=await api(mode==='register'?'/api/auth/register/verify':'/api/auth/forgot/reset',{email:$('email').value.trim(),code:$('code').value.trim(),password:$('pw1').value});
+  const j=await api(mode==='register'?'/api/auth/register/verify':'/api/auth/forgot/reset',{email:$('email').value.trim(),code:$('code').value.trim(),password:$('pw1').value,agree:mode==='register'?true:undefined});
   $('go2').disabled=false;
   if(j.ok){ say(msg,j.message,true); setTimeout(()=>location.href=mode==='register'?'/':'/login',800); } else say(msg,j.message); };`;
   return layout(`审读 · ${titles[mode]}`, body, { nav: mode === 'login' ? '<a class="btn small" href="/home">首页</a>' : '<a class="btn small" href="/home">首页</a><a class="btn small" href="/login">登录</a>', script });
@@ -240,7 +257,7 @@ export function adminConsolePage() {
 <div class="banner hidden" id="elev">修改用户、订单和设置之前，需要先用管理员邮箱验证码确认（确认后 10 分钟内有效）。
 <div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn small" id="eSend">发送确认码</button><input class="i" id="eCode" inputmode="numeric" maxlength="6" placeholder="确认码" style="max-width:140px"><button class="btn small primary" id="eGo">确认</button><span class="hint" id="eMsg"></span></div></div>
 <p class="hint" id="elevOk"></p>
-<div class="tabs" id="tabs"><button data-t="users" class="on">注册用户</button><button data-t="orders">订单</button><button data-t="settings">商用设置</button><button data-t="security">登录地址与安全</button><button data-t="audit">操作记录</button><a class="btn small" href="/admin">检测服务管理（校准 / Key）</a></div>
+<div class="tabs" id="tabs"><button data-t="users" class="on">注册用户</button><button data-t="orders">订单</button><button data-t="settings">商用设置</button><button data-t="security">登录地址与安全</button><button data-t="audit">操作记录</button><button data-t="legal">网站条款</button><a class="btn small" href="/admin">检测服务管理（校准 / Key）</a></div>
 <section data-p="users"><div class="grid" id="stats"></div>
 <div class="row" style="margin:14px 0"><input class="i" id="q" placeholder="按邮箱搜索"><button class="btn" id="qGo">搜索</button></div>
 <div class="scroll card"><table class="t"><thead><tr><th>邮箱</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>今日 / 累计字数</th><th>余额</th><th>会员到期</th><th>备注</th><th>操作</th></tr></thead><tbody id="users"></tbody></table></div>
@@ -263,6 +280,16 @@ export function adminConsolePage() {
 <button class="btn primary" id="slugGo" style="margin-top:10px">修改登录地址</button><div class="msg" id="slugMsg"></div>
 <p class="hint">修改后旧地址立即失效，新地址会发到管理员邮箱。忘记地址时可以在 <a href="/admin-link">/admin-link</a> 让系统把地址发到管理员邮箱。</p>
 <button class="btn" id="outAll" style="margin-top:10px">退出所有设备上的管理员登录</button></div></section>
+<section data-p="legal" class="hidden"><div class="card">
+<label class="f">联系邮箱（显示在每个页面底部和条款里，多个用英文逗号分隔）</label><input class="i" id="lContacts" maxlength="300">
+<label class="f">条款更新日期（显示为"最近更新"）</label><input class="i" id="lUpdated" maxlength="20" style="max-width:200px">
+<div class="row" style="margin-top:14px;flex-wrap:wrap"><select class="i" id="lPage" style="max-width:240px"><option value="terms">用户条款与免责声明</option><option value="privacy">隐私政策</option><option value="cookies">Cookie 政策</option></select>
+<select class="i" id="lLang" style="max-width:140px"><option value="zh">中文</option><option value="en">English</option></select>
+<a class="btn small" id="lView" target="_blank" href="/terms">查看页面</a></div>
+<label class="f">正文（"## " 开头的行是小标题，"- " 开头的行是列表，空行分段；{contact} 显示为联系邮箱，{updated} 显示为更新日期）</label>
+<textarea class="i" id="lText" spellcheck="false" style="min-height:420px;font-family:inherit;font-size:14px"></textarea>
+<p class="hint" id="lState"></p>
+<div class="row" style="flex-wrap:wrap"><button class="btn primary" id="lSave">保存</button><button class="btn" id="lReset">恢复默认文字</button></div><div class="msg" id="lMsg"></div></div></section>
 <section data-p="audit" class="hidden"><div class="scroll card"><table class="t"><thead><tr><th>时间</th><th>操作人</th><th>操作</th><th>内容</th><th>IP</th></tr></thead><tbody id="audit"></tbody></table></div></section>`;
   const script = `
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -302,12 +329,25 @@ $('rand').onclick=()=>{ const a=new Uint8Array(24); crypto.getRandomValues(a); $
 $('slugGo').onclick=async()=>{ const j=await act('/api/admin/login-url',{slug:$('slug').value.trim()}); say($('slugMsg'),j.message+(j.url?' 新地址：'+j.url:''),j.ok); if(j.ok) overview(); };
 $('outAll').onclick=async()=>{ if(!confirm('退出所有设备（包括当前）？')) return; await api('/api/admin/logout-everywhere',{}); location.href='/home'; };
 async function audit(){ const j=await api('/api/admin/audit'); if(!j.ok) return; $('audit').innerHTML=j.items.map(x=>'<tr><td>'+fmt(x.at)+'</td><td>'+esc(x.actor||'')+'</td><td>'+esc(x.action)+'</td><td>'+esc(x.detail||'')+'</td><td>'+esc(x.ip||'')+'</td></tr>').join(''); }
+let LG=null;
+async function legal(){ LG=await api('/api/admin/legal'); if(!LG.ok) return; $('lContacts').value=LG.contacts; $('lUpdated').value=LG.updated; showLegal(); }
+function showLegal(){ if(!LG) return; const k=$('lPage').value+':'+$('lLang').value, t=LG.texts[k]; $('lText').value=t.text;
+  $('lState').textContent=t.custom?'当前显示的是你修改过的文字。':'当前显示的是默认文字（还没有修改过）。'; $('lView').href='/'+$('lPage').value; }
+$('lPage').onchange=showLegal; $('lLang').onchange=showLegal;
+$('lSave').onclick=async()=>{ const j=await act('/api/admin/legal',{page:$('lPage').value,lang:$('lLang').value,text:$('lText').value,contacts:$('lContacts').value.trim(),updated:$('lUpdated').value.trim()}); say($('lMsg'),j.message,j.ok); if(j.ok) legal(); };
+$('lReset').onclick=async()=>{ if(!confirm('把这一页（当前语言）恢复成默认文字？')) return; const j=await act('/api/admin/legal',{page:$('lPage').value,lang:$('lLang').value,reset:true}); say($('lMsg'),j.message,j.ok); if(j.ok) legal(); };
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{ document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('section[data-p]').forEach(s=>s.classList.toggle('hidden',s.dataset.p!==b.dataset.t));
-  ({users,orders,audit})[b.dataset.t]?.(); });
+  ({users,orders,audit,legal})[b.dataset.t]?.(); });
 $('qGo').onclick=()=>{page=0;users();}; $('prev').onclick=()=>{ if(page>0){page--;users();} }; $('next').onclick=()=>{page++;users();}; $('ost').onchange=orders;
 overview().then(users);`;
   return layout('审读 · 管理后台', body, { nav: `<a class="btn small" href="/">检测页面</a><button class="btn small" onclick="api('/api/auth/logout',{}).then(()=>location.href='/home')">退出</button>`, script });
+}
+
+export function legalPage(title, bodyHtml, loggedIn) {
+  // 条款正文已按当前语言给出，不再交给页面翻译脚本处理
+  const body = `<article class="legal card" data-noi18n><h1>${esc(title)}</h1>${bodyHtml}</article>`;
+  return layout(title, body, { nav: loggedIn ? userNav : guestNav });
 }
 
 export function notFoundPage() {
@@ -320,4 +360,10 @@ export function userBarHtml(email, isAdmin) {
 <span style="opacity:.7">${esc(email)}</span>${isAdmin ? '<a href="/admin/console">管理后台</a>' : '<a href="/account">我的账户</a>'}<a href="/home">首页</a>
 <a href="/logout">退出</a></div>
 <style>.key-zone{display:none!important}</style>`;
+}
+
+// 检测页底部的条款链接与联系方式
+export function siteFooterHtml() {
+  return `<div id="atc-footer" style="font:13px/1.8 'Noto Sans SC',sans-serif;opacity:.75;text-align:center;padding:18px 16px 26px;border-top:1px solid rgba(0,0,0,.08);margin-top:30px">
+<a href="/terms">用户条款与免责声明</a> · <a href="/privacy">隐私政策</a> · <a href="/cookies">Cookie 政策</a><br>联系我们：${contactLinks(SITE_CONTACTS)}</div>`;
 }

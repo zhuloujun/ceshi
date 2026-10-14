@@ -3,6 +3,7 @@
 import { json, sameOrigin, readJson, clientIp, audit, getSetting, setSetting, today, normEmail, esc } from './util.js';
 import { requestOtp, verifyOtp, OtpError, ELEVATE_MS, adminSlug, SLUG_RE, sendEmail, adminEmail } from './auth.js';
 import { billingConfig, validatePlans, markOrderPaid, grant } from './billing.js';
+import { LEGAL_PAGES, legalConfig, defaultLegal } from './legal.js';
 
 export async function handleAdminApi(req, env, path, s) {
   if (!s || !s.isAdmin) return json({ ok: false, message: '页面不存在。' }, 404);
@@ -41,6 +42,15 @@ export async function handleAdminApi(req, env, path, s) {
           `SELECT o.*, u.email FROM orders o LEFT JOIN users u ON u.id = o.user_id
            WHERE (?1 = '' OR o.status = ?1) ORDER BY o.created_at DESC LIMIT 100`).bind(st).all();
         return json({ ok: true, orders: results });
+      }
+      if (path === '/api/admin/legal') {
+        const c = await legalConfig(env);
+        const texts = {};
+        for (const pg of LEGAL_PAGES) for (const lang of ['zh', 'en']) {
+          const custom = await getSetting(env, `legal:${pg}:${lang}`);
+          texts[`${pg}:${lang}`] = { text: custom || defaultLegal(pg, lang), custom: !!custom };
+        }
+        return json({ ok: true, contacts: c.contacts, updated: c.updated, texts });
       }
       if (path === '/api/admin/audit') {
         const { results } = await env.DB.prepare(`SELECT at, actor, action, detail, ip FROM audit_log ORDER BY id DESC LIMIT 200`).all();
@@ -144,6 +154,26 @@ export async function handleAdminApi(req, env, path, s) {
       }
       await audit(env, s.email, 'settings', ch.join('，'), ip);
       return json({ ok: true, message: '已保存。' });
+    }
+    if (path === '/api/admin/legal') {
+      const pg = String(body.page || ''), lang = String(body.lang || '');
+      if (!LEGAL_PAGES.includes(pg) || !['zh', 'en'].includes(lang)) return json({ ok: false, message: '页面或语言不正确。' }, 400);
+      if (body.contacts !== undefined) {
+        const c = String(body.contacts).trim().slice(0, 300);
+        if (!c || !/@/.test(c)) return json({ ok: false, message: '请至少填写一个联系邮箱。' }, 400);
+        await setSetting(env, 'legal:contacts', c);
+      }
+      if (body.updated !== undefined && String(body.updated).trim()) await setSetting(env, 'legal:updated', String(body.updated).trim().slice(0, 20));
+      if (body.reset) {
+        await env.DB.prepare(`DELETE FROM settings WHERE key = ?1`).bind(`legal:${pg}:${lang}`).run();
+        await audit(env, s.email, 'legal_reset', `${pg}:${lang}`, ip);
+        return json({ ok: true, message: '已恢复默认文字。' });
+      }
+      const text = String(body.text || '');
+      if (text.trim().length < 20 || text.length > 30000) return json({ ok: false, message: '正文太短或太长（20–30000 字）。' }, 400);
+      await setSetting(env, `legal:${pg}:${lang}`, text);
+      await audit(env, s.email, 'legal_update', `${pg}:${lang} ${text.length} 字`, ip);
+      return json({ ok: true, message: '已保存，网站上立即生效。' });
     }
     if (path === '/api/admin/login-url') {
       const slug = String(body.slug || '').trim();
