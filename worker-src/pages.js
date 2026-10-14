@@ -364,6 +364,6 @@ export function userBarHtml(email, isAdmin) {
 
 // 检测页底部的条款链接与联系方式
 export function siteFooterHtml() {
-  return `<div id="atc-footer" style="font:13px/1.8 'Noto Sans SC',sans-serif;opacity:.75;text-align:center;padding:18px 16px 26px;border-top:1px solid rgba(0,0,0,.08);margin-top:30px">
+  return `<style>#atc-footer a{color:inherit}</style><div id="atc-footer" style="font:13px/1.8 'Noto Sans SC',sans-serif;opacity:.75;text-align:center;padding:18px 16px 26px;border-top:1px solid rgba(0,0,0,.08);margin-top:30px">
 <a href="/terms">用户条款与免责声明</a> · <a href="/privacy">隐私政策</a> · <a href="/cookies">Cookie 政策</a><br>联系我们：${contactLinks(SITE_CONTACTS)}</div>`;
 }
