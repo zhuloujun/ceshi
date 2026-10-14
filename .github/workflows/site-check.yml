@@ -36,7 +36,7 @@ jobs:
               except urllib.error.HTTPError as e: return e.code, e.headers, e.read()
           out = {}
           c, h, b = get("/health"); out["/health"] = f"{c} {b[:120].decode('utf-8','ignore')}"
-          for p in ["/", "/home", "/login", "/register", "/forgot", "/admin", "/account", "/admin-link", "/__i18n.js"]:
+          for p in ["/", "/home", "/login", "/register", "/forgot", "/admin", "/account", "/admin-link", "/terms", "/privacy", "/cookies"]:
               c, h, b = get(p)
               out[p] = f"{c} {h.get('Location') or ''} {len(b)}B"
           c, h, b = get("/api/auth/captcha")
