@@ -14,6 +14,7 @@ import uuid
 
 from . import config, scoring
 from .detectors import stylometry
+from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
 from .segmenter import (REGISTER_NAMES, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
@@ -93,10 +94,39 @@ EXTRA_EVAL = {"zh_poetry": [{"name": "对联：国产模型写的对联 vs 真�
 
 
 def _wilson_upper(k: int, n: int, z: float = 1.96) -> float | None:
+    """误判率的单侧 95% 精确上限（Clopper–Pearson）：实测 k / n 次误判时，真实误判率不超过多少（95% 把握）。
+    0 次误判时就是 1 − 0.05^(1/n)（1000 篇约 0.3%；要把上限压到 0.01% 需要约 3 万篇无误判，见 2026-10 用户提供的
+    检测方法综述）。比原来的 Wilson 近似更保守、也是统计上标准的写法。函数名保持不变以兼容旧调用。"""
     if not n:
         return None
-    p = k / n
-    return round(min(1.0, (p + z * z / (2 * n) + z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / (1 + z * z / n)), 4)
+    if k >= n:
+        return 1.0
+    if k <= 0:
+        return round(1 - 0.05 ** (1 / n), 4)
+
+    def cdf(p):                                   # P(X ≤ k | n, p)
+        term, tot = (1 - p) ** n, 0.0
+        for i in range(k + 1):
+            tot += term
+            term *= (n - i) / (i + 1) * p / (1 - p) if p < 1 else 0
+        return tot
+    lo, hi = k / n, 1.0
+    for _ in range(60):                           # 找使 P(X ≤ k) = 0.05 的 p
+        mid = (lo + hi) / 2
+        if cdf(mid) > 0.05:
+            lo = mid
+        else:
+            hi = mid
+    return round(hi, 4)
+
+
+def _detectors_disagree(raw: dict) -> bool:
+    """第二分类器（中文 v3 / 英文第二分类器 + 整篇分类器）都 ≥ 0.9，但综合分数没过阈值。"""
+    z2 = raw.get("classifier_zh2")
+    if z2 is not None:
+        return z2 >= 0.9
+    e2, e3, e4 = raw.get("classifier_en2"), raw.get("classifier_en3"), raw.get("classifier_en4")
+    return e2 is not None and e2 >= 0.9 and max(e3 or 0, e4 or 0) >= 0.9
 
 
 def precision_at_prevalence(tpr: float, fpr: float, prevalence: float) -> float | None:
@@ -128,7 +158,7 @@ def known_error_rates(profiles: list) -> list:
             fp = e.get("human_flagged") if nh else None
             sets.append({"name": e["name"], "n_ai": na, "n_human": nh,
                          "ai_caught": e.get("ai_caught") if na else None, "human_flagged": fp,
-                         # 误判率的 95% 置信上限（Wilson 区间；0 次误判时近似"三法则" 3/n）：样本有限，实测 0% 不等于不会误判
+                         # 误判率的单侧 95% 精确上限（Clopper–Pearson；0 次误判时为 1 − 0.05^(1/n)）：样本有限，实测 0% 不等于不会误判
                          "human_flagged_upper95": _wilson_upper(round(fp * nh), nh) if fp is not None else None})
         if sets:
             g = {"profile": prof, "name": scoring.PROFILE_NAMES.get(prof, prof), "sets": sets}
@@ -497,6 +527,12 @@ class Engine:
             if s.index in famous:
                 s.kind = "quotation"
                 s.notes = list(s.notes) + ["语言模型几乎能逐字复现，疑为公开名篇原文，不计入 AI 率"]
+        # 古诗词名篇：一半以上的句子与《全唐诗》《全宋词》等古人原句逐字相同（引用时改了一两个字、只引半首也能认出）
+        for s in counted:
+            if s.register in ("zh_poetry", "zh_classical") and s.index not in famous and is_famous_verse(strip_list_mark(s.text)):
+                famous.add(s.index)
+                s.kind = "quotation"
+                s.notes = list(s.notes) + ["一半以上的句子与古人诗词原句相同，疑为引用的名篇，不计入 AI 率"]
         memo |= famous
         counted = [s for s in segs if s.counted]
 
@@ -660,6 +696,23 @@ class Engine:
                 zh2_ai.update(i for i in idxs if smoothed.get(i) is not None
                               and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
                               and own_ok(i, "classifier_zh2"))
+        # 6.55) 只有一段的中文短篇（作品集里的一篇 250 字以上的小散文、短故事）：上面的整篇判断要求至少两段，这类作品
+        #       永远轮不到。中文第二分类器对这一段的得分达到 ZH2_SINGLE_THRESHOLD 时，同样按"中度疑似（整篇判断）"计入。
+        #       依据（2026-10-16 用户测试文档 1015.docx）：AI 短篇《幸福的月光》《踏浪》第二分类器 96%，但 MPU 分类器和
+        #       语言模型信号都不明显，原来最终只有 0–9%；同一文档里的真人短篇（老舍、张晓风、余秋雨、梁实秋……）都 ≤ 10%。
+        #       真人对照（单段 250–700 字，第二分类器 v3）见 config.ZH2_SINGLE_THRESHOLD 的说明。
+        blk_counts: dict = {}
+        for (blk, reg), idxs in groups.items():
+            blk_counts[blk] = blk_counts.get(blk, 0) + len(idxs)
+        for (blk, reg), idxs in groups.items():
+            if reg != "zh" or len(idxs) != 1 or blk_counts.get(blk) != 1 or (blk, reg) in zh2_groups:
+                continue
+            i = idxs[0]
+            p2 = results[i].get("classifier_zh2")
+            if (p2 is not None and p2 >= config.ZH2_SINGLE_THRESHOLD and len(segs_by_idx[i].text) >= config.ZH2_SINGLE_MIN_CHARS
+                    and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
+                zh2_groups.add((blk, reg))
+                zh2_ai.add(i)
         # 6.6) 英文非论文作品（故事、散文、读后感、清单……）的整篇判断：英文整篇分类器各段得分的加权中位数（两段取较低）
         #      达到 EN3_DOC_THRESHOLD 时，本篇未过阈值的段落计为"中度疑似（整篇判断）"。英文论文另有论文整篇判断。
         if True:
@@ -742,6 +795,11 @@ class Engine:
                 level, label, near = "mid", "中度疑似（整篇判断）", False
             elif by_work:
                 level, label, near = "light", "轻度疑似（整篇判断）", False
+            elif s.counted and prob is not None and prob < thr and level in ("low", "none") and _detectors_disagree(sc):
+                # 选择性判断（selective classification）：专门见过新一代大模型的第二分类器很肯定是 AI，综合分数却很低——
+                # 证据互相矛盾时不下结论，标出来请人复核，不计入 AI 率（不把"没标出"当成"确认是人写"）
+                level, near = "low", True
+                label = "接近阈值（检测器意见不一致，建议复核）"
             if s.counted and prob is not None:
                 counted_chars += len(s.text)
                 prob_weighted += prob * len(s.text)
@@ -854,6 +912,10 @@ class Engine:
         if near_chars and counted_chars:
             notes.append(f"另有 {near_chars / counted_chars:.0%} 的文字 AI 概率接近阈值（已标“接近阈值”，未计入 AI 率），"
                          "可重点复核；AI 翻译、经过改写或人工润色的 AI 文字常落在这一区间。")
+        n_dis = sum(1 for x in seg_out if "意见不一致" in (x.get("label") or ""))
+        if n_dis:
+            notes.append(f"有 {n_dis} 段各检测器意见不一致（专门见过新一代大模型的分类器判为 AI，综合分数却未过阈值），"
+                         "已标“检测器意见不一致，建议复核”，未计入 AI 率。没被标出不等于确认是人写，这几段请结合草稿、修改记录复核。")
         if sampled:
             notes.append(f"快速模式：语言模型只检测了 {len(lm_ids)} 段，其余段落仅用分类器。")
         if fallback_all:
