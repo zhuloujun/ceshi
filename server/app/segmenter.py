@@ -139,6 +139,21 @@ def is_list_item(line: str) -> bool:
     return len(_CJK.findall(rest)) >= 8 and bool(re.search(r"[，。！？；,]", rest))
 
 
+def is_list_head(line: str) -> bool:
+    """作品集条目编号后面是题目或外文正文（"8、《幸福的月光》""8、兄台如面：""52、This is what's true …"），
+    不是"1.2 方法"这样的小节号。作品集模式下这也是一篇新作品的开头。"""
+    s = line.strip()
+    m = _LIST_MARK.match(s)
+    if not m or re.match(r"^\s*\d+[.．]\d", s):
+        return False
+    rest = s[m.end():].strip()
+    if not rest:
+        return False
+    if re.match(r"^[《「“\"]", rest) or (len(rest) <= 24 and _CJK.search(rest)):
+        return True
+    return len(re.findall(r"[A-Za-z][A-Za-z'’\-]*", rest)) >= 5 and not _CJK.search(rest)
+
+
 # 押韵：句末字（句号、问号、叹号、分号前）的韵母，最常见的一个韵占多大比例。
 # 宋词中位数 0.83、唐诗 0.75，古文 0.33、现代文 0（chinese-poetry 宋词 600 首、NiuTrans 古文 800 段测定）。
 try:
@@ -610,7 +625,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             continue
         section = is_section_heading(stripped)
         title = stripped in paper_titles or (is_title(stripped) and not section)
-        item = list_mode and is_list_item(stripped)
+        item = list_mode and (is_list_item(stripped) or is_list_head(stripped))
         if (list_mode and not item and pending_break and blk_item and buf.strip()
                 and len(_CJK.findall(buf)) >= 40 and len(_CJK.findall(stripped)) >= 40
                 and detect_register(buf) == "zh_poetry" and detect_register(stripped) == "zh_poetry"):
