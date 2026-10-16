@@ -139,6 +139,9 @@ ZH_DOC_THRESHOLD = float(os.getenv("ZH_DOC_THRESHOLD", "0.88") or 0.88)
 # 依据（chinese-classifier-v2，2026-10-04，含豆包 198 篇）：没参与训练的真人文档（文学散文、高考现代文、C3、知乎、网文、HC3）整篇中位数最高 0.19（v1 为 0.54），
 # 用户的真人文章《背影》《草原》《废墟》《长征》约 0.05；五家国产模型 + Claude / ChatGPT / Gemini 写的文档整篇约 0.95。
 ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.7") or 0.7)
+# 只有一段的中文短篇（≥ ZH2_SINGLE_MIN_CHARS 字）：第二分类器得分达到此值时按"中度疑似（整篇判断）"计入（见 engine 6.55）。
+ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.9") or 0.9)
+ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
 WORK_MAJORITY = float(os.getenv("WORK_MAJORITY", "0.6") or 0.6)   # 同篇已判 AI 的文字占比达到此值，接近阈值的段落按整篇计入
 # 文言虚词（之乎者也矣焉哉曰…）占汉字比例超过此值的段落，视为以古籍引文为主，不计入 AI 率
