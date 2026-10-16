@@ -9,6 +9,9 @@ on:
       payload:
         description: "base64(xz(JSON 列表 [{name, text, genre?}]))"
         required: true
+      skip_online:
+        description: "1 = 不读取线上的标注校准（不唤醒 Modal，完全不花 Modal 费用）"
+        default: "0"
 
 permissions:
   contents: read
@@ -105,6 +108,7 @@ jobs:
         working-directory: server
         run: python download_models.py Qwen/Qwen2.5-0.5B Qwen/Qwen2.5-0.5B-Instruct yuchuantian/AIGC_detector_zhv3 desklib/ai-text-detector-v1.01
       - name: 读取线上的标注校准（与线上结果一致）
+        if: github.event.inputs.skip_online != '1'
         env:
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
         run: |
@@ -130,6 +134,7 @@ jobs:
       - name: 启动本地检测服务
         working-directory: server
         run: |
+          [ -f /tmp/user_calibration.json ] || echo '{"profiles": {}}' > /tmp/user_calibration.json
           D=$PWD
           export TORCH_THREADS=4 TOKENIZERS_PARALLELISM=false
           export OBSERVER_MODEL=Qwen/Qwen2.5-0.5B PERFORMER_MODEL=Qwen/Qwen2.5-0.5B-Instruct
