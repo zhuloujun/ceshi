@@ -67,7 +67,7 @@ DOC_CARRY_FLOOR = float(os.getenv("DOC_CARRY_FLOOR", "0.5") or 0.5)
 ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
 # v3（2026-10-04）：加入 287 篇"去 AI 味"改写的中文（五家国产模型先写再按"降 AI 率"指令改写，或一步要求"写得不像 AI"）。
 # 没参与训练的 ChatGPT / Gemini"规避检测"中文文章 6 篇里 5 篇整篇 ≥ 0.92；没参与训练的真人文档整篇最高 0.05（v2 为 0.08）。
-ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v3")
+ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v5")
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
 def _calibrated_classifier(profile: str, prefix: str, default: str) -> str:
@@ -138,7 +138,17 @@ ZH_DOC_THRESHOLD = float(os.getenv("ZH_DOC_THRESHOLD", "0.88") or 0.88)
 # 中文第二分类器整篇判断：同一篇中文作品各段得分按字数加权的中位数达到此值，本篇未过阈值的段落计为"中度疑似（整篇判断）"。
 # 依据（chinese-classifier-v2，2026-10-04，含豆包 198 篇）：没参与训练的真人文档（文学散文、高考现代文、C3、知乎、网文、HC3）整篇中位数最高 0.19（v1 为 0.54），
 # 用户的真人文章《背影》《草原》《废墟》《长征》约 0.05；五家国产模型 + Claude / ChatGPT / Gemini 写的文档整篇约 0.95。
-ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.7") or 0.7)
+# v5（2026-10-17，加入 ChatGPT / 豆包 / Claude 文白夹杂样本）：训练报告里没参与训练的真人文档整篇中位数最高 0.71（文学散文），
+# AI 文档整篇约 0.95，所以阈值从 0.7 提到 0.85。
+ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.85") or 0.85)
+# 只有一段的中文短篇（≥ ZH2_SINGLE_MIN_CHARS 字）：第二分类器得分达到此值时按"中度疑似（整篇判断）"计入（见 engine 6.55）。
+# 依据（2026-10-16，v3）：没参与训练的真人中文单段 2154 段（老舍、鲁迅、梁实秋、林语堂、钱钟书、周作人、蔡元培、胡适日记、
+# 朱生豪书信、名家散文选等 11 部书各 140 段，学者论著 600 段，用户真人文档 14 段；每段 250–700 字）最高 0.41，没有一段 ≥ 0.5；
+# 0 / 2154 的单侧 95% 上限约 0.14%。用户 AI 短篇《幸福的月光》《踏浪》0.96。
+# v5 复测（同一批 2154 段）：学者论著 0/600、用户真人 0/8、名家书 9/1540（0.6%）达到 0.9；新的 ChatGPT 文白夹杂保留集
+# 149/150 达到 0.9（v3 只有 49/150），1015.docx 的 5 篇 AI 现代文全部 ≥ 0.9（v3 2/5）。
+ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.9") or 0.9)
+ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
 WORK_MAJORITY = float(os.getenv("WORK_MAJORITY", "0.6") or 0.6)   # 同篇已判 AI 的文字占比达到此值，接近阈值的段落按整篇计入
 # 文言虚词（之乎者也矣焉哉曰…）占汉字比例超过此值的段落，视为以古籍引文为主，不计入 AI 率
