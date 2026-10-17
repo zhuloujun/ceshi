@@ -140,6 +140,9 @@ ZH_DOC_THRESHOLD = float(os.getenv("ZH_DOC_THRESHOLD", "0.88") or 0.88)
 # 用户的真人文章《背影》《草原》《废墟》《长征》约 0.05；五家国产模型 + Claude / ChatGPT / Gemini 写的文档整篇约 0.95。
 ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.7") or 0.7)
 # 只有一段的中文短篇（≥ ZH2_SINGLE_MIN_CHARS 字）：第二分类器得分达到此值时按"中度疑似（整篇判断）"计入（见 engine 6.55）。
+# 依据（2026-10-16，v3）：没参与训练的真人中文单段 2154 段（老舍、鲁迅、梁实秋、林语堂、钱钟书、周作人、蔡元培、胡适日记、
+# 朱生豪书信、名家散文选等 11 部书各 140 段，学者论著 600 段，用户真人文档 14 段；每段 250–700 字）最高 0.41，没有一段 ≥ 0.5；
+# 0 / 2154 的单侧 95% 上限约 0.14%。用户 AI 短篇《幸福的月光》《踏浪》0.96。
 ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.9") or 0.9)
 ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
