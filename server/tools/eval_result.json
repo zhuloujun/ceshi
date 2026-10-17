@@ -524,7 +524,7 @@
    "auroc": {
     "fastdetect": 0.842,
     "binoculars": 0.8224,
-    "classifier": 0.9984
+    "classifier": 1.0
    },
    "features_used": [
     "fastdetect",
@@ -532,10 +532,10 @@
     "logit_classifier"
    ],
    "cross_validated": true,
-   "combined_auroc": 0.9939,
-   "threshold": 0.8985,
-   "human_flagged_rate": 0.0188,
-   "ai_caught_rate": 0.9343,
+   "combined_auroc": 0.9999,
+   "threshold": 0.5,
+   "human_flagged_rate": 0.008,
+   "ai_caught_rate": 1.0,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
   },
   "evaluation": [
@@ -543,13 +543,13 @@
     "name": "文言保留集（另一组古籍 + 未参与校准的 AI 文言）",
     "n_human": 278,
     "n_ai": 147,
-    "auroc": 0.9895,
-    "ai_caught": 0.898,
-    "human_flagged": 0.0252,
+    "auroc": 0.9962,
+    "ai_caught": 0.9932,
+    "human_flagged": 0.018,
     "per_signal_auroc": {
      "fastdetect": 0.8286,
      "binoculars": 0.1873,
-     "logit_classifier": 0.9774,
+     "logit_classifier": 0.9955,
      "fastdetect_norm": 0.815,
      "lrr": 0.792,
      "log_rank": 0.1741,
@@ -561,12 +561,12 @@
      "logit_classifier_mpu": 0.8773
     },
     "ai_caught_by_model": {
-     "llm-classical": 0.875,
-     "gen-claude": 0.9,
-     "gen-deepseek": 0.9333,
-     "gen-doubao": 0.8333,
+     "llm-classical": 0.975,
+     "gen-claude": 1.0,
+     "gen-deepseek": 1.0,
+     "gen-doubao": 1.0,
      "gen-kimi": 1.0,
-     "gen-qwen": 0.9375
+     "gen-qwen": 1.0
     },
     "human_flagged_by_source": {}
    },
@@ -575,12 +575,12 @@
     "n_human": 0,
     "n_ai": 50,
     "auroc": null,
-    "ai_caught": 0.9,
+    "ai_caught": 1.0,
     "human_flagged": null,
     "per_signal_auroc": {},
     "ai_caught_by_model": {
-     "repo-ai-deepseek": 0.9643,
-     "repo-ai-kimi": 0.6667,
+     "repo-ai-deepseek": 1.0,
+     "repo-ai-kimi": 1.0,
      "repo-ai-wenxin": 1.0
     },
     "human_flagged_by_source": {}
@@ -589,7 +589,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "classical-classifier-v19"
+   "classifier": "classical-classifier-v20"
   }
  },
  "zh_poetry": {
@@ -653,7 +653,7 @@
      "故事诗 vs 当代人写": 0.5923,
      "ChangAn AI vs 唐宋名篇": 0.3359,
      "故事诗 vs 唐宋名篇": 0.1325,
-     "国产新模型诗 vs 当代人写": 0.8361,
+     "国产新模型诗 vs 当代人写": 0.836,
      "国产新模型诗 vs 唐宋名篇": 0.3113
     },
     "只用语言模型": {
@@ -691,7 +691,7 @@
     "ai_caught": 0.73,
     "human_flagged": 0.05,
     "per_signal_auroc": {
-     "fastdetect": 0.7596,
+     "fastdetect": 0.7595,
      "binoculars": 0.2502,
      "logit_classifier": 0.9535,
      "fastdetect_norm": 0.7519,
