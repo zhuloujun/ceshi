@@ -121,10 +121,10 @@ def _wilson_upper(k: int, n: int, z: float = 1.96) -> float | None:
 
 
 def _detectors_disagree(raw: dict) -> bool:
-    """第二分类器（中文 v3 / 英文第二分类器 + 整篇分类器）都 ≥ 0.9，但综合分数没过阈值。"""
+    """中文第二分类器 ≥ ZH2_SINGLE_THRESHOLD，或英文第二分类器与整篇分类器都 ≥ 0.9，但综合分数没过阈值。"""
     z2 = raw.get("classifier_zh2")
     if z2 is not None:
-        return z2 >= 0.9
+        return z2 >= config.ZH2_SINGLE_THRESHOLD
     e2, e3, e4 = raw.get("classifier_en2"), raw.get("classifier_en3"), raw.get("classifier_en4")
     return e2 is not None and e2 >= 0.9 and max(e3 or 0, e4 or 0) >= 0.9
 

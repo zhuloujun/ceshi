@@ -147,7 +147,9 @@ ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.85") or 0.85)
 # 0 / 2154 的单侧 95% 上限约 0.14%。用户 AI 短篇《幸福的月光》《踏浪》0.96。
 # v5 复测（同一批 2154 段）：学者论著 0/600、用户真人 0/8、名家书 9/1540（0.6%）达到 0.9；新的 ChatGPT 文白夹杂保留集
 # 149/150 达到 0.9（v3 只有 49/150），1015.docx 的 5 篇 AI 现代文全部 ≥ 0.9（v3 2/5）。
-ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.9") or 0.9)
+# 2026-10-18 复核：v5 在完全没参与训练的 7 部真人书（名家散文、梁实秋、朱生豪等）1381 段里，21 段（1.5%）≥ 0.9、最高 0.94；
+# AI（ChatGPT 文白夹杂保留集 148/150、1015.docx 5/5）≥ 0.95。阈值定为 0.95：这批真人 0 段达到。
+ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.95") or 0.95)
 ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
 WORK_MAJORITY = float(os.getenv("WORK_MAJORITY", "0.6") or 0.6)   # 同篇已判 AI 的文字占比达到此值，接近阈值的段落按整篇计入
