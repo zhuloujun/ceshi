@@ -685,3 +685,7 @@ body{
 .err-table th:nth-child(n+3), .err-table td:nth-child(n+3){ text-align: right; white-space: nowrap; }
 .err-n{ color: var(--muted); }
 .err-guide{ margin: 8px 0 2px; padding-left: 18px; line-height: 1.7; }
+
+/* 逐句窗口：部分疑似 / 局部疑似 */
+.para-text mark.win-ai{ background: rgba(194, 59, 34, .16); color: inherit; border-bottom: 2px solid var(--vermillion); padding: 0 1px; }
+.para-text .win-human{ color: #8a8a8a; }

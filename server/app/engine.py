@@ -244,8 +244,14 @@ def window_spans(text: str, register: str) -> list[tuple[int, int]]:
     return spans if len(spans) >= 2 else []
 
 
-def window_flag(prob, second) -> str | None:
-    """窗口判定：'ai'（综合分数很高且第二意见同意）、'human'（两者都明确判人写）或 None（不确定）。"""
+def window_flag(prob, second, seg_second=None, register: str = "") -> str | None:
+    """窗口判定：'ai'（综合分数很高且第二意见同意）、'human'（两者都明确判人写）或 None（不确定）。
+    现代汉语另有一条：中文第二分类器对这个窗口 ≥ WIN_ZH2_AI、对整段也 ≥ WIN_ZH2_SEG（人写文章中夹入几句新一代国产
+    大模型写的句子，MPU 分类器和语言模型认不出）。依据（2026-10-19）：没参与训练的 7 部真人书 3000 个约 100 字的窗口，
+    第二分类器 ≥ 0.95 的只有 3 个（0.1%）；国产大模型窗口 80% ≥ 0.95。"""
+    if register == "zh" and second is not None and seg_second is not None \
+            and second >= config.WIN_ZH2_AI and seg_second >= config.WIN_ZH2_SEG:
+        return "ai"
     if prob is None:
         return None
     if prob >= config.WIN_AI_PROB and (second is None or second >= config.WIN_AI_SECOND):
@@ -782,6 +788,21 @@ class Engine:
                     and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
                 zh2_groups.add((blk, reg))
                 zh2_ai.add(i)
+        # 6.56) 人写文章里插入的一整段 AI 文字：整篇判断要求多数段落像 AI，插进来的一两段永远轮不到；MPU 分类器和语言模型
+        #       又认不出新一代国产大模型。中文第二分类器对这一段的得分达到 ZH2_SINGLE_THRESHOLD（且 ≥ ZH2_SEG_MIN_CHARS 字）时，
+        #       单段按"中度疑似"计入。依据（2026-10-19）：没参与训练的 7 部真人书 1381 段 + 84 段，没有一段达到 0.95；
+        #       在真人文章中间插入的 8 段 AI 文字（千问、DeepSeek、豆包、Kimi）全部 ≥ 0.953。
+        zh2_seg = set()
+        for (blk, reg), idxs in groups.items():
+            if reg != "zh" or (blk, reg) in zh2_groups:
+                continue
+            for i in idxs:
+                p2 = results[i].get("classifier_zh2")
+                if (p2 is not None and p2 >= config.ZH2_SINGLE_THRESHOLD and len(segs_by_idx[i].text) >= config.ZH2_SEG_MIN_CHARS
+                        and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
+                        and i not in memo):
+                    zh2_seg.add(i)
+        zh2_ai |= zh2_seg
         # 6.6) 英文非论文作品（故事、散文、读后感、清单……）的整篇判断：英文整篇分类器各段得分的加权中位数（两段取较低）
         #      达到 EN3_DOC_THRESHOLD 时，本篇未过阈值的段落计为"中度疑似（整篇判断）"。英文论文另有论文整篇判断。
         if True:
@@ -809,6 +830,7 @@ class Engine:
         work_ai -= zh2_ai
         zh_doc_ai -= zh2_ai
         zh_human_work -= {i for g in zh2_groups for i in groups[g]}
+        zh_human_work -= zh2_seg
 
         # 7) 中文名篇 / 孤立段落保护：
         #    a) 本篇有"名篇特征"（某段困惑度很低、波动很大，或已有段落被认作名篇原文），且整篇分类器中位数 < ZH_DOC_THRESHOLD：
@@ -860,6 +882,8 @@ class Engine:
                 level, near = "low", True
                 label = ("接近阈值（疑似名篇，未计入）" if s.index in famous_like else
                          "接近阈值（孤立段落，未计入）" if s.index in isolated else "接近阈值（整篇像人写，未计入）")
+            elif s.index in zh2_seg:
+                level, label, near = "mid", "中度疑似（单段：带有国产大模型写作风格）", False
             elif s.index in paper_ai or s.index in zh2_ai:
                 level, label, near = "mid", "中度疑似（整篇判断）", False
             elif by_work:
@@ -884,7 +908,7 @@ class Engine:
                     wins_out.append({"start": pos, "chars": len(wtxt), "text": wtxt,
                                      "prob": None if wp is None else round(wp, 4),
                                      "second": None if second is None else round(second, 4),
-                                     "flag": window_flag(wp, second)})
+                                     "flag": window_flag(wp, second, sc.get("classifier_zh2"), s.register)})
                 tot_w = sum(w["chars"] for w in wins_out) or 1
                 hum_w = sum(w["chars"] for w in wins_out if w["flag"] == "human")
                 ai_w = sum(w["chars"] for w in wins_out if w["flag"] == "ai")
@@ -994,8 +1018,12 @@ class Engine:
         if en3_ai:
             notes.append(f"按整篇判断：有 {len(en3_ai)} 段英文单看得分未过阈值，但所在文章整体带有大模型写作风格"
                          "（英文整篇分类器整篇中位得分达到阈值），按“中度疑似（整篇判断）”计入。如果其中有你亲自写的段落，请逐段复核。")
-        if zh2_ai - en3_ai:
-            notes.append(f"按整篇判断：有 {len(zh2_ai - en3_ai)} 段中文单看得分未过阈值，但所在文章整体带有新一代国产大模型（豆包、千问、"
+        if zh2_seg:
+            notes.append(f"有 {len(zh2_seg)} 段中文所在文章整体不像 AI，但这几段本身带有新一代国产大模型（豆包、千问、DeepSeek、Kimi、"
+                         "文心等）的明显写作风格（中文第二分类器单段得分很高），按“中度疑似”单独计入。常见于人写文章里插入了 AI 生成的段落；"
+                         "如果是你亲自写的，请结合草稿复核。")
+        if zh2_ai - en3_ai - zh2_seg:
+            notes.append(f"按整篇判断：有 {len(zh2_ai - en3_ai - zh2_seg)} 段中文单看得分未过阈值，但所在文章整体带有新一代国产大模型（豆包、千问、"
                          "DeepSeek、Kimi、文心等）的写作风格（中文第二分类器整篇中位得分达到阈值），按“中度疑似（整篇判断）”计入。"
                          "如果其中有你亲自写的段落，请逐段复核。")
         if famous_like:
