@@ -194,8 +194,54 @@ function showError(msg){
   errorBox.classList.toggle('hidden', !msg);
 }
 
-async function api(path, opts){
-  const r = await fetch(path, opts);
+/* 网络层失败（浏览器只报 "Failed to fetch" / "NetworkError" / "Load failed"，拿不到任何 HTTP 状态）：
+   常见原因是网络或 VPN / 代理瞬间断开、浏览器插件拦截、电脑休眠。以前一次失败就整个检测中止，
+   2026-10-19 用户反馈提交后只显示 "Failed to fetch"。现在：自动重试几次；仍失败就给出能看懂的中文说明，
+   并把失败情况（不含正文）记下来，下次能连上时报给本站，方便排查。 */
+const isNetErr = (e)=> e && e.name === 'TypeError' && /fetch|network|load failed/i.test(e.message || '');
+const NET_MSG = '网络连接中断，请求没有送到检测服务器（浏览器提示：Failed to fetch）。' +
+  '常见原因：网络或 VPN / 代理不稳定、浏览器插件（广告拦截、翻译、安全软件）拦截了请求、电脑休眠。' +
+  '请检查网络后刷新页面重试；如果开着 VPN，可以换一条线路或关闭后再试；也可以换一个浏览器或用无痕窗口试试。';
+function logClientError(stage, err, extra){
+  const item = { t: Date.now(), stage, name: err && err.name, msg: String(err && err.message || '').slice(0, 200),
+    online: navigator.onLine, ua: navigator.userAgent.slice(0, 160), ...extra };
+  let q = [];
+  try{ q = JSON.parse(localStorage.getItem('atc_client_errors') || '[]'); }catch(e){}
+  q.push(item); q = q.slice(-10);
+  try{ localStorage.setItem('atc_client_errors', JSON.stringify(q)); }catch(e){}
+}
+async function flushClientErrors(){
+  let q = [];
+  try{ q = JSON.parse(localStorage.getItem('atc_client_errors') || '[]'); }catch(e){ return; }
+  if(!q.length) return;
+  try{
+    const r = await fetch('/api/client-log', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ items: q }) });
+    if(r.ok) localStorage.removeItem('atc_client_errors');
+  }catch(e){ /* 下次再报 */ }
+}
+setTimeout(flushClientErrors, 3000);
+
+async function api(path, opts, tries){
+  // GET（查询进度）可以放心多试几次；POST（提交检测）最多再试 2 次，避免重复提交
+  const isGet = !opts || !opts.method || opts.method === 'GET';
+  const max = tries || (isGet ? 8 : 3);
+  let r, lastErr;
+  for(let i = 0; i < max; i++){
+    try{ r = await fetch(path, opts); lastErr = null; break; }
+    catch(e){
+      lastErr = e;
+      if(!isNetErr(e)) throw e;
+      if(i < max - 1){
+        if(typeof progressLabel !== 'undefined' && progressLabel) progressLabel.textContent = `网络不稳定，正在重试（第 ${i + 1} 次）…`;
+        await sleep(Math.min(15000, 1500 * Math.pow(2, i)));
+      }
+    }
+  }
+  if(lastErr){
+    logClientError(path.replace(/\/v1\/jobs\/.*/, '/v1/jobs/*'), lastErr,
+      { body_len: opts && opts.body ? opts.body.length : 0, tries: max });
+    throw Object.assign(new Error(NET_MSG), { network: true });
+  }
   let data;
   try{ data = await r.json(); }catch(e){ data = { message: `服务返回异常（HTTP ${r.status}）` }; }
   if(!r.ok && r.status !== 202) throw Object.assign(new Error(data.message || ('HTTP ' + r.status)), { status: r.status, data });
