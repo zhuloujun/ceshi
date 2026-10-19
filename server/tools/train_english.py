@@ -119,6 +119,21 @@ def build_rows(args, rnd):
         raw.append((r["text"], 1, r["model"], "test" if r["split"] == "test" else "train", 2))
     for t in ev.read_blocks(ev.DATA_DIR / "ai_english_extra.txt"):
         raw.append((t, 1, "repo-ai-english", "train", 1))
+    # 用户提供的已标注英文（私有 Kaggle 脚本传入，不进公开仓库）：{t, y, r:'en', d, split?}
+    if getattr(args, "user_docs", ""):
+        n_ud = 0
+        for line in Path(args.user_docs).read_text("utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if (r.get("register") or {"en": "en"}.get(r.get("r"), "")) != "en":
+                continue
+            t = r.get("text", r.get("t", "")).strip()
+            src = f"user-{r.get('doc', r.get('d', '?')).split('-')[0]}-{'ai' if int(r['y']) else 'human'}"
+            raw.append((t, int(r["y"]), src, "test" if r.get("split") == "test" else "train",
+                        2 if r.get("split") == "test" else max(1, args.user_docs_reps)))
+            n_ud += 1
+        print(f"用户英文段落 {n_ud}", flush=True)
     rows = []
     for text, y, src, split, k in raw:
         for w in windows(text, rnd, k):
@@ -143,6 +158,8 @@ def main():
     ap.add_argument("--skip-prefix", nargs="*", default=[], help="不使用这些前缀的生成数据（如 tr_），用于对比实验")
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--time-budget-min", type=float, default=270)
+    ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='en' 为英文）")
+    ap.add_argument("--user-docs-reps", type=int, default=3, help="用户英文在训练集里取几个窗口")
     args = ap.parse_args()
 
     import torch
