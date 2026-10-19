@@ -173,6 +173,8 @@ jobs:
           key = call("/admin/api/keys", {"name": "adhoc-check", "days": 1}, {"X-Admin-Token": os.environ["LOCAL_ADMIN"]})
           tok = key.get("key") or key.get("api_key") or key.get("token")
           H = {"Authorization": "Bearer " + tok}
+          COMPACT = len(docs) > 4      # 文档多时只输出汇总（每一步最多显示 10 条提示）
+          summary = []
           for d in docs:
               j = call("/v1/detect", {"text": d["text"], "wait": True, "genre": d.get("genre", "auto")}, H)
               jid = j.get("job_id") or j.get("id")
@@ -188,6 +190,14 @@ jobs:
               s = res.get("summary") or {}
               works = " ； ".join(f"{w['title'][:24]} {'—' if w.get('ai_rate') is None else round(w['ai_rate'] * 100)}%"
                                  for w in res.get("works", []))
+              code = {"high": "H", "mid": "M", "light": "L", "low": ".", "none": "-"}
+              summary.append(f"{d['name']} {s.get('ai_rate')}: " + " ".join(
+                  f"{code.get(g.get('level'), '?')}{round((g.get('prob') or 0) * 100)}"
+                  + ("" if not g.get("windows") else "[" + "".join({"ai": "A", "human": "h"}.get(w["flag"], ".") for w in g["windows"]) + "]")
+                  + ("" if not g.get("partial") else f"={g['partial'][0]}{g.get('ai_chars')}")
+                  for g in res.get("segments", []) if g.get("prob") is not None))
+              if COMPACT:
+                  continue
               print(f"::warning title={d['name']} 分篇::AI 率 {s.get('ai_rate')} · {works}"[:4000], flush=True)
               segs = []
               for g in res.get("segments", []):
@@ -213,6 +223,10 @@ jobs:
                   print(f"::warning title={d['name']} PDF 报告失败::{e}", flush=True)
               for i in range(0, len(segs), 30):
                   print(f"::notice title={d['name']} 分段 {i // 30 + 1}::" + " | ".join(segs[i:i + 30]), flush=True)
+          if COMPACT:
+              blob = "\n".join(summary)
+              for i in range(0, len(blob), 3800):
+                  print(f"::notice title=汇总 {i // 3800 + 1}::" + blob[i:i + 3800].replace("\n", " ｜ "), flush=True)
           PY
       - name: 服务日志（出错时看）
         if: always()
