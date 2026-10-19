@@ -524,7 +524,7 @@
    "auroc": {
     "fastdetect": 0.842,
     "binoculars": 0.8224,
-    "classifier": 1.0
+    "classifier": 0.9999
    },
    "features_used": [
     "fastdetect",
@@ -532,9 +532,9 @@
     "logit_classifier"
    ],
    "cross_validated": true,
-   "combined_auroc": 0.9999,
+   "combined_auroc": 0.9998,
    "threshold": 0.5,
-   "human_flagged_rate": 0.008,
+   "human_flagged_rate": 0.0107,
    "ai_caught_rate": 1.0,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
   },
@@ -543,13 +543,13 @@
     "name": "文言保留集（另一组古籍 + 未参与校准的 AI 文言）",
     "n_human": 278,
     "n_ai": 147,
-    "auroc": 0.9962,
+    "auroc": 0.9989,
     "ai_caught": 0.9932,
-    "human_flagged": 0.018,
+    "human_flagged": 0.0216,
     "per_signal_auroc": {
      "fastdetect": 0.8286,
      "binoculars": 0.1873,
-     "logit_classifier": 0.9955,
+     "logit_classifier": 0.9989,
      "fastdetect_norm": 0.815,
      "lrr": 0.792,
      "log_rank": 0.1741,
@@ -589,7 +589,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "classical-classifier-v20"
+   "classifier": "classical-classifier-v22"
   }
  },
  "zh_poetry": {
@@ -599,61 +599,61 @@
    "auroc": {
     "fastdetect": 0.8229,
     "binoculars": 0.807,
-    "classifier": 0.9626
+    "classifier": 0.9673
    },
    "features_used": [
     "logit_classifier"
    ],
    "cross_validated": true,
-   "combined_auroc": 0.9617,
-   "threshold": 0.8313,
-   "human_flagged_rate": 0.03,
-   "ai_caught_rate": 0.7945,
+   "combined_auroc": 0.9662,
+   "threshold": 0.8485,
+   "human_flagged_rate": 0.0325,
+   "ai_caught_rate": 0.8396,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。",
    "count_check": {
-    "fp_changan_human": 0.0333,
-    "fp_tang_song_300": 0.0217,
-    "worst_auroc": 0.6602
+    "fp_changan_human": 0.0433,
+    "fp_tang_song_300": 0.0155,
+    "worst_auroc": 0.645
    },
    "feature_selection": {
-    "只用诗词分类器": 0.6602,
-    "诗词分类器 + 语言模型": 0.4154,
-    "诗词分类器 + 通用分类器 + 语言模型": 0.374,
+    "只用诗词分类器": 0.645,
+    "诗词分类器 + 语言模型": 0.4474,
+    "诗词分类器 + 通用分类器 + 语言模型": 0.3988,
     "通用分类器 + 语言模型": 0.1325,
     "只用语言模型": 0.1128
    },
    "feature_set": "只用诗词分类器",
    "variant_table": {
     "只用诗词分类器": {
-     "ChangAn 保留集": 0.9483,
-     "故事诗 vs 当代人写": 0.6602,
-     "ChangAn AI vs 唐宋名篇": 0.9653,
-     "故事诗 vs 唐宋名篇": 0.7041,
-     "国产新模型诗 vs 当代人写": 0.9611,
-     "国产新模型诗 vs 唐宋名篇": 0.9721
+     "ChangAn 保留集": 0.9529,
+     "故事诗 vs 当代人写": 0.645,
+     "ChangAn AI vs 唐宋名篇": 0.9728,
+     "故事诗 vs 唐宋名篇": 0.6998,
+     "国产新模型诗 vs 当代人写": 0.9684,
+     "国产新模型诗 vs 唐宋名篇": 0.9818
     },
     "诗词分类器 + 语言模型": {
-     "ChangAn 保留集": 0.9518,
-     "故事诗 vs 当代人写": 0.7103,
-     "ChangAn AI vs 唐宋名篇": 0.8152,
-     "故事诗 vs 唐宋名篇": 0.4154,
-     "国产新模型诗 vs 当代人写": 0.9773,
-     "国产新模型诗 vs 唐宋名篇": 0.8765
+     "ChangAn 保留集": 0.9552,
+     "故事诗 vs 当代人写": 0.6982,
+     "ChangAn AI vs 唐宋名篇": 0.8604,
+     "故事诗 vs 唐宋名篇": 0.4474,
+     "国产新模型诗 vs 当代人写": 0.9837,
+     "国产新模型诗 vs 唐宋名篇": 0.9185
     },
     "诗词分类器 + 通用分类器 + 语言模型": {
-     "ChangAn 保留集": 0.9537,
-     "故事诗 vs 当代人写": 0.6683,
-     "ChangAn AI vs 唐宋名篇": 0.7841,
-     "故事诗 vs 唐宋名篇": 0.374,
-     "国产新模型诗 vs 当代人写": 0.9624,
-     "国产新模型诗 vs 唐宋名篇": 0.8023
+     "ChangAn 保留集": 0.9562,
+     "故事诗 vs 当代人写": 0.6602,
+     "ChangAn AI vs 唐宋名篇": 0.8246,
+     "故事诗 vs 唐宋名篇": 0.3988,
+     "国产新模型诗 vs 当代人写": 0.973,
+     "国产新模型诗 vs 唐宋名篇": 0.8532
     },
     "通用分类器 + 语言模型": {
      "ChangAn 保留集": 0.8769,
      "故事诗 vs 当代人写": 0.5923,
      "ChangAn AI vs 唐宋名篇": 0.3359,
      "故事诗 vs 唐宋名篇": 0.1325,
-     "国产新模型诗 vs 当代人写": 0.8361,
+     "国产新模型诗 vs 当代人写": 0.836,
      "国产新模型诗 vs 唐宋名篇": 0.3113
     },
     "只用语言模型": {
@@ -687,13 +687,13 @@
     "name": "ChangAn 保留集（另一批作者 + 没见过的 Kimi-K2 与其他模型的新诗词）",
     "n_human": 300,
     "n_ai": 300,
-    "auroc": 0.9483,
-    "ai_caught": 0.67,
-    "human_flagged": 0.0333,
+    "auroc": 0.9529,
+    "ai_caught": 0.7233,
+    "human_flagged": 0.0433,
     "per_signal_auroc": {
-     "fastdetect": 0.7596,
+     "fastdetect": 0.7595,
      "binoculars": 0.2502,
-     "logit_classifier": 0.9483,
+     "logit_classifier": 0.9529,
      "fastdetect_norm": 0.7519,
      "lrr": 0.8175,
      "log_rank": 0.1699,
@@ -705,13 +705,13 @@
      "logit_classifier_mpu": 0.7237
     },
     "ai_caught_by_model": {
-     "Deepseek": 0.5733,
-     "gpt-4.1": 0.84,
-     "kimi-k2": 0.5467,
-     "seed": 0.72
+     "Deepseek": 0.68,
+     "gpt-4.1": 0.88,
+     "kimi-k2": 0.56,
+     "seed": 0.7733
     },
     "human_flagged_by_source": {
-     "human": 0.0333
+     "human": 0.0433
     }
    },
    {
@@ -733,11 +733,11 @@
     "n_ai": 0,
     "auroc": null,
     "ai_caught": null,
-    "human_flagged": 0.0217,
+    "human_flagged": 0.0155,
     "per_signal_auroc": {},
     "ai_caught_by_model": {},
     "human_flagged_by_source": {
-     "唐诗三百首": 0.0383,
+     "唐诗三百首": 0.0273,
      "宋词三百首": 0.0
     }
    }
@@ -745,7 +745,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "poetry-classifier-v19"
+   "classifier": "poetry-classifier-v20"
   }
  }
 }
