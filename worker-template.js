@@ -21,7 +21,7 @@
  * 注意：此文件由 build.mjs 生成，请修改 pages-static/ 下的源文件后重新生成。
  */
 
-import { json as sjson, html, SECURITY_HEADERS, readJson, clientIp, sameOrigin, BACKEND_PAGE_CSP, LITE_CSP, withStoredSecrets, handleSetupSecret } from './worker-src/util.js';
+import { json as sjson, html, SECURITY_HEADERS, readJson, clientIp, sameOrigin, BACKEND_PAGE_CSP, LITE_CSP, withStoredSecrets, handleSetupSecret, audit, hitRateLimit } from './worker-src/util.js';
 import { handleAuthApi, getSession, adminSlug, SESSION_COOKIE, clearCookie } from './worker-src/auth.js';
 import { handleBillingApi, planCharge, recordCharge, detectRateOk, mintBackendKey, hasAnyQuota, settleFileJob } from './worker-src/billing.js';
 import { handleAdminApi } from './worker-src/admin.js';
@@ -152,6 +152,16 @@ async function gated(request, env, url) {
   }
 
   // 已登录
+  // 检测页报告的网络层失败（浏览器只显示 "Failed to fetch"，服务器上看不到这次请求）：记入操作日志，便于排查
+  if (p === '/api/client-log' && request.method === 'POST') {
+    if (!sameOrigin(request)) return sjson({ ok: false }, 403);
+    const rl = await hitRateLimit(env, 'clog:' + s.user_id, 20, 3600);
+    if (!rl.ok) return sjson({ ok: true });
+    let items = [];
+    try { items = ((await request.json()).items || []).slice(-10); } catch { /* 忽略 */ }
+    if (items.length) await audit(env, s.email, 'client_network_error', JSON.stringify(items).slice(0, 1000), clientIp(request));
+    return sjson({ ok: true });
+  }
   if (isGet && p === '/account') return s.isAdmin ? Response.redirect(url.origin + '/admin/console', 302) : html(accountPage());
   if (p === '/admin/console') return s.isAdmin ? html(adminConsolePage()) : html(notFoundPage(), 404);
   if (p === '/admin' || p.startsWith('/admin/')) {
@@ -186,7 +196,10 @@ async function gated(request, env, url) {
     let n = 0;
     try { n = String(JSON.parse(raw).text || '').length; } catch { return sjson({ error: 'bad_request', message: '请求内容不是合法的 JSON' }, 400); }
     const charge = await planCharge(env, s, n);
-    if (!charge.ok) return sjson({ error: 'quota_exceeded', message: charge.message }, 402);
+    if (!charge.ok) {
+      await audit(env, s.email, 'detect_quota_exceeded', `${n} 字`, clientIp(request));
+      return sjson({ error: 'quota_exceeded', message: charge.message }, 402);
+    }
     const r = await proxy(new Request(request.url, { method: 'POST', headers, body: raw }), env, url);
     if (r.status < 400) await recordCharge(env, s, n, charge);
     afterBackend(env, url, request, r);
