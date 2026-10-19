@@ -408,8 +408,9 @@ def test_file_upload(client, tmp_path):
         z.writestr("word/document.xml", '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
                    + body + "</w:body></w:document>")
     r = client.post("/v1/detect/file", files={"file": ("t.docx", p.read_bytes())}, headers=h)
-    assert r.status_code == 200, r.text
-    assert r.json()["result"]["summary"]["total_chars"] >= len(MODERN) * 3
+    assert r.status_code in (200, 202), r.text
+    j = r.json() if r.status_code == 200 else poll(client, r.json()["id"], h)   # 机器慢时先返回 202，再查询结果
+    assert j["result"]["summary"]["total_chars"] >= len(MODERN) * 3
     r = client.post("/v1/detect/file", files={"file": ("t.exe", b"xx")}, headers=h)
     assert r.json()["error"] == "bad_file"
 
