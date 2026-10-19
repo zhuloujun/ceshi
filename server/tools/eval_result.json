@@ -211,7 +211,7 @@
     "ai_caught": 0.8276,
     "human_flagged": 0.0209,
     "per_signal_auroc": {
-     "fastdetect": 0.6856,
+     "fastdetect": 0.6857,
      "binoculars": 0.3152,
      "logit_classifier": 0.9337,
      "fastdetect_norm": 0.6857,
@@ -328,7 +328,7 @@
     "ai_caught": 0.7685,
     "human_flagged": 0.0272,
     "per_signal_auroc": {
-     "fastdetect": 0.6856,
+     "fastdetect": 0.6857,
      "binoculars": 0.3152,
      "logit_classifier": 0.9337,
      "fastdetect_norm": 0.6857,
@@ -474,7 +474,7 @@
     "ai_caught": 0.7734,
     "human_flagged": 0.0146,
     "per_signal_auroc": {
-     "fastdetect": 0.6856,
+     "fastdetect": 0.6857,
      "binoculars": 0.3152,
      "logit_classifier": 0.9337,
      "fastdetect_norm": 0.6857,
