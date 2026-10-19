@@ -422,6 +422,23 @@ function renderResult(res){
     div.className = `para-item level-${lvl}`;
     div.dataset.flagged = (lvl === 'high' || lvl === 'mid' || lvl === 'light') ? '1' : '0';
     const preview = seg.text.length > 280 ? seg.text.slice(0,280) + '……' : seg.text;
+    // 逐句窗口：标出整段里很像 AI 的句子（红底）和明显像人写的句子（灰色），只在“部分疑似 / 局部疑似”时显示全文
+    const wins = (seg.windows || []).filter(w=>w.start >= 0 && (w.flag === 'ai' || (seg.partial === 'partial' && w.flag === 'human')));
+    let textHtml = escapeHtml(preview);
+    if(seg.partial && wins.length){
+      wins.sort((a,b)=>a.start-b.start);
+      let pos = 0, out = '';
+      for(const w of wins){
+        if(w.start < pos) continue;
+        out += escapeHtml(seg.text.slice(pos, w.start));
+        const piece = escapeHtml(seg.text.slice(w.start, w.start + w.chars));
+        out += w.flag === 'ai'
+          ? `<mark class="win-ai" title="这几句很像 AI 写的（窗口分数 ${w.prob!=null ? Math.round(w.prob*100) : '—'}%）">${piece}</mark>`
+          : `<span class="win-human" title="这几句明显像人写（不计入 AI 率）">${piece}</span>`;
+        pos = w.start + w.chars;
+      }
+      textHtml = out + escapeHtml(seg.text.slice(pos));
+    }
     const sig = Object.entries(seg.signals || {}).filter(([,v])=>v!=null)
       .map(([k,v])=>`<span class="para-tag">${sigName(k, seg)} ${pct(v)}</span>`).join('');
     const raw = seg.raw || {};
@@ -454,7 +471,7 @@ function renderResult(res){
         : seg.by_work ? 'title="单段分数未过阈值，按整篇判断计入 AI 率（颜色表示计入）"'
         : (seg.near_threshold && seg.prob!=null && seg.prob >= seg.threshold) ? 'title="单段分数过了阈值，但按整篇判断未计入 AI 率（颜色表示未计入）"' : ''}>${seg.prob!=null ? Math.round(seg.prob*100) : seg.ref_prob!=null ? Math.round(seg.ref_prob*100) : '—'}${seg.by_work ? '<small style="display:block;font-size:10px;line-height:1">整篇</small>' : (seg.near_threshold && seg.prob!=null && seg.prob >= seg.threshold) ? '<small style="display:block;font-size:10px;line-height:1">未计入</small>' : ''}</div>
       <div class="para-body">
-        <div class="para-text">${escapeHtml(preview)}</div>
+        <div class="para-text">${textHtml}</div>
         <div class="para-tags">
           ${seg.label ? `<span class="para-tag strong">${seg.label}</span>` : ''}
           ${seg.near_threshold ? '<span class="para-tag" title="低于判定阈值，但相差不大，未计入 AI 率">接近阈值</span>' : ''}

@@ -151,6 +151,7 @@ ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.85") or 0.85)
 # AI（ChatGPT 文白夹杂保留集 148/150、1015.docx 5/5）≥ 0.95。阈值定为 0.95：这批真人 0 段达到。
 ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.95") or 0.95)
 ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
+ZH2_SEG_MIN_CHARS = _int("ZH2_SEG_MIN_CHARS", 150)   # 多段文章里单独一段按第二分类器计入的最短字数
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
 WORK_MAJORITY = float(os.getenv("WORK_MAJORITY", "0.6") or 0.6)   # 同篇已判 AI 的文字占比达到此值，接近阈值的段落按整篇计入
 # 文言虚词（之乎者也矣焉哉曰…）占汉字比例超过此值的段落，视为以古籍引文为主，不计入 AI 率
@@ -165,6 +166,8 @@ WIN_AI_PROB = float(os.getenv("WIN_AI_PROB", "0.95") or 0.95)        # 窗口综
 WIN_AI_SECOND = float(os.getenv("WIN_AI_SECOND", "0.9") or 0.9)
 WIN_HUMAN_PROB = float(os.getenv("WIN_HUMAN_PROB", "0.15") or 0.15)  # 窗口综合分数低于此值且第二分类器也判人写，算人写窗口
 WIN_HUMAN_SECOND = float(os.getenv("WIN_HUMAN_SECOND", "0.3") or 0.3)
+WIN_ZH2_AI = float(os.getenv("WIN_ZH2_AI", "0.95") or 0.95)
+WIN_ZH2_SEG = float(os.getenv("WIN_ZH2_SEG", "0.85") or 0.85)
 WIN_PARTIAL_MIN_SHARE = float(os.getenv("WIN_PARTIAL_MIN_SHARE", "0.3") or 0.3)   # 人写窗口至少占整段这么多，才按“部分疑似”扣除
 COUPLET_CLASSIFIER_THRESHOLD = float(os.getenv("COUPLET_CLASSIFIER_THRESHOLD", "0.975") or 0.975)
 CLASSICAL_THRESHOLD = float(os.getenv("CLASSICAL_THRESHOLD", "0.03") or 0.03)
