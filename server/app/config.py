@@ -154,6 +154,18 @@ ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
 WORK_MAJORITY = float(os.getenv("WORK_MAJORITY", "0.6") or 0.6)   # 同篇已判 AI 的文字占比达到此值，接近阈值的段落按整篇计入
 # 文言虚词（之乎者也矣焉哉曰…）占汉字比例超过此值的段落，视为以古籍引文为主，不计入 AI 率
+# ---------- 逐句窗口（局部检测）----------
+# 长段落再按句子切成约 100 字 / 70 词的窗口分别打分（参考 Turnitin：5–10 句的重叠窗口逐句给分）。用途：
+#   ① 整段判为 AI、但其中有几句明显像人写（人写文章里插入了 AI 段落，或 AI 稿被人大幅改写）：只把 AI 的部分计入；
+#   ② 整段未过阈值、但其中几句非常像 AI（人写文章里夹了几句 AI 生成或 AI 润色的句子）：只把这几句计入“局部疑似”。
+WINDOWS_ENABLED = os.getenv("WINDOWS_ENABLED", "1") == "1"
+WIN_ZH_CHARS = _int("WIN_ZH_CHARS", 100)
+WIN_EN_WORDS = _int("WIN_EN_WORDS", 70)
+WIN_AI_PROB = float(os.getenv("WIN_AI_PROB", "0.95") or 0.95)        # 窗口综合分数达到此值且第二分类器同意，算 AI 窗口
+WIN_AI_SECOND = float(os.getenv("WIN_AI_SECOND", "0.9") or 0.9)
+WIN_HUMAN_PROB = float(os.getenv("WIN_HUMAN_PROB", "0.15") or 0.15)  # 窗口综合分数低于此值且第二分类器也判人写，算人写窗口
+WIN_HUMAN_SECOND = float(os.getenv("WIN_HUMAN_SECOND", "0.3") or 0.3)
+WIN_PARTIAL_MIN_SHARE = float(os.getenv("WIN_PARTIAL_MIN_SHARE", "0.3") or 0.3)   # 人写窗口至少占整段这么多，才按“部分疑似”扣除
 COUPLET_CLASSIFIER_THRESHOLD = float(os.getenv("COUPLET_CLASSIFIER_THRESHOLD", "0.975") or 0.975)
 CLASSICAL_THRESHOLD = float(os.getenv("CLASSICAL_THRESHOLD", "0.03") or 0.03)
 MODERN_MAX_RATIO = float(os.getenv("MODERN_MAX_RATIO", "0.015") or 0.015)

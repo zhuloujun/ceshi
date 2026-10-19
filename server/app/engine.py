@@ -187,7 +187,9 @@ def works_summary(seg_out: list) -> list:
         if seg["prob"] is not None:
             w["counted"] += seg["chars"]
             w["psum"] += seg["prob"] * seg["chars"]
-            if seg["level"] in ("high", "mid", "light"):
+            if seg.get("ai_chars") is not None:          # 部分疑似 / 局部疑似：只计入窗口判出的那部分
+                w["flagged"] += seg["ai_chars"]
+            elif seg["level"] in ("high", "mid", "light"):
                 w["flagged"] += seg["chars"]
         elif seg["kind"] == "reference_only" and seg["ref_prob"] is not None:
             w["refchars"] += seg["chars"]
@@ -214,6 +216,43 @@ def works_summary(seg_out: list) -> list:
                         "ai_rate": None, "mean_prob": None, "counted": False,
                         "verdict": "疑似公开名篇原文（不计入）" if famous else "未计入（引文 / 参考文献）"})
     return out
+
+
+_SENT_ZH = re.compile(r"[^。！？；!?;…\n]*(?:[。！？；!?;…]+[”’」』）)]*|\n|$)")
+_SENT_EN = re.compile(r"[^.!?\n]*(?:[.!?]+[\"'”’)]*\s*|\n|$)")
+
+
+def window_spans(text: str, register: str) -> list[tuple[int, int]]:
+    """把一段文字按句子切成约 WIN_ZH_CHARS 字 / WIN_EN_WORDS 词的窗口（不重叠，首尾相接覆盖全段）。
+    段落不到两个窗口长时返回空列表（短段落本身就是一个窗口，不必再切）。"""
+    en = register == "en"
+    size = (lambda a, b: len(text[a:b].split())) if en else (lambda a, b: len(re.findall(r"[\u4e00-\u9fff]", text[a:b])))
+    target = config.WIN_EN_WORDS if en else config.WIN_ZH_CHARS
+    if size(0, len(text)) < 2 * target:
+        return []
+    bounds = [m.end() for m in (_SENT_EN if en else _SENT_ZH).finditer(text) if m.end() > m.start()]
+    spans, a = [], 0
+    for b in bounds:
+        if size(a, b) >= target:
+            spans.append((a, b))
+            a = b
+    if a < len(text):
+        if spans and size(a, len(text)) < target // 2:
+            spans[-1] = (spans[-1][0], len(text))
+        else:
+            spans.append((a, len(text)))
+    return spans if len(spans) >= 2 else []
+
+
+def window_flag(prob, second) -> str | None:
+    """窗口判定：'ai'（综合分数很高且第二意见同意）、'human'（两者都明确判人写）或 None（不确定）。"""
+    if prob is None:
+        return None
+    if prob >= config.WIN_AI_PROB and (second is None or second >= config.WIN_AI_SECOND):
+        return "ai"
+    if prob < config.WIN_HUMAN_PROB and (second is None or second < config.WIN_HUMAN_SECOND):
+        return "human"
+    return None
 
 
 class Engine:
@@ -466,6 +505,15 @@ class Engine:
             idx = [k for k, r in enumerate(sc_regs) if r == "en"]
             for k, p in zip(idx, self.cls_en4.predict([sc_texts[k] for k in idx]) if idx else []):
                 results[scored[k].index]["classifier_en4"] = p
+        # 逐句窗口：长段落按句子切成小窗口，供“部分疑似 / 局部疑似”判断（诗词短小，不切）
+        win_spans = {}
+        if config.WINDOWS_ENABLED:
+            for s in counted:
+                if s.register in ("zh", "zh_classical", "en"):
+                    sp = window_spans(score_text(s), s.register)
+                    if sp:
+                        win_spans[s.index] = sp
+        win_raw: dict = {i: [{} for _ in sp] for i, sp in win_spans.items()}
         # 语言模型较慢：快速模式下抽样
         if self.lm and self.lm.ready:
             done = 0
@@ -473,7 +521,13 @@ class Engine:
                 if s.index not in lm_ids:
                     continue
                 t0 = time.time()
-                r = self.lm.score(score_text(s))
+                if s.index in win_spans:
+                    r, wl = self.lm.score_with_spans(score_text(s), win_spans[s.index])
+                    for d, w in zip(win_raw[s.index], wl):
+                        if w:
+                            d.update(w)
+                else:
+                    r = self.lm.score(score_text(s))
                 if r:
                     results[s.index].update(r)
                     dt = time.time() - t0
@@ -483,6 +537,21 @@ class Engine:
                 done += 1
                 if progress:
                     progress(done, len(lm_ids))
+
+        # 窗口的分类器分数（分类器很快）
+        if win_spans:
+            seg_of = {x.index: x for x in segs}
+            keys = [(i, k) for i, sp in win_spans.items() for k in range(len(sp))]
+            wt = [score_text(seg_of[i])[a:b] for i, sp in win_spans.items() for (a, b) in sp]
+            wr = [seg_of[i].register for i, _ in keys]
+            for name, fn in (("classifier", self.classify), ("classifier_mpu", self.classify_second),
+                             ("classifier_en2", self.classify_en2), ("classifier_zh2", self.classify_zh2)):
+                for (i, k), p in zip(keys, fn(wt, wr)):
+                    if p is not None:
+                        win_raw[i][k][name] = p
+            for (i, k), t in zip(keys, wt):
+                win_raw[i][k].update(style_scores(t))
+                win_raw[i][k]["_text"] = t
 
         cal = self.cal
         styles = {s.index: stylometry.features(score_text(s)) for s in scored}
@@ -800,10 +869,46 @@ class Engine:
                 # 证据互相矛盾时不下结论，标出来请人复核，不计入 AI 率（不把"没标出"当成"确认是人写"）
                 level, near = "low", True
                 label = "接近阈值（检测器意见不一致，建议复核）"
+            # 逐句窗口：整段判 AI 但有成片的句子明显像人写 → 只按 AI 部分计入（部分疑似）；
+            # 整段未过阈值但有几句非常像 AI（综合分数和第二分类器都很肯定）→ 只把这几句计入（局部疑似）
+            wins_out, ai_chars, partial = [], None, None
+            if (s.index in win_spans and s.counted and prob is not None and s.index not in memo
+                    and s.index not in zh_human_work):
+                wprof = scoring.profile_for(cal, "zh_short")[0] if (s.register == "zh" and has_short) else pcal
+                stext = score_text(s)
+                for (a, b), wraw in zip(win_spans[s.index], win_raw[s.index]):
+                    wtxt = wraw.get("_text") or stext[a:b]
+                    wp = scoring.combine({k: v for k, v in wraw.items() if k != "_text"}, wprof)["prob"]
+                    second = wraw.get({"zh": "classifier_zh2", "en": "classifier_en2"}.get(s.register, "classifier"))
+                    pos = s.text.find(wtxt[:12].strip()) if wtxt.strip() else -1
+                    wins_out.append({"start": pos, "chars": len(wtxt), "text": wtxt,
+                                     "prob": None if wp is None else round(wp, 4),
+                                     "second": None if second is None else round(second, 4),
+                                     "flag": window_flag(wp, second)})
+                tot_w = sum(w["chars"] for w in wins_out) or 1
+                hum_w = sum(w["chars"] for w in wins_out if w["flag"] == "human")
+                ai_w = sum(w["chars"] for w in wins_out if w["flag"] == "ai")
+                if level in ("high", "mid", "light") and not by_work and hum_w >= config.WIN_PARTIAL_MIN_SHARE * tot_w:
+                    ai_chars = round(len(s.text) * (1 - hum_w / tot_w))
+                    partial = "partial"
+                    label = f"{label}（部分句子明显像人写，按约 {ai_chars / len(s.text):.0%} 计入）"
+                elif level in ("low", "none") and ai_w:
+                    ai_chars = round(len(s.text) * ai_w / tot_w)
+                    partial = "local"
+                    n_ai = sum(1 for w in wins_out if w["flag"] == "ai")
+                    label = f"局部疑似（{n_ai} 处句子很像 AI 写的或经 AI 润色，约 {ai_chars} 字计入）"
+                    near = False
             if s.counted and prob is not None:
                 counted_chars += len(s.text)
                 prob_weighted += prob * len(s.text)
-                chars_by_level[level] += len(s.text)
+                if partial == "partial":
+                    chars_by_level[level] += ai_chars
+                    chars_by_level["low"] += len(s.text) - ai_chars
+                elif partial == "local":
+                    chars_by_level["light"] += ai_chars
+                    chars_by_level["low"] += len(s.text) - ai_chars
+                else:
+                    chars_by_level[level] += len(s.text)
                 level_counts[level] += 1
                 chars_by_register[s.register] = chars_by_register.get(s.register, 0) + len(s.text)
                 if near:
@@ -819,6 +924,7 @@ class Engine:
                 "ref_prob": (None if s.counted or comb["prob"] is None else round(comb["prob"], 4)),
                 "prob_unsmoothed": None if comb["prob"] is None else round(comb["prob"], 4),
                 "level": level, "label": label, "near_threshold": near, "by_work": by_work,
+                "partial": partial, "ai_chars": ai_chars, "windows": wins_out,
                 "memorized": s.index in memo,
                 "short": is_short(s, score_text(s)),
                 "signals": {k: (None if v is None else round(v, 4)) for k, v in comb["signals"].items()},
@@ -912,6 +1018,15 @@ class Engine:
         if near_chars and counted_chars:
             notes.append(f"另有 {near_chars / counted_chars:.0%} 的文字 AI 概率接近阈值（已标“接近阈值”，未计入 AI 率），"
                          "可重点复核；AI 翻译、经过改写或人工润色的 AI 文字常落在这一区间。")
+        n_part = [x for x in seg_out if x.get("partial") == "partial"]
+        n_local = [x for x in seg_out if x.get("partial") == "local"]
+        if n_part:
+            notes.append(f"逐句复查：有 {len(n_part)} 段整段判为疑似 AI，但其中成片的句子明显像人写"
+                         "（常见于人写文章里插入了 AI 段落，或 AI 稿经过大幅改写），只按 AI 部分的字数计入（标“部分句子明显像人写”）。")
+        if n_local:
+            notes.append(f"逐句复查：有 {len(n_local)} 段整段未过阈值，但其中有句子非常像 AI 写的或经 AI 润色"
+                         f"（共约 {sum(x['ai_chars'] for x in n_local)} 字），只把这些句子计入，标“局部疑似”。"
+                         "单独几句的判断比整段更容易出错，请重点复核这些句子。")
         n_dis = sum(1 for x in seg_out if "意见不一致" in (x.get("label") or ""))
         if n_dis:
             notes.append(f"有 {n_dis} 段各检测器意见不一致（专门见过新一代大模型的分类器判为 AI，综合分数却未过阈值），"
@@ -945,7 +1060,7 @@ class Engine:
                 r_ = "en_paper"
             n_judged += 1
             expected_false += fpr_of.get(r_, fpr_of.get(s_.register, 0.02))
-        n_flagged = sum(1 for x in seg_out if x["prob"] is not None and x["level"] in ("high", "mid", "light"))
+        n_flagged = sum(1 for x in seg_out if x["prob"] is not None and (x["level"] in ("high", "mid", "light") or x.get("partial") == "local"))
         p_chance = None
         if n_flagged and n_judged:
             lam = expected_false
