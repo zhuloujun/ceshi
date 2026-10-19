@@ -84,14 +84,30 @@ class LMScorer:
         div_*                     —— 逐 token 惊奇度（−log p）分布的多样性（DivEye，Basani & Chen，TMLR 2026）：
                                      标准差、偏度、峰度，以及一阶 / 二阶差分的标准差（惊奇度起伏的节奏）
         """
+        tok = self._per_token(ids)
+        return None if tok is None else _aggregate(tok, 0, len(tok["ll"]))
+
+    def score_with_spans(self, text: str, spans: list[tuple[int, int]]) -> tuple[dict | None, list[dict | None]]:
+        """整段打分，同时给出段内每个字符区间（逐句窗口）的同一套特征。只做一次前向计算：窗口特征由
+        整段推理得到的逐 token 数值按区间汇总（窗口里的字仍以前文为上下文，和整段打分一致）。"""
+        enc = self.tok(text, add_special_tokens=False, return_offsets_mapping=True)
+        ids, offs = enc["input_ids"], enc["offset_mapping"]
+        tok = self._per_token(ids)
+        if tok is None:
+            return None, [None] * len(spans)
+        whole = _aggregate(tok, 0, len(tok["ll"]))
+        out = []
+        for a, b in spans:
+            # 第 k 个逐 token 数值对应 ids[k + 1]（预测下一个 token）
+            ks = [k for k in range(len(tok["ll"])) if a <= offs[k + 1][0] < b]
+            out.append(_aggregate(tok, ks[0], ks[-1] + 1) if len(ks) >= 16 else None)
+        return whole, out
+
+    def _per_token(self, ids: list[int]) -> dict | None:
         torch = self.torch
         if len(ids) < 16:
             return None
-        sum_lp = sum_mu = sum_var = sum_xent = 0.0
-        sum_logrank = sum_ent = 0.0
-        n_top1 = n_top10 = 0
-        n_tok = 0
-        nll_all: list[float] = []
+        acc = {k: [] for k in ("ll", "mu", "var", "logrank", "ent", "rank")}
         with self._lock, torch.inference_mode():
             for chunk in self._chunks(ids):
                 inp = torch.tensor([chunk])
@@ -105,48 +121,60 @@ class LMScorer:
                 ll = lp_perf.gather(-1, labels.unsqueeze(-1)).squeeze(-1)       # L_t[x_t]
                 mu = (pr_obs * lp_perf).sum(-1)                                  # μ_t
                 var = (pr_obs * lp_perf.square()).sum(-1) - mu.square()          # σ²_t
-                sum_lp += ll.sum().item()
-                sum_mu += mu.sum().item()
-                sum_var += var.clamp_min(0).sum().item()
-                sum_xent += (-mu).sum().item()
-                del pr_obs, mu, var
+                del pr_obs
                 # 名次：比实际 token 概率更高的候选有几个（+1）
                 rank = (lp_perf > ll.unsqueeze(-1)).sum(-1) + 1
-                sum_logrank += torch.log(rank.float()).sum().item()
-                n_top1 += int((rank == 1).sum().item())
-                n_top10 += int((rank <= 10).sum().item())
-                sum_ent += (-(lp_perf.exp() * lp_perf).sum(-1)).sum().item()
-                nll_all.extend((-ll).tolist())
-                n_tok += labels.numel()
-                del lp_perf, ll, rank
-        if n_tok == 0:
-            return None
-        ppl = -sum_lp / n_tok
-        x_ppl = sum_xent / n_tok
-        fd = (sum_lp - sum_mu) / math.sqrt(sum_var) if sum_var > 0 else None
-        w = 24
-        wins = [sum(nll_all[i:i + w]) / len(nll_all[i:i + w]) for i in range(0, len(nll_all), w) if len(nll_all[i:i + w]) >= w // 2]
-        burst = None
-        if len(wins) >= 2:
-            m = sum(wins) / len(wins)
-            sd = math.sqrt(sum((x - m) ** 2 for x in wins) / len(wins))
-            burst = sd / m if m > 0 else None
-        div = _surprisal_diversity(nll_all)
-        return {
-            **div,
-            "binoculars": ppl / x_ppl if x_ppl > 0 else None,
-            "fastdetect": fd,
-            "fastdetect_norm": fd / math.sqrt(n_tok) if fd is not None else None,
-            "ppl": ppl,
-            "x_ppl": x_ppl,
-            "log_rank": sum_logrank / n_tok,
-            "lrr": (-sum_lp) / sum_logrank if sum_logrank > 0 else None,
-            "entropy": sum_ent / n_tok,
-            "top1": n_top1 / n_tok,
-            "top10": n_top10 / n_tok,
-            "lp_burstiness": burst,
-            "tokens": n_tok,
-        }
+                ent = -(lp_perf.exp() * lp_perf).sum(-1)
+                acc["ll"].extend(ll.tolist())
+                acc["mu"].extend(mu.tolist())
+                acc["var"].extend(var.clamp_min(0).tolist())
+                acc["logrank"].extend(torch.log(rank.float()).tolist())
+                acc["rank"].extend(rank.tolist())
+                acc["ent"].extend(ent.tolist())
+                del lp_perf, ll, rank, mu, var, ent
+        return acc if acc["ll"] else None
+
+
+def _aggregate(t: dict, lo: int, hi: int) -> dict | None:
+    """把逐 token 数值的 [lo, hi) 区间汇总成检测特征（整段和逐句窗口用同一个公式）。"""
+    n_tok = hi - lo
+    if n_tok <= 0:
+        return None
+    ll, mu = t["ll"][lo:hi], t["mu"][lo:hi]
+    sum_lp, sum_mu, sum_var = sum(ll), sum(mu), sum(t["var"][lo:hi])
+    sum_xent = -sum_mu
+    sum_logrank = sum(t["logrank"][lo:hi])
+    ranks = t["rank"][lo:hi]
+    n_top1 = sum(1 for r in ranks if r == 1)
+    n_top10 = sum(1 for r in ranks if r <= 10)
+    sum_ent = sum(t["ent"][lo:hi])
+    nll_all = [-x for x in ll]
+    ppl = -sum_lp / n_tok
+    x_ppl = sum_xent / n_tok
+    fd = (sum_lp - sum_mu) / math.sqrt(sum_var) if sum_var > 0 else None
+    w = 24
+    wins = [sum(nll_all[i:i + w]) / len(nll_all[i:i + w]) for i in range(0, len(nll_all), w) if len(nll_all[i:i + w]) >= w // 2]
+    burst = None
+    if len(wins) >= 2:
+        m = sum(wins) / len(wins)
+        sd = math.sqrt(sum((x - m) ** 2 for x in wins) / len(wins))
+        burst = sd / m if m > 0 else None
+    div = _surprisal_diversity(nll_all)
+    return {
+        **div,
+        "binoculars": ppl / x_ppl if x_ppl > 0 else None,
+        "fastdetect": fd,
+        "fastdetect_norm": fd / math.sqrt(n_tok) if fd is not None else None,
+        "ppl": ppl,
+        "x_ppl": x_ppl,
+        "log_rank": sum_logrank / n_tok,
+        "lrr": (-sum_lp) / sum_logrank if sum_logrank > 0 else None,
+        "entropy": sum_ent / n_tok,
+        "top1": n_top1 / n_tok,
+        "top10": n_top10 / n_tok,
+        "lp_burstiness": burst,
+        "tokens": n_tok,
+    }
 
 
 def _surprisal_diversity(nll: list) -> dict:
