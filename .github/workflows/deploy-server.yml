@@ -39,7 +39,11 @@ jobs:
         working-directory: server
         run: |
           python tests/make_tiny_models.py /tmp/tiny
-          TEST_MODELS_DIR=/tmp/tiny python -m pytest -q
+          # 失败时把出错的测试写成注释（Actions 页面直接能看到，不用下载日志）
+          set -o pipefail
+          TEST_MODELS_DIR=/tmp/tiny python -m pytest -q -rf 2>&1 | tee /tmp/pytest.txt || {
+            grep -E "^(FAILED|ERROR)|Error|assert" /tmp/pytest.txt | head -20 | cut -c1-400 | sed 's/^/::error title=测试失败::/'
+            tail -30 /tmp/pytest.txt | tr '\n' ' ' | cut -c1-3000 | sed 's/^/::error title=测试输出末尾::/'; echo; exit 1; }
       - name: 检查网页脚本语法
         run: node --check server/static/app.js && node --check server/static/admin.js
 
