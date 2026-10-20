@@ -249,6 +249,9 @@ def main():
     dev = base[: min(max(200, len(base) // 20), len(base) // 5)]
     train = base[len(dev):]
     ud = load_user_docs(args.user_docs, "zh_poetry")
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "experiments"))
+    from memo_filter import drop_memorized, threshold_from_env
+    ud = drop_memorized(ud, threshold_from_env())   # 去掉 AI 文档里照抄的古人原文（困惑度极低）
     print(f"用户已标注文档（诗词）：AI {sum(r['y'] for r in ud)} / 人写 {sum(1 - r['y'] for r in ud)}，各重复 {args.user_docs_reps} 次", flush=True)
     train += ud * args.user_docs_reps
     # 国产新模型样本少：过采样到约占 AI 训练样本的 user_share（开发集里的不再复制，避免泄漏）

@@ -458,6 +458,7 @@ function renderResult(res){
       raw.lp_burstiness!=null ? `困惑度波动 ${raw.lp_burstiness.toFixed(3)}` : '',
       (seg.prob_unsmoothed!=null && seg.prob!=null && Math.abs(seg.prob_unsmoothed-seg.prob)>0.005) ? `平滑前 ${pct(seg.prob_unsmoothed)}` : '',
       seg.style ? `句长变异 ${seg.style.sentence_len_cv}` : '',
+      humanRefText(seg),
       seg.style && seg.style.template_phrases.length ? `套话：${seg.style.template_phrases.join('、')}` : ''
     ].filter(Boolean).join(' · ');
     const kindTag = seg.kind === 'reference' ? '<span class="para-tag">参考文献 · 不计入</span>'
@@ -563,6 +564,13 @@ $('onlyFlagged').addEventListener('change', applyFilter);
 
 /* ---------------- 导出 ---------------- */
 const METHOD_LINE = () => `方法：Fast-DetectGPT、Binoculars（Qwen2.5 打分）、MPU 中文分类器 + 国产大模型中文分类器、desklib 英文分类器 + 国产大模型英文分类器（按段落文体选用）；模式：${lastResult.summary.mode === 'fast' ? '快速（抽样）' : '完整'}`;
+// 保形预测式的"人写对照"：同文体人写样本里，得分不低于本段的比例（越小越不像人写；例如 1% = 100 段人写里约 1 段这么高）
+function humanRefText(seg){
+  const h = seg.human_ref;
+  if (!h || h.share == null) return '';
+  const v = h.share * 100;
+  return `人写对照：${h.n} 段同文体人写样本中 ${v < 1 ? v.toFixed(1) : Math.round(v)}% 得分不低于本段`;
+}
 function segIndicators(seg){
   const r = seg.raw || {};
   return [
@@ -576,6 +584,7 @@ function segIndicators(seg){
     r.ppl!=null ? `困惑度 ${Math.exp(r.ppl).toFixed(1)}` : '',
     r.lp_burstiness!=null ? `困惑度波动 ${r.lp_burstiness.toFixed(3)}` : '',
     seg.style ? `句长变异 ${seg.style.sentence_len_cv}` : '',
+    humanRefText(seg),
     (seg.notes && seg.notes.length) ? `备注：${seg.notes.join('；')}` : '',
     seg.memorized ? '疑似名篇原文（不采信语言模型信号）' : '',
     seg.short ? '篇幅短' : ''

@@ -4,6 +4,7 @@
 与知网、维普、Turnitin 等平台"先分语种、再用专门模型判断"的做法一致。"""
 from __future__ import annotations
 
+import bisect
 import logging
 import math
 import re
@@ -315,6 +316,25 @@ class Engine:
 
     def set_calibration(self, cal: dict, source: str):
         self.cal, self.cal_source = cal, source
+        self._human_ref_cache = {}
+
+    def human_ref(self, profile: str, prof_cal: dict):
+        """同文体人写对照样本（随代码发布的校准数据里的人写段落）的综合得分，已排序。
+        用于给每段算"人写样本里有多少比例得分不低于本段"（保形预测的经验 p 值，Open-Set Conformal 一类论文的做法）：
+        比单个概率更好解释——它直接回答"如果把阈值定在本段的分数，人写文字会被误判多少"。"""
+        cache = getattr(self, "_human_ref_cache", None)
+        if cache is None:
+            cache = self._human_ref_cache = {}
+        key = (profile, id(prof_cal.get("lr") or prof_cal.get("weights") or prof_cal))
+        if key not in cache:
+            vals = []
+            for r in load_builtin_calib(profile):
+                if int(r.get("y", 1)) == 0 and isinstance(r.get("s"), dict):
+                    pr = scoring.combine(r["s"], prof_cal)["prob"]
+                    if pr is not None:
+                        vals.append(pr)
+            cache[key] = sorted(vals)
+        return cache[key]
 
     def load_all(self):
         try:
@@ -566,7 +586,7 @@ class Engine:
 
         # 1) 每段按自己的文体用对应的校准参数打分（引文段落的分数只作参考值）
         scored_ids = {s.index for s in scored}
-        prof = {}
+        prof, prof_name = {}, {}
         has_short = bool((cal.get("profiles") or {}).get("zh_short"))
         # 是不是英文论文按"每篇作品"判断，而不是整个文件：文集里论文和故事、散文混排时（2026-10 用户的 104.docx），
         # 以前整个文件被认作论文，故事和散文就用不上非论文的整篇判断，豆包散文、ChatGPT 童话都漏检
@@ -583,6 +603,7 @@ class Engine:
             if reg == "en" and s.block in paper_blocks:
                 reg = "en_paper"
             prof[s.index] = scoring.profile_for(cal, reg)
+            prof_name[s.index] = reg
             if reg == "zh_poetry" and is_couplet(score_text(s)):
                 # 对联单独的阈值：诗词阈值按当代诗词"人写误判约 5%"定，对联只有十几二十个字，同样的阈值几乎认不出 AI 对联。
                 # 用没参与训练的 500 副真人对联（couplet-dataset）测定：分类器 0.975 时真人对联误判约 4%、AI 对联检出约 69%。
@@ -863,6 +884,18 @@ class Engine:
                 isolated.update(over)
         work_ai -= zh_human_work
 
+        def human_ref_of(i, pr):
+            if pr is None or i not in prof_name:
+                return None
+            try:
+                h = self.human_ref(prof_name[i], prof[i][0])
+            except Exception:  # noqa: BLE001
+                return None
+            if len(h) < 50:
+                return None
+            n_ge = len(h) - bisect.bisect_left(h, pr)
+            return {"n": len(h), "share": round((n_ge + 1) / (len(h) + 1), 4)}
+
         seg_out, counted_chars, prob_weighted = [], 0, 0.0
         chars_by_level = {"high": 0, "mid": 0, "light": 0, "low": 0}
         level_counts = {"high": 0, "mid": 0, "light": 0, "low": 0}
@@ -955,6 +988,7 @@ class Engine:
                 "raw": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in sc.items()},
                 "style": styles.get(s.index),
                 "scored_by_lm": s.index in lm_ids and "fastdetect" in sc,
+                "human_ref": human_ref_of(s.index, comb["prob"]),
             })
 
         excluded = [s for s in segs if not s.counted]
