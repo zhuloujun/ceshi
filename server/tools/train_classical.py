@@ -183,6 +183,8 @@ def main():
 
     # AI 样本少：每个 epoch 里按人写数量过采样 AI，使两类权重相当
     ud = [dict(r, text=normalize_classical(r["text"])) for r in load_user_docs(args.user_docs, "zh_classical")]
+    from memo_filter import drop_memorized, threshold_from_env
+    ud = drop_memorized(ud, threshold_from_env())   # 去掉 AI 文档里照抄的古人原文（困惑度极低）
     print(f"用户已标注文档（文言）：AI {sum(r['y'] for r in ud)} / 人写 {sum(1 - r['y'] for r in ud)}，各重复 {args.user_docs_reps} 次", flush=True)
     rnd.shuffle(h_train); rnd.shuffle(ai_train)
     dev_h, h_train = h_train[: len(h_train) // 8], h_train[len(h_train) // 8:]
