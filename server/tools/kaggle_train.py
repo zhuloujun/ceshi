@@ -29,8 +29,26 @@ def sh(*cmd, **kw):
     subprocess.run(cmd, check=True, **kw)
 t0 = time.time()
 sh("git", "init", "-q", "/tmp/ceshi")
-sh("git", "-C", "/tmp/ceshi", "fetch", "-q", "--depth", "1", f"https://github.com/{{REPO}}", SHA)
-sh("git", "-C", "/tmp/ceshi", "checkout", "-q", "FETCH_HEAD")
+try:
+    sh("git", "-C", "/tmp/ceshi", "fetch", "-q", "--depth", "1", f"https://github.com/{{REPO}}", SHA)
+    sh("git", "-C", "/tmp/ceshi", "checkout", "-q", "FETCH_HEAD")
+except subprocess.CalledProcessError:
+    # 2026-10-19：Kaggle 排队几个小时后才开始运行，提交所在的临时分支已经删掉，按提交号 fetch 失败。
+    # 改为下载这个提交的源码压缩包（只要提交还在仓库历史里就能下载）。
+    import io, tarfile as _tf, urllib.request
+    for k in range(5):
+        try:
+            data = urllib.request.urlopen(f"https://codeload.github.com/{{REPO}}/tar.gz/{{SHA}}", timeout=120).read()
+            break
+        except Exception as e:  # noqa: BLE001
+            print("下载源码失败，重试：", e, flush=True)
+            time.sleep(30)
+    with _tf.open(fileobj=io.BytesIO(data), mode="r:gz") as t:
+        top = t.getmembers()[0].name.split("/")[0]
+        t.extractall("/tmp/_src")
+    import shutil
+    shutil.rmtree("/tmp/ceshi")
+    shutil.move(f"/tmp/_src/{{top}}", "/tmp/ceshi")
 sh(sys.executable, "-m", "pip", "install", "-q", "transformers>=4.45,<5", "tokenizers>=0.20", "sentencepiece", "protobuf", "safetensors", "pypinyin")
 import torch
 print("torch", torch.__version__, "cuda", torch.cuda.is_available(),
