@@ -25,7 +25,6 @@ on:
       - "!server/tools/data/eval_zh_user_docs.jsonl"
       - "!server/tools/compare_experiment.py"
       - "!server/tools/kaggle_train.py"
-      - "!server/tools/memo_filter.py"
       - "!server/tools/zh_model_compare.py"
       - "!server/tools/gen_classical_ai.py"
       - "!server/tools/data/gen_cl/**"
