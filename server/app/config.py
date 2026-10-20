@@ -53,14 +53,18 @@ EN3_DOC_THRESHOLD = float(os.getenv("EN3_DOC_THRESHOLD", "0.92") or 0.92)
 #   "v7 整篇 ≥ EN3_JOINT_THRESHOLD 且 v9 整篇 ≥ EN4_JOINT_THRESHOLD" → 394 篇真人英文长文 0 篇命中，用户的 17 篇 AI 文档全部命中
 #   （包括豆包田园散文《Of Fields and Seasons》：v7 0.857 / v9 0.956；最接近的真人：v7 0.851 / v9 0.947）。
 EN4_CLASSIFIER_MODEL = os.getenv("EN4_CLASSIFIER_MODEL", "")
-EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v10")
+EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v11")
+# v11（2026-10-20）：在 v10 的基础上加入用户提供的 124 篇 AI 英文（故事、书信、论文）。真人与 AI 分得更开：
+#   397 篇真人英文长文里 v11 整篇最高 0.93（v10 为 0.956），用户 21 篇 AI 文档几乎都 ≥ 0.95；
+#   "v7 ≥ 0.75 且 v11 ≥ 0.93"→ 真人 0/397、用户 AI 20/21（v10 最好的一档是 0/397、19/21）。
+#   1015.docx 的真人小说片段（Sue Grafton）v10 0.956 → v11 0.931，离误判更远。
 # v10（2026-10-04）：在 v9 基础上加入 253 篇"去 AI 味"改写的英文（DeepSeek / 千问 / 豆包 / Kimi / 文心先写、再按"降 AI 率"
 # 指令改写），专门针对用户用 ChatGPT / Gemini 写的"规避检测"文章。验证（397 篇真人英文长文 + 21 篇用户 AI 文档）：
 #   v7 ≥ 0.85 且 v10 ≥ 0.95 → 真人 0 篇，用户 AI 19 篇；另一档 v7 ≥ 0.75 且 v10 ≥ 0.955 → 真人 0 篇，再多认出 The Seam in the Night
 EN3_JOINT_THRESHOLD = float(os.getenv("EN3_JOINT_THRESHOLD", "0.85") or 0.85)
-EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.95") or 0.95)
+EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.93") or 0.93)
 EN3_JOINT2_THRESHOLD = float(os.getenv("EN3_JOINT2_THRESHOLD", "0.75") or 0.75)
-EN4_JOINT2_THRESHOLD = float(os.getenv("EN4_JOINT2_THRESHOLD", "0.955") or 0.955)
+EN4_JOINT2_THRESHOLD = float(os.getenv("EN4_JOINT2_THRESHOLD", "0.94") or 0.94)
 # 整篇判断只带上自己的整篇分类器得分 ≥ 这个值的段落（插在 AI 文章中间的真人段落不跟着计入）
 DOC_CARRY_FLOOR = float(os.getenv("DOC_CARRY_FLOOR", "0.5") or 0.5)
 # 国产大模型中文分类器整篇中位数低于这个值（明确像人写）时，不用 MPU 中文分类器的整篇判断
