@@ -56,7 +56,8 @@ EN3_DOC_THRESHOLD = float(os.getenv("EN3_DOC_THRESHOLD", "0.92") or 0.92)
 #   （包括豆包田园散文《Of Fields and Seasons》：v7 0.857 / v9 0.956；最接近的真人：v7 0.851 / v9 0.947）。
 EN4_CLASSIFIER_MODEL = os.getenv("EN4_CLASSIFIER_MODEL", "")
 EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v14")
-# v14（2026-10-22）：v11 把真人当代小说约八成打到 0.9 以上（45 本没参与训练的书 540 段：v11 ≥0.9 占两成多，v14 9 段）。
+# v14（2026-10-22）：v11 把真人当代小说大量打到 0.9 以上（《At First Sight》146 段中 112 段、用户另给的 40 本书 320 段中 68 段）；
+#   v14 在 45 本没参与训练的书 540 段中 9 段、《At First Sight》中 24 段。
 #   397 篇真人英文长文：v14 整篇最高约 0.90；"v7 ≥ 0.75 且 v14 ≥ 0.93" → 真人 0/397、用户 AI 19/21（v11 20/21）。
 # v11（2026-10-20）：在 v10 的基础上加入用户提供的 124 篇 AI 英文（故事、书信、论文）。真人与 AI 分得更开：
 #   397 篇真人英文长文里 v11 整篇最高 0.93（v10 为 0.956），用户 21 篇 AI 文档几乎都 ≥ 0.95；
