@@ -132,6 +132,7 @@ ISOLATED_MAX_SHARE = float(os.getenv("ISOLATED_MAX_SHARE", "0.25") or 0.25)
 MEMORIZED_PPL = float(os.getenv("MEMORIZED_PPL", "3.5") or 3.5)
 # 管理页校准时，用户样本与内置公开数据合并，用户样本合计所占的权重比例
 USER_SAMPLE_SHARE = float(os.getenv("USER_SAMPLE_SHARE", "0.3") or 0.3)
+USER_SAMPLE_MAX_WEIGHT = float(os.getenv("USER_SAMPLE_MAX_WEIGHT", "8") or 8)   # 每段用户标注最多抵几段内置样本
 FAST_MODE_MAX_SEGMENTS = _int("FAST_MODE_MAX_SEGMENTS", 60)  # 快速模式下语言模型最多检测多少段
 # 相邻段落平滑强度（0 = 不平滑，0.3 = 本段 70% + 相邻段 30%）
 SMOOTHING = float(os.getenv("SMOOTHING", "0.3") or 0.3)
