@@ -543,6 +543,56 @@ DOC_TOPICS = [
 ]
 
 
+# 各学科论文（2026-10，用户要求"各行各专业都要有，包括历史、人文社科"）：AI 一方按学科写论文的不同部分（ap_*），
+# 与真人一方的 arXiv / PubMed / PLOS / Elsevier 各学科开放论文、斯坦福哲学百科、欧洲人权法院判决对应。
+PAPER_STYLE = [
+    "Write the abstract (about 250 words) of a {g} research article titled: {t}.",
+    "Write the introduction section (about 700 words) of an academic paper in {g} on: {t}. Include citations in "
+    "author-year style. Plain text, no Markdown.",
+    "用英文写一篇{g}领域的学术论文的文献综述部分，题目：{t}。约700词，用作者-年份格式引用文献，不要使用Markdown。",
+    "Write the discussion and conclusion sections (about 700 words) of a {g} paper on: {t}. Make it read like a real "
+    "journal article by a human scholar: hedged claims, specific findings, limitations, no generic summary phrases.",
+    "帮我用英文写一篇{g}方向的课程论文，题目是{t}，包括摘要、引言、正文分节和结论，约900词。",
+    "Write the methodology section (about 600 words) of a {g} study on: {t}. Describe data sources, sample, and analysis.",
+]
+PAPER_TOPICS = [
+    ("history", "grain prices and famine relief in eighteenth-century Qing China"),
+    ("history", "the role of Venetian merchants in the fourteenth-century spice trade"),
+    ("history", "local militias and state power during the Song–Yuan transition"),
+    ("philosophy", "moral luck and the limits of responsibility"),
+    ("philosophy", "Zhu Xi's theory of principle and its reception in Joseon Korea"),
+    ("literary studies", "unreliable narration in post-war British fiction"),
+    ("literary studies", "landscape and exile in the poetry of Su Shi"),
+    ("linguistics", "evidential markers in spoken Tibetan dialects"),
+    ("linguistics", "code-switching among bilingual teenagers in Singapore"),
+    ("law", "the enforceability of arbitration clauses in consumer contracts"),
+    ("law", "data protection obligations of cross-border e-commerce platforms"),
+    ("political science", "electoral reform and party fragmentation in Latin America"),
+    ("international relations", "small-state hedging strategies in Southeast Asia"),
+    ("sociology", "intergenerational support among rural migrant families"),
+    ("anthropology", "ritual exchange and kinship in a highland Papua New Guinea village"),
+    ("education", "the effects of formative assessment on secondary school mathematics"),
+    ("economics", "minimum wage increases and employment in small retail firms"),
+    ("management", "remote work and team innovation in technology companies"),
+    ("accounting", "earnings management around seasoned equity offerings"),
+    ("psychology", "sleep deprivation and emotional regulation in adolescents"),
+    ("art history", "patronage and workshop practice in Ming dynasty court painting"),
+    ("musicology", "improvisation practices in early jazz recordings"),
+    ("archaeology", "Neolithic rice cultivation in the lower Yangtze region"),
+    ("religious studies", "pilgrimage networks in medieval Japanese Buddhism"),
+    ("journalism and media studies", "local newspaper closures and civic participation"),
+    ("geography", "urban heat islands and green space distribution"),
+    ("architecture", "adaptive reuse of industrial buildings in post-socialist cities"),
+    ("environmental science", "wetland restoration and carbon sequestration"),
+    ("agronomy", "intercropping maize and soybean under drought stress"),
+    ("civil engineering", "fatigue performance of steel bridge welds"),
+    ("chemistry", "catalytic conversion of biomass to platform chemicals"),
+    ("public health", "community health workers and childhood vaccination coverage"),
+    ("nursing", "nurse staffing levels and patient falls in acute care"),
+    ("mathematics education", "students' misconceptions about limits in calculus"),
+]
+
+
 def genre_topics(rnd):
     ts = GENRE_TOPICS * 3
     rnd.shuffle(ts)
@@ -599,26 +649,27 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         styles = [x for pair in zip(USER_STYLE * 2, GENRE_STYLE) for x in pair]
     else:
         topics, styles = (genre_topics(rnd), GENRE_STYLE) if out_f.name.startswith("ge_") else (user_style_topics(rnd), USER_STYLE)
-    if out_f.name.startswith(("nv_", "dc_")):      # 当代小说体 / 各行业文体：每个题目轮换不同写法
-        pairs = [(g, t) for g, t in (NOVEL_TOPICS if out_f.name.startswith("nv_") else DOC_TOPICS) for _ in range(4)]
+    if out_f.name.startswith(("nv_", "dc_", "ap_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
+        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS}[out_f.name[:3]]
+        pairs = [(g, t) for g, t in tbl for _ in range(4)]
         rnd.shuffle(pairs)
         topics = [f"{g}|{t}" for g, t in pairs]
         seen_k: dict = {}
-        styles = NOVEL_STYLE if out_f.name.startswith("nv_") else DOC_STYLE
+        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE}[out_f.name[:3]]
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
             break
         url, model = eps[i % len(eps)]
         key_ = f"{t}|{model}"
-        if out_f.name.startswith(("nv_", "dc_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+        if out_f.name.startswith(("nv_", "dc_", "ap_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
             seen_k[key_] = seen_k.get(key_, 0) + 1
             key_ += f"#{seen_k[key_]}"
         if key_ in done:
             continue
         done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        if out_f.name.startswith(("nv_", "dc_")):
+        if out_f.name.startswith(("nv_", "dc_", "ap_")):
             g_, t_ = t.split("|", 1)
             tpl = styles[(i + i // len(styles)) % len(styles)]
             prompt = tpl.format(g=g_, t=t_)
@@ -678,7 +729,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -687,7 +738,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -706,9 +757,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize", "novel", "docs"):
+        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
