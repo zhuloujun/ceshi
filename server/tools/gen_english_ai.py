@@ -507,6 +507,42 @@ NOVEL_TOPICS = [
 ]
 
 
+# 各行业文体（2026-10）：真人一方加入了政府报告、法案、BBC 新闻、维基百科等之后，AI 一方也要有同类文字（dc_*）。
+DOC_STYLE = [
+    "Write a {g} (about 600 words) on: {t}. Plain text, no Markdown, no title line.",
+    "用英文写一篇{g}，主题：{t}。600词左右，正式规范，不要使用Markdown符号。",
+    "Write about 500 words of a {g} about {t}. Make it read like it was written by a professional human writer, "
+    "with specific names, figures and dates, and without generic AI phrasing.",
+    "Draft one section of a {g} on {t}, roughly 600 words, in the house style of a serious publication.",
+]
+DOC_TOPICS = [
+    ("government audit report", "delays and cost overruns in a federal broadband grant program"),
+    ("government audit report", "oversight of veterans' disability claim processing times"),
+    ("congressional research report", "the history and current debate over agricultural subsidies"),
+    ("legislative bill summary", "a bill to expand tax credits for small businesses that hire apprentices"),
+    ("legislative bill text", "an act requiring disclosure of data breaches within 72 hours"),
+    ("BBC-style news article", "flooding forces hundreds of families from their homes in a Welsh valley"),
+    ("BBC-style news article", "a football club fined after fans invade the pitch"),
+    ("wire news story", "a central bank holds interest rates steady amid slowing inflation"),
+    ("encyclopedia article", "the history of a small coastal town in Maine"),
+    ("encyclopedia article", "the life and career of a nineteenth-century railway engineer"),
+    ("encyclopedia article", "a species of freshwater turtle and its conservation status"),
+    ("company annual report letter to shareholders", "a regional grocery chain's year of expansion"),
+    ("market research report", "consumer demand for electric bicycles in Europe"),
+    ("legal memorandum", "whether a non-compete clause is enforceable under state law"),
+    ("court opinion summary", "a dispute over a contractor's failure to complete a home renovation"),
+    ("technical documentation", "configuring a home network router for parental controls"),
+    ("product review", "a mid-range noise-cancelling headphone after three months of use"),
+    ("travel guide", "two days in Lisbon on a budget"),
+    ("op-ed column", "why cities should ban cars from their historic centres"),
+    ("NGO policy brief", "improving childhood nutrition in rural Kenya"),
+    ("medical patient information leaflet", "managing type 2 diabetes with diet and exercise"),
+    ("environmental impact statement", "a proposed wind farm off the coast of New Jersey"),
+    ("grant proposal", "a community oral-history project for a public library"),
+    ("press release", "a university announces a new research centre for battery technology"),
+]
+
+
 def genre_topics(rnd):
     ts = GENRE_TOPICS * 3
     rnd.shuffle(ts)
@@ -563,26 +599,26 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         styles = [x for pair in zip(USER_STYLE * 2, GENRE_STYLE) for x in pair]
     else:
         topics, styles = (genre_topics(rnd), GENRE_STYLE) if out_f.name.startswith("ge_") else (user_style_topics(rnd), USER_STYLE)
-    if out_f.name.startswith("nv_"):               # 当代小说体：每个情节轮换不同写法
-        pairs = [(g, t) for g, t in NOVEL_TOPICS for _ in range(4)]
+    if out_f.name.startswith(("nv_", "dc_")):      # 当代小说体 / 各行业文体：每个题目轮换不同写法
+        pairs = [(g, t) for g, t in (NOVEL_TOPICS if out_f.name.startswith("nv_") else DOC_TOPICS) for _ in range(4)]
         rnd.shuffle(pairs)
         topics = [f"{g}|{t}" for g, t in pairs]
         seen_k: dict = {}
-        styles = NOVEL_STYLE
+        styles = NOVEL_STYLE if out_f.name.startswith("nv_") else DOC_STYLE
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
             break
         url, model = eps[i % len(eps)]
         key_ = f"{t}|{model}"
-        if out_f.name.startswith("nv_"):            # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+        if out_f.name.startswith(("nv_", "dc_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
             seen_k[key_] = seen_k.get(key_, 0) + 1
             key_ += f"#{seen_k[key_]}"
         if key_ in done:
             continue
         done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        if out_f.name.startswith("nv_"):
+        if out_f.name.startswith(("nv_", "dc_")):
             g_, t_ = t.split("|", 1)
             tpl = styles[(i + i // len(styles)) % len(styles)]
             prompt = tpl.format(g=g_, t=t_)
@@ -642,7 +678,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -651,7 +687,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -670,9 +706,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize", "novel"):
+        if args.source in ("userstyle", "genre", "humanize", "novel", "docs"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
