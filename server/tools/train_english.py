@@ -139,6 +139,10 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     ("EdinburghNLP/xsum", None, "document", "bbc-news"),            # BBC 新闻（2010–2017）
     ("legacy-datasets/wikipedia", "20220301.en", "text", "wiki"),  # 维基百科 2022-03 快照（ChatGPT 之前）
     ("multi_news", None, "document", "multinews"),                 # 多来源新闻报道
+    # 论文全文（用户要求加大论文比例：网站上最多的就是论文，真人论文误判代价最大）——各取 2 倍数量
+    ("ccdv/arxiv-summarization", None, "article", "arxiv-paper", 2),      # arXiv 论文正文（物理、计算机、数学等，2018 年前）
+    ("ccdv/pubmed-summarization", None, "article", "pubmed-paper", 2),    # PubMed 论文正文（医学、生物）
+    ("tomasg25/scientific_lay_summarisation", "plos", "article", "plos-paper", 2),   # PLOS 期刊论文正文
 ]
 
 
@@ -148,12 +152,13 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
     except Exception:  # noqa: BLE001
         return []
     out = []
-    for name, cfg, field, tag in EXTRA_HUMAN:
+    for name, cfg, field, tag, *mult in EXTRA_HUMAN:
         t0, got = time.time(), 0
+        want = want_each * (mult[0] if mult else 1)
         try:
             ds = load_dataset(name, cfg, split="train", streaming=True) if cfg else load_dataset(name, split="train", streaming=True)
             for i, row in enumerate(ds):
-                if got >= want_each or (time.time() - t0) / 60 > max_minutes:
+                if got >= want or (time.time() - t0) / 60 > max_minutes:
                     break
                 if i % 7:
                     continue
