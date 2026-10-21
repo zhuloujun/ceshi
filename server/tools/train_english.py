@@ -143,6 +143,11 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     ("ccdv/arxiv-summarization", None, "article", "arxiv-paper", 2),      # arXiv 论文正文（物理、计算机、数学等，2018 年前）
     ("ccdv/pubmed-summarization", None, "article", "pubmed-paper", 2),    # PubMed 论文正文（医学、生物）
     ("tomasg25/scientific_lay_summarisation", "plos", "article", "plos-paper", 2),   # PLOS 期刊论文正文
+    # 各学科（含人文社科）：Elsevier 开放获取论文（2014–2020，按学科分类，含艺术人文、社会科学、经济、心理、法律等 27 个大类）、
+    # 斯坦福哲学百科、欧洲人权法院判决书（法学）
+    ("orieg/elsevier-oa-cc-by", None, "body_text", "elsevier-paper", 3),
+    ("AiresPucrs/stanford-encyclopedia-philosophy", None, "text", "philosophy", 1),
+    ("coastalcph/lex_glue", "ecthr_a", "text", "law-ecthr", 1),
 ]
 
 
@@ -162,7 +167,12 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
                     break
                 if i % 7:
                     continue
-                txt = (row.get(field) or "").replace("|||||", "\n")
+                v = row.get(field) or ""
+                if isinstance(v, list):                    # 正文按句 / 按段存成列表（Elsevier、lex_glue）
+                    v = "\n".join(x.get("sentence") or x.get("text") or "" if isinstance(x, dict) else str(x) for x in v)
+                txt = str(v).replace("|||||", "\n")
+                if tag == "elsevier-paper" and len(txt.split("\n")) < 5:
+                    txt = re.sub(r"(?<=[.!?]) (?=[A-Z])", "\n", txt, count=60)   # 没有分段的正文按句切开
                 paras = [" ".join(p.split()) for p in re.split(r"\n+", txt)]
                 paras = [p for p in paras if len(p.split()) >= 12]
                 if sum(len(p.split()) for p in paras) < 220:
@@ -213,7 +223,7 @@ def build_rows(args, rnd):
         if f.stem in HUMAN_FILES or any(f.stem.startswith(x) for x in args.skip_prefix):
             continue
         gen_models.append(f.stem)
-        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体"}.get(f.stem[:2], "")
+        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc|ap)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体", "ap": "-学科论文"}.get(f.stem[:2], "")
         for g in load_jsonl(f):
             raw.append((clean_ai(g["text"]), 1, f"gen-{model}", split_of(g["title"]), 6))
     if not gen_models:
