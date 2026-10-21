@@ -60,6 +60,10 @@ PART_PROFILE = {
     # 国产大模型写的英文论文段落（tools/gen_english_ai.py 生成）+ 同题 arXiv 真人摘要。只取英文第二分类器训练时
     # 留作评估的那些题目（tools/train_english.py 的 split_of），再对半分：一半参与校准、一半只评估。
     "en_gen_fit": "en", "en_gen_test": "en",
+    # 当代出版小说（真人，用户提供的电子书 + 《At First Sight》）与对照的 AI 小说段落：受版权保护，不进公开仓库，
+    # 只在手动运行时通过加密的 extra_en 输入传入（EXTRA_EN_DOCS 指向解密后的 jsonl）。按书划分：一半参与校准、一半只评估。
+    # 打分结果（只有各项得分，没有原文）照常保存。
+    "en_novel_fit": "en", "en_novel_test": "en",
 }
 USER_MODELS = {"deepseek": "DeepSeek", "kimi": "Kimi", "wenxin": "文心一言"}
 USER_PARTS = {"cl_user": "classical", "po_user": "poem", "en_user": "english"}
@@ -74,9 +78,10 @@ PROFILE_PARTS = {
                                               ("po_test", "ChangAn 保留集（另一批作者 + 没见过的 Kimi-K2 与其他模型的新诗词）"),
                                               ("po_story", "复述故事情节的 AI 诗词（本仓库自带，40 首）"),
                                               ("po_classic", "唐诗三百首 + 宋词三百首（人写名篇，检查误判）")]},
-    "en": {"fit": ["en_cal1", "en_cal2", "en_gen_fit"],
+    "en": {"fit": ["en_cal1", "en_cal2", "en_gen_fit", "en_novel_fit"],
            "eval": [("en_gen_test", "国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准"),
                     ("en_user_test", "国产新模型 AI 英文短篇（DeepSeek / Kimi / 文心一言，用户提供；英文第二分类器训练时没见过的那 1/3）"),
+                    ("en_novel_test", "当代出版小说（真人，没参与校准的那一半书）与 AI 写的小说段落"),
                                                   ("en_ood", "MAGE：GPT-4 在未见过的领域生成的文本"),
                                                   ("en_para", "MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）")]},
     # 英文学术论文：只用学术英文（arXiv / PubMed / PMC 真人，含中国作者）和国产模型写的英文论文拟合与评估
@@ -437,7 +442,18 @@ def split_user_parts(parts):
             parts[base + "_test"] = [r for r in rows if r.get("split") == "test"]
 
 
+def en_novel_rows(part):
+    f = os.getenv("EXTRA_EN_DOCS", "")
+    if not f or not Path(f).exists():
+        return []
+    want = "fit" if part == "en_novel_fit" else "test"
+    rows = [json.loads(l) for l in Path(f).read_text("utf-8").splitlines() if l.strip()]
+    return [{"text": r["t"], "y": int(r["y"]), "model": r.get("src", "novel")} for r in rows if r.get("split") == want]
+
+
 def build_part(args, part):
+    if part in ("en_novel_fit", "en_novel_test"):
+        return en_novel_rows(part)
     if part in ("en_gen_fit", "en_gen_test"):
         return en_gen_parts()[part]
     if part in USER_PARTS:

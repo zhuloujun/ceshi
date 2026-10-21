@@ -46,4 +46,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add server/tools/data/en_doc_check.json || true
           git commit -m "en doc check results [skip ci]" || exit 0
-          git pull --rebase origin main && git push origin HEAD:main
+          git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}"
