@@ -462,6 +462,51 @@ HUMANIZE_ONESHOT_EN = [
 ]
 
 
+# 当代小说体（2026-10）：真人一方加入了当代出版小说（BookCorpusOpen、用户提供的电子书）后，AI 一方也要有同样文风的
+# 小说片段——否则模型会学成"小说 = 真人"。题材与用户的电子书对应：惊悚、悬疑、言情、科幻、奇幻、恐怖、青少年、
+# 文学小说、回忆录 / 时评；有一部分要求"模仿某位作家的文风"或"写得像真人出版的小说"（规避检测的常见用法）。
+NOVEL_STYLE = [
+    "Write a scene (about 700 words) from a contemporary {g} novel: {t}. Third person, past tense, with dialogue. "
+    "Output only the story text.",
+    "Write the opening of chapter seven of a {g} novel. Premise: {t}. First person, lots of interior monologue and "
+    "dialogue, around 800 words. No title.",
+    "用英文写一段{g}小说的章节片段（约800词），情节：{t}。要有对话和细节描写，像正式出版的小说，不要标题和总结。",
+    "Write about 700 words of a {g} novel in the style of a bestselling American author. Premise: {t}. "
+    "Make it read like a published human-written novel, not like AI: uneven rhythm, specific detail, no moral at the end.",
+    "帮我用英文写一个{g}故事的一个场景：{t}。800词左右，多用对话，人物性格鲜明。只输出正文。",
+    "Continue this {g} novel from the middle of a chapter (about 600 words). Situation: {t}. Keep the tone gritty and "
+    "realistic, use contractions and short punchy sentences mixed with longer ones.",
+]
+NOVEL_TOPICS = [
+    ("thriller", "an ex-military drifter is cornered in a small-town diner by men who mistake him for someone else"),
+    ("thriller", "a CIA analyst realises the briefing she wrote has been altered before it reached the President"),
+    ("mystery", "a wedding planner finds the best man dead in the hotel's walk-in freezer the night before the ceremony"),
+    ("mystery", "a Venetian police commissario questions a widow who seems relieved rather than grieving"),
+    ("crime", "two small-time crooks argue in a parked car about whether to go through with a kidnapping"),
+    ("romance", "a widowed veterinarian and a stubborn rancher are snowed in together during a blizzard"),
+    ("romance", "a journalist returns to her hometown and runs into the boy she left without saying goodbye"),
+    ("science fiction", "a bounty hunter in a decaying future city must decide whether an android is truly alive"),
+    ("science fiction", "the crew of a generation ship discover the captain has been lying about their destination"),
+    ("fantasy", "a half-vampire girl and her dog travel from village to village hunting the undead for money"),
+    ("fantasy", "a disgraced court mage is summoned back to save the prince who exiled her"),
+    ("horror", "a family moves into a farmhouse where the previous owners' dog will not stop digging in the cellar"),
+    ("horror", "survivors barricaded in a supermarket hear someone they buried knocking at the loading dock"),
+    ("young adult", "a fourteen-year-old girl runs away to a music festival to find the mother who left her"),
+    ("young adult", "a boy genius criminal mastermind negotiates with fairy police to rescue his father"),
+    ("literary", "a disgraced professor moves to his daughter's farm after a scandal at the university"),
+    ("literary", "an old woman tells a police officer the true story of the night her husband died"),
+    ("comic", "a holistic detective tries to explain to a sceptical client why a horse is in the bathroom"),
+    ("spy", "a British agent plays baccarat against a man who is financing an enemy network"),
+    ("military science fiction", "mercenary tank crews defend a mining colony against a much larger invading force"),
+    ("legal thriller", "a public defender realises her client's alibi witness is lying to protect someone else"),
+    ("cozy mystery", "a doll collector stumbles onto a murder at a county fair antiques show"),
+    ("political memoir", "a young woman describes life on the campaign trail with her famous father"),
+    ("historical", "a codebreaker in 1942 notices a pattern in intercepted Japanese messages that nobody believes"),
+    ("paranormal", "a werewolf radio host takes a call from a listener who claims to be a hunter"),
+    ("domestic suspense", "a diary written by a woman whose husband lies in a coma after a suicide attempt"),
+]
+
+
 def genre_topics(rnd):
     ts = GENRE_TOPICS * 3
     rnd.shuffle(ts)
@@ -510,7 +555,7 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
     if not eps:
         return 0
     rnd = random.Random(f"{name}-{out_f.name}")
-    done = {r["title"] + "|" + r.get("ver", "") for r in load_jsonl(out_f)}
+    done = {r["title"] + "|" + r.get("ver", "") + r.get("k", "") for r in load_jsonl(out_f)}
     n_new = 0
     humanize = out_f.name.startswith("hu_")
     if humanize:                                   # 论文和非论文体裁交替
@@ -518,17 +563,32 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         styles = [x for pair in zip(USER_STYLE * 2, GENRE_STYLE) for x in pair]
     else:
         topics, styles = (genre_topics(rnd), GENRE_STYLE) if out_f.name.startswith("ge_") else (user_style_topics(rnd), USER_STYLE)
+    if out_f.name.startswith("nv_"):               # 当代小说体：每个情节轮换不同写法
+        pairs = [(g, t) for g, t in NOVEL_TOPICS for _ in range(4)]
+        rnd.shuffle(pairs)
+        topics = [f"{g}|{t}" for g, t in pairs]
+        seen_k: dict = {}
+        styles = NOVEL_STYLE
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
             break
         url, model = eps[i % len(eps)]
-        if f"{t}|{model}" in done:
+        key_ = f"{t}|{model}"
+        if out_f.name.startswith("nv_"):            # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+            seen_k[key_] = seen_k.get(key_, 0) + 1
+            key_ += f"#{seen_k[key_]}"
+        if key_ in done:
             continue
-        done.add(f"{t}|{model}")
+        done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        prompt = tpl.format(t=t, t_en=t) if "{t_en}" not in tpl else (
-            f"Write a short academic paper in English on the topic \"{t}\" (translate the topic). Strictly follow the standard paper format.")
+        if out_f.name.startswith("nv_"):
+            g_, t_ = t.split("|", 1)
+            tpl = styles[(i + i // len(styles)) % len(styles)]
+            prompt = tpl.format(g=g_, t=t_)
+        else:
+            prompt = tpl.format(t=t, t_en=t) if "{t_en}" not in tpl else (
+                f"Write a short academic paper in English on the topic \"{t}\" (translate the topic). Strictly follow the standard paper format.")
         kind = "user_style"
         if humanize and rnd.random() < 0.3:
             prompt, kind = rnd.choice(HUMANIZE_ONESHOT_EN).format(t=t), "humanize_oneshot"
@@ -538,7 +598,8 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
             kind = "humanize_rewrite"
         if text and len(text) > 800:
             with lock, out_f.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps({"title": t, "kind": kind, "model": name, "ver": model, "text": clean(text)},
+                fh.write(json.dumps({"title": t, "kind": kind, "model": name, "ver": model, "text": clean(text),
+                                     **({"k": key_[key_.rfind("#"):]} if "#" in key_ else {})},
                                     ensure_ascii=False) + "\n")
             n_new += 1
         if i % 20 == 0:
@@ -581,7 +642,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -590,7 +651,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -609,9 +670,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize"):
+        if args.source in ("userstyle", "genre", "humanize", "novel"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
