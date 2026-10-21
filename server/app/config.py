@@ -37,7 +37,9 @@ EN_CLS_MAX_TOKENS = _int("EN_CLS_MAX_TOKENS", 512)
 # 英文第二分类器（tools/train_english.py：arXiv / MAGE 人写 vs DeepSeek、文心一言等国产大模型写的英文论文段落，
 # 发布在本仓库 Release english-classifier-v1）。与 desklib（主要见过 GPT、LLaMA 等国外模型）互补。填本地目录；留空则不用。
 EN2_CLASSIFIER_MODEL = os.getenv("EN2_CLASSIFIER_MODEL", "")
-EN2_CLASSIFIER_ID = os.getenv("EN2_CLASSIFIER_ID", "english-classifier-v3")
+# v14（2026-10-22）：v3 只见过论文，把当代出版小说（《At First Sight》等）普遍打到 0.9 以上，逐段判断因此误判真人小说。
+# v14 加入当代小说（BookCorpusOpen + 用户提供的电子书，按作者划分）与同题材的 AI 小说后，接入逐段校准（见 MODEL_UPDATES.md）。
+EN2_CLASSIFIER_ID = os.getenv("EN2_CLASSIFIER_ID", "english-classifier-v14")
 # 中文第二分类器（tools/train_chinese.py 训练）：专门识别新一代国产大模型（DeepSeek / Kimi / 文心 / 千问 / 豆包）的中文，
 # 尤其是散文、游记、回忆类文学文字。只用于"整篇判断"（不参与逐段校准）。
 ZH2_CLASSIFIER_MODEL = os.getenv("ZH2_CLASSIFIER_MODEL", "")
@@ -53,7 +55,9 @@ EN3_DOC_THRESHOLD = float(os.getenv("EN3_DOC_THRESHOLD", "0.92") or 0.92)
 #   "v7 整篇 ≥ EN3_JOINT_THRESHOLD 且 v9 整篇 ≥ EN4_JOINT_THRESHOLD" → 394 篇真人英文长文 0 篇命中，用户的 17 篇 AI 文档全部命中
 #   （包括豆包田园散文《Of Fields and Seasons》：v7 0.857 / v9 0.956；最接近的真人：v7 0.851 / v9 0.947）。
 EN4_CLASSIFIER_MODEL = os.getenv("EN4_CLASSIFIER_MODEL", "")
-EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v11")
+EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v14")
+# v14（2026-10-22）：v11 把真人当代小说约八成打到 0.9 以上（45 本没参与训练的书 540 段：v11 ≥0.9 占两成多，v14 9 段）。
+#   397 篇真人英文长文：v14 整篇最高约 0.90；"v7 ≥ 0.75 且 v14 ≥ 0.93" → 真人 0/397、用户 AI 19/21（v11 20/21）。
 # v11（2026-10-20）：在 v10 的基础上加入用户提供的 124 篇 AI 英文（故事、书信、论文）。真人与 AI 分得更开：
 #   397 篇真人英文长文里 v11 整篇最高 0.93（v10 为 0.956），用户 21 篇 AI 文档几乎都 ≥ 0.95；
 #   "v7 ≥ 0.75 且 v11 ≥ 0.93"→ 真人 0/397、用户 AI 20/21（v10 最好的一档是 0/397、19/21）。
