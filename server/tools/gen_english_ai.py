@@ -462,6 +462,137 @@ HUMANIZE_ONESHOT_EN = [
 ]
 
 
+# 当代小说体（2026-10）：真人一方加入了当代出版小说（BookCorpusOpen、用户提供的电子书）后，AI 一方也要有同样文风的
+# 小说片段——否则模型会学成"小说 = 真人"。题材与用户的电子书对应：惊悚、悬疑、言情、科幻、奇幻、恐怖、青少年、
+# 文学小说、回忆录 / 时评；有一部分要求"模仿某位作家的文风"或"写得像真人出版的小说"（规避检测的常见用法）。
+NOVEL_STYLE = [
+    "Write a scene (about 700 words) from a contemporary {g} novel: {t}. Third person, past tense, with dialogue. "
+    "Output only the story text.",
+    "Write the opening of chapter seven of a {g} novel. Premise: {t}. First person, lots of interior monologue and "
+    "dialogue, around 800 words. No title.",
+    "用英文写一段{g}小说的章节片段（约800词），情节：{t}。要有对话和细节描写，像正式出版的小说，不要标题和总结。",
+    "Write about 700 words of a {g} novel in the style of a bestselling American author. Premise: {t}. "
+    "Make it read like a published human-written novel, not like AI: uneven rhythm, specific detail, no moral at the end.",
+    "帮我用英文写一个{g}故事的一个场景：{t}。800词左右，多用对话，人物性格鲜明。只输出正文。",
+    "Continue this {g} novel from the middle of a chapter (about 600 words). Situation: {t}. Keep the tone gritty and "
+    "realistic, use contractions and short punchy sentences mixed with longer ones.",
+]
+NOVEL_TOPICS = [
+    ("thriller", "an ex-military drifter is cornered in a small-town diner by men who mistake him for someone else"),
+    ("thriller", "a CIA analyst realises the briefing she wrote has been altered before it reached the President"),
+    ("mystery", "a wedding planner finds the best man dead in the hotel's walk-in freezer the night before the ceremony"),
+    ("mystery", "a Venetian police commissario questions a widow who seems relieved rather than grieving"),
+    ("crime", "two small-time crooks argue in a parked car about whether to go through with a kidnapping"),
+    ("romance", "a widowed veterinarian and a stubborn rancher are snowed in together during a blizzard"),
+    ("romance", "a journalist returns to her hometown and runs into the boy she left without saying goodbye"),
+    ("science fiction", "a bounty hunter in a decaying future city must decide whether an android is truly alive"),
+    ("science fiction", "the crew of a generation ship discover the captain has been lying about their destination"),
+    ("fantasy", "a half-vampire girl and her dog travel from village to village hunting the undead for money"),
+    ("fantasy", "a disgraced court mage is summoned back to save the prince who exiled her"),
+    ("horror", "a family moves into a farmhouse where the previous owners' dog will not stop digging in the cellar"),
+    ("horror", "survivors barricaded in a supermarket hear someone they buried knocking at the loading dock"),
+    ("young adult", "a fourteen-year-old girl runs away to a music festival to find the mother who left her"),
+    ("young adult", "a boy genius criminal mastermind negotiates with fairy police to rescue his father"),
+    ("literary", "a disgraced professor moves to his daughter's farm after a scandal at the university"),
+    ("literary", "an old woman tells a police officer the true story of the night her husband died"),
+    ("comic", "a holistic detective tries to explain to a sceptical client why a horse is in the bathroom"),
+    ("spy", "a British agent plays baccarat against a man who is financing an enemy network"),
+    ("military science fiction", "mercenary tank crews defend a mining colony against a much larger invading force"),
+    ("legal thriller", "a public defender realises her client's alibi witness is lying to protect someone else"),
+    ("cozy mystery", "a doll collector stumbles onto a murder at a county fair antiques show"),
+    ("political memoir", "a young woman describes life on the campaign trail with her famous father"),
+    ("historical", "a codebreaker in 1942 notices a pattern in intercepted Japanese messages that nobody believes"),
+    ("paranormal", "a werewolf radio host takes a call from a listener who claims to be a hunter"),
+    ("domestic suspense", "a diary written by a woman whose husband lies in a coma after a suicide attempt"),
+]
+
+
+# 各行业文体（2026-10）：真人一方加入了政府报告、法案、BBC 新闻、维基百科等之后，AI 一方也要有同类文字（dc_*）。
+DOC_STYLE = [
+    "Write a {g} (about 600 words) on: {t}. Plain text, no Markdown, no title line.",
+    "用英文写一篇{g}，主题：{t}。600词左右，正式规范，不要使用Markdown符号。",
+    "Write about 500 words of a {g} about {t}. Make it read like it was written by a professional human writer, "
+    "with specific names, figures and dates, and without generic AI phrasing.",
+    "Draft one section of a {g} on {t}, roughly 600 words, in the house style of a serious publication.",
+]
+DOC_TOPICS = [
+    ("government audit report", "delays and cost overruns in a federal broadband grant program"),
+    ("government audit report", "oversight of veterans' disability claim processing times"),
+    ("congressional research report", "the history and current debate over agricultural subsidies"),
+    ("legislative bill summary", "a bill to expand tax credits for small businesses that hire apprentices"),
+    ("legislative bill text", "an act requiring disclosure of data breaches within 72 hours"),
+    ("BBC-style news article", "flooding forces hundreds of families from their homes in a Welsh valley"),
+    ("BBC-style news article", "a football club fined after fans invade the pitch"),
+    ("wire news story", "a central bank holds interest rates steady amid slowing inflation"),
+    ("encyclopedia article", "the history of a small coastal town in Maine"),
+    ("encyclopedia article", "the life and career of a nineteenth-century railway engineer"),
+    ("encyclopedia article", "a species of freshwater turtle and its conservation status"),
+    ("company annual report letter to shareholders", "a regional grocery chain's year of expansion"),
+    ("market research report", "consumer demand for electric bicycles in Europe"),
+    ("legal memorandum", "whether a non-compete clause is enforceable under state law"),
+    ("court opinion summary", "a dispute over a contractor's failure to complete a home renovation"),
+    ("technical documentation", "configuring a home network router for parental controls"),
+    ("product review", "a mid-range noise-cancelling headphone after three months of use"),
+    ("travel guide", "two days in Lisbon on a budget"),
+    ("op-ed column", "why cities should ban cars from their historic centres"),
+    ("NGO policy brief", "improving childhood nutrition in rural Kenya"),
+    ("medical patient information leaflet", "managing type 2 diabetes with diet and exercise"),
+    ("environmental impact statement", "a proposed wind farm off the coast of New Jersey"),
+    ("grant proposal", "a community oral-history project for a public library"),
+    ("press release", "a university announces a new research centre for battery technology"),
+]
+
+
+# 各学科论文（2026-10，用户要求"各行各专业都要有，包括历史、人文社科"）：AI 一方按学科写论文的不同部分（ap_*），
+# 与真人一方的 arXiv / PubMed / PLOS / Elsevier 各学科开放论文、斯坦福哲学百科、欧洲人权法院判决对应。
+PAPER_STYLE = [
+    "Write the abstract (about 250 words) of a {g} research article titled: {t}.",
+    "Write the introduction section (about 700 words) of an academic paper in {g} on: {t}. Include citations in "
+    "author-year style. Plain text, no Markdown.",
+    "用英文写一篇{g}领域的学术论文的文献综述部分，题目：{t}。约700词，用作者-年份格式引用文献，不要使用Markdown。",
+    "Write the discussion and conclusion sections (about 700 words) of a {g} paper on: {t}. Make it read like a real "
+    "journal article by a human scholar: hedged claims, specific findings, limitations, no generic summary phrases.",
+    "帮我用英文写一篇{g}方向的课程论文，题目是{t}，包括摘要、引言、正文分节和结论，约900词。",
+    "Write the methodology section (about 600 words) of a {g} study on: {t}. Describe data sources, sample, and analysis.",
+]
+PAPER_TOPICS = [
+    ("history", "grain prices and famine relief in eighteenth-century Qing China"),
+    ("history", "the role of Venetian merchants in the fourteenth-century spice trade"),
+    ("history", "local militias and state power during the Song–Yuan transition"),
+    ("philosophy", "moral luck and the limits of responsibility"),
+    ("philosophy", "Zhu Xi's theory of principle and its reception in Joseon Korea"),
+    ("literary studies", "unreliable narration in post-war British fiction"),
+    ("literary studies", "landscape and exile in the poetry of Su Shi"),
+    ("linguistics", "evidential markers in spoken Tibetan dialects"),
+    ("linguistics", "code-switching among bilingual teenagers in Singapore"),
+    ("law", "the enforceability of arbitration clauses in consumer contracts"),
+    ("law", "data protection obligations of cross-border e-commerce platforms"),
+    ("political science", "electoral reform and party fragmentation in Latin America"),
+    ("international relations", "small-state hedging strategies in Southeast Asia"),
+    ("sociology", "intergenerational support among rural migrant families"),
+    ("anthropology", "ritual exchange and kinship in a highland Papua New Guinea village"),
+    ("education", "the effects of formative assessment on secondary school mathematics"),
+    ("economics", "minimum wage increases and employment in small retail firms"),
+    ("management", "remote work and team innovation in technology companies"),
+    ("accounting", "earnings management around seasoned equity offerings"),
+    ("psychology", "sleep deprivation and emotional regulation in adolescents"),
+    ("art history", "patronage and workshop practice in Ming dynasty court painting"),
+    ("musicology", "improvisation practices in early jazz recordings"),
+    ("archaeology", "Neolithic rice cultivation in the lower Yangtze region"),
+    ("religious studies", "pilgrimage networks in medieval Japanese Buddhism"),
+    ("journalism and media studies", "local newspaper closures and civic participation"),
+    ("geography", "urban heat islands and green space distribution"),
+    ("architecture", "adaptive reuse of industrial buildings in post-socialist cities"),
+    ("environmental science", "wetland restoration and carbon sequestration"),
+    ("agronomy", "intercropping maize and soybean under drought stress"),
+    ("civil engineering", "fatigue performance of steel bridge welds"),
+    ("chemistry", "catalytic conversion of biomass to platform chemicals"),
+    ("public health", "community health workers and childhood vaccination coverage"),
+    ("nursing", "nurse staffing levels and patient falls in acute care"),
+    ("mathematics education", "students' misconceptions about limits in calculus"),
+]
+
+
 def genre_topics(rnd):
     ts = GENRE_TOPICS * 3
     rnd.shuffle(ts)
@@ -510,7 +641,7 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
     if not eps:
         return 0
     rnd = random.Random(f"{name}-{out_f.name}")
-    done = {r["title"] + "|" + r.get("ver", "") for r in load_jsonl(out_f)}
+    done = {r["title"] + "|" + r.get("ver", "") + r.get("k", "") for r in load_jsonl(out_f)}
     n_new = 0
     humanize = out_f.name.startswith("hu_")
     if humanize:                                   # 论文和非论文体裁交替
@@ -518,17 +649,33 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         styles = [x for pair in zip(USER_STYLE * 2, GENRE_STYLE) for x in pair]
     else:
         topics, styles = (genre_topics(rnd), GENRE_STYLE) if out_f.name.startswith("ge_") else (user_style_topics(rnd), USER_STYLE)
+    if out_f.name.startswith(("nv_", "dc_", "ap_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
+        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS}[out_f.name[:3]]
+        pairs = [(g, t) for g, t in tbl for _ in range(4)]
+        rnd.shuffle(pairs)
+        topics = [f"{g}|{t}" for g, t in pairs]
+        seen_k: dict = {}
+        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE}[out_f.name[:3]]
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
             break
         url, model = eps[i % len(eps)]
-        if f"{t}|{model}" in done:
+        key_ = f"{t}|{model}"
+        if out_f.name.startswith(("nv_", "dc_", "ap_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+            seen_k[key_] = seen_k.get(key_, 0) + 1
+            key_ += f"#{seen_k[key_]}"
+        if key_ in done:
             continue
-        done.add(f"{t}|{model}")
+        done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        prompt = tpl.format(t=t, t_en=t) if "{t_en}" not in tpl else (
-            f"Write a short academic paper in English on the topic \"{t}\" (translate the topic). Strictly follow the standard paper format.")
+        if out_f.name.startswith(("nv_", "dc_", "ap_")):
+            g_, t_ = t.split("|", 1)
+            tpl = styles[(i + i // len(styles)) % len(styles)]
+            prompt = tpl.format(g=g_, t=t_)
+        else:
+            prompt = tpl.format(t=t, t_en=t) if "{t_en}" not in tpl else (
+                f"Write a short academic paper in English on the topic \"{t}\" (translate the topic). Strictly follow the standard paper format.")
         kind = "user_style"
         if humanize and rnd.random() < 0.3:
             prompt, kind = rnd.choice(HUMANIZE_ONESHOT_EN).format(t=t), "humanize_oneshot"
@@ -538,7 +685,8 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
             kind = "humanize_rewrite"
         if text and len(text) > 800:
             with lock, out_f.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps({"title": t, "kind": kind, "model": name, "ver": model, "text": clean(text)},
+                fh.write(json.dumps({"title": t, "kind": kind, "model": name, "ver": model, "text": clean(text),
+                                     **({"k": key_[key_.rfind("#"):]} if "#" in key_ else {})},
                                     ensure_ascii=False) + "\n")
             n_new += 1
         if i % 20 == 0:
@@ -581,7 +729,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -590,7 +738,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -609,9 +757,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize"):
+        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
