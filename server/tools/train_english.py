@@ -131,6 +131,53 @@ def novel_excerpts(want: int, rnd: random.Random, per_book: int = 3, max_minutes
     return out[:want]
 
 
+# 其他领域的真人英文（2026-10，用户要求"各行各业、各个题材的论文、图书、文章、报告"）：都取 ChatGPT 之前的公开数据集，
+# 训练时在训练机上临时下载，不提交进仓库。每个来源按文档编号划分训练 / 评估（评估部分从不参与训练）。
+EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
+    ("launch/gov_report", None, "document", "govreport"),          # 美国政府问责局 / 国会研究处报告
+    ("FiscalNote/billsum", None, "text", "bill"),                  # 美国法案文本
+    ("EdinburghNLP/xsum", None, "document", "bbc-news"),            # BBC 新闻（2010–2017）
+    ("legacy-datasets/wikipedia", "20220301.en", "text", "wiki"),  # 维基百科 2022-03 快照（ChatGPT 之前）
+    ("multi_news", None, "document", "multinews"),                 # 多来源新闻报道
+]
+
+
+def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float = 8.0):
+    try:
+        from datasets import load_dataset
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for name, cfg, field, tag in EXTRA_HUMAN:
+        t0, got = time.time(), 0
+        try:
+            ds = load_dataset(name, cfg, split="train", streaming=True) if cfg else load_dataset(name, split="train", streaming=True)
+            for i, row in enumerate(ds):
+                if got >= want_each or (time.time() - t0) / 60 > max_minutes:
+                    break
+                if i % 7:
+                    continue
+                txt = (row.get(field) or "").replace("|||||", "\n")
+                paras = [" ".join(p.split()) for p in re.split(r"\n+", txt)]
+                paras = [p for p in paras if len(p.split()) >= 12]
+                if sum(len(p.split()) for p in paras) < 220:
+                    continue
+                st = rnd.randint(0, max(0, len(paras) - 3))
+                buf, n, goal = [], 0, rnd.randint(200, 500)
+                for p in paras[st:]:
+                    buf.append(p)
+                    n += len(p.split())
+                    if n >= goal:
+                        break
+                if n >= 180:
+                    out.append(("\n".join(buf), f"{tag}:{row.get('id', i)}", tag))
+                    got += 1
+        except Exception as e:  # noqa: BLE001
+            print(f"::warning title=真人英文 {name}::{str(e)[:200]}", flush=True)
+        print(f"::notice title=真人英文 {tag}::{got} 段（{(time.time() - t0) / 60:.1f} 分钟）", flush=True)
+    return out
+
+
 def build_rows(args, rnd):
     from app.segmenter import normalize_english
     raw = []   # (text, y, src, split, n_windows)
@@ -153,12 +200,15 @@ def build_rows(args, rnd):
     if args.novel_human > 0:
         for text, title in novel_excerpts(args.novel_human, rnd):
             raw.append((text, 0, "novel-human", split_of("novel:" + title), 2))
+    if args.extra_human > 0:
+        for text, key, tag in extra_human_excerpts(args.extra_human, rnd):
+            raw.append((text, 0, f"{tag}-human", split_of(key), 1))
     gen_models = []
     for f in sorted(GEN_DIR.glob("*.jsonl")):
         if f.stem in HUMAN_FILES or any(f.stem.startswith(x) for x in args.skip_prefix):
             continue
         gen_models.append(f.stem)
-        model = re.sub(r"^(pm|tr|us|ge|hu|nv)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说"}.get(f.stem[:2], "")
+        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体"}.get(f.stem[:2], "")
         for g in load_jsonl(f):
             raw.append((clean_ai(g["text"]), 1, f"gen-{model}", split_of(g["title"]), 6))
     if not gen_models:
@@ -215,6 +265,7 @@ def main():
     ap.add_argument("--time-budget-min", type=float, default=270)
     ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='en' 为英文）")
     ap.add_argument("--user-docs-reps", type=int, default=3, help="用户英文在训练集里取几个窗口")
+    ap.add_argument("--extra-human", type=int, default=0, help="其他领域真人英文（政府报告、法案、BBC 新闻、维基百科等）每个来源取多少段")
     ap.add_argument("--novel-human", type=int, default=0, help="从 BookCorpusOpen 取多少段当代真人小说片段（0 = 不用）")
     args = ap.parse_args()
 
