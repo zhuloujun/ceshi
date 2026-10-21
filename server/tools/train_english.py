@@ -83,6 +83,116 @@ def load_jsonl(f: Path) -> list[dict]:
     return [json.loads(l) for l in f.read_text("utf-8").split("\n") if l.strip()] if f.exists() else []
 
 
+NOVEL_DATASETS = ("lucadiliello/bookcorpusopen", "bookcorpusopen")
+
+
+def novel_excerpts(want: int, rnd: random.Random, per_book: int = 3, max_minutes: float = 25.0):
+    """BookCorpusOpen 小说片段：跳过开头 8%（版权页、目录、致谢）和结尾 5%，每本取 per_book 段 250–600 词的连续段落。
+    下载失败时返回空列表（训练照常进行，结果里看不到 novel-human 一栏）。"""
+    try:
+        from datasets import load_dataset
+    except Exception as e:  # noqa: BLE001
+        print(f"::warning title=小说片段::没有 datasets 库：{e}", flush=True)
+        return []
+    t0, out = time.time(), []
+    for name in NOVEL_DATASETS:
+        try:
+            ds = load_dataset(name, split="train", streaming=True)
+            for i, b in enumerate(ds):
+                if (time.time() - t0) / 60 > max_minutes or len(out) >= want:
+                    break
+                if i % 3:                              # 隔几本取一本，题材更分散
+                    continue
+                title = str(b.get("title") or i)
+                paras = [" ".join(p.split()) for p in re.split(r"\n\s*\n|\n", b.get("text") or "")]
+                paras = [p for p in paras if len(p.split()) >= 3]
+                if len(paras) < 200:
+                    continue
+                body = paras[int(len(paras) * 0.08): int(len(paras) * 0.95)]
+                head = " ".join(body[:80])
+                if len(re.findall(r"[^\x00-\x7f\u2018-\u201d\u2026\u2014\u2013]", head)) > 0.005 * len(head):
+                    continue                           # 只要英文书
+                for _ in range(per_book):
+                    st = rnd.randint(0, max(0, len(body) - 60))
+                    buf, n, goal = [], 0, rnd.randint(250, 600)
+                    for p in body[st:]:
+                        buf.append(p)
+                        n += len(p.split())
+                        if n >= goal:
+                            break
+                    txt = "\n".join(buf)
+                    if n >= 200 and not re.search(r"copyright|smashwords|all rights reserved|chapter \w+$", txt, re.I | re.M):
+                        out.append((txt, title))
+            if out:
+                break
+        except Exception as e:  # noqa: BLE001
+            print(f"::warning title=小说片段 {name}::{e}", flush=True)
+    print(f"::notice title=小说片段::{len(out)} 段，{len({t for _, t in out})} 本（{(time.time() - t0) / 60:.1f} 分钟）", flush=True)
+    return out[:want]
+
+
+# 其他领域的真人英文（2026-10，用户要求"各行各业、各个题材的论文、图书、文章、报告"）：都取 ChatGPT 之前的公开数据集，
+# 训练时在训练机上临时下载，不提交进仓库。每个来源按文档编号划分训练 / 评估（评估部分从不参与训练）。
+EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
+    ("launch/gov_report", None, "document", "govreport"),          # 美国政府问责局 / 国会研究处报告
+    ("FiscalNote/billsum", None, "text", "bill"),                  # 美国法案文本
+    ("EdinburghNLP/xsum", None, "document", "bbc-news"),            # BBC 新闻（2010–2017）
+    ("legacy-datasets/wikipedia", "20220301.en", "text", "wiki"),  # 维基百科 2022-03 快照（ChatGPT 之前）
+    ("multi_news", None, "document", "multinews"),                 # 多来源新闻报道
+    # 论文全文（用户要求加大论文比例：网站上最多的就是论文，真人论文误判代价最大）——各取 2 倍数量
+    ("ccdv/arxiv-summarization", None, "article", "arxiv-paper", 2),      # arXiv 论文正文（物理、计算机、数学等，2018 年前）
+    ("ccdv/pubmed-summarization", None, "article", "pubmed-paper", 2),    # PubMed 论文正文（医学、生物）
+    ("tomasg25/scientific_lay_summarisation", "plos", "article", "plos-paper", 2),   # PLOS 期刊论文正文
+    # 各学科（含人文社科）：Elsevier 开放获取论文（2014–2020，按学科分类，含艺术人文、社会科学、经济、心理、法律等 27 个大类）、
+    # 斯坦福哲学百科、欧洲人权法院判决书（法学）
+    ("orieg/elsevier-oa-cc-by", None, "body_text", "elsevier-paper", 3),
+    ("AiresPucrs/stanford-encyclopedia-philosophy", None, "text", "philosophy", 1),
+    ("coastalcph/lex_glue", "ecthr_a", "text", "law-ecthr", 1),
+]
+
+
+def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float = 8.0):
+    try:
+        from datasets import load_dataset
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for name, cfg, field, tag, *mult in EXTRA_HUMAN:
+        t0, got = time.time(), 0
+        want = want_each * (mult[0] if mult else 1)
+        try:
+            ds = load_dataset(name, cfg, split="train", streaming=True) if cfg else load_dataset(name, split="train", streaming=True)
+            for i, row in enumerate(ds):
+                if got >= want or (time.time() - t0) / 60 > max_minutes:
+                    break
+                if i % 7:
+                    continue
+                v = row.get(field) or ""
+                if isinstance(v, list):                    # 正文按句 / 按段存成列表（Elsevier、lex_glue）
+                    v = "\n".join(x.get("sentence") or x.get("text") or "" if isinstance(x, dict) else str(x) for x in v)
+                txt = str(v).replace("|||||", "\n")
+                if tag == "elsevier-paper" and len(txt.split("\n")) < 5:
+                    txt = re.sub(r"(?<=[.!?]) (?=[A-Z])", "\n", txt, count=60)   # 没有分段的正文按句切开
+                paras = [" ".join(p.split()) for p in re.split(r"\n+", txt)]
+                paras = [p for p in paras if len(p.split()) >= 12]
+                if sum(len(p.split()) for p in paras) < 220:
+                    continue
+                st = rnd.randint(0, max(0, len(paras) - 3))
+                buf, n, goal = [], 0, rnd.randint(200, 500)
+                for p in paras[st:]:
+                    buf.append(p)
+                    n += len(p.split())
+                    if n >= goal:
+                        break
+                if n >= 180:
+                    out.append(("\n".join(buf), f"{tag}:{row.get('id', i)}", tag))
+                    got += 1
+        except Exception as e:  # noqa: BLE001
+            print(f"::warning title=真人英文 {name}::{str(e)[:200]}", flush=True)
+        print(f"::notice title=真人英文 {tag}::{got} 段（{(time.time() - t0) / 60:.1f} 分钟）", flush=True)
+    return out
+
+
 def build_rows(args, rnd):
     from app.segmenter import normalize_english
     raw = []   # (text, y, src, split, n_windows)
@@ -98,12 +208,22 @@ def build_rows(args, rnd):
     for h in load_jsonl(GEN_DIR / "genre_human.jsonl"):
         if "genre_human" not in args.skip_prefix:
             raw.append((h["text"], 0, f"genre-human-{h['source']}", split_of(h["title"]), args.genre_human_windows))
+    # 当代出版小说（真人）：v11 把 Nicholas Sparks《At First Sight》这类当代小说的段落约八成打到 0.9 以上——训练数据里的
+    # 真人故事只有 Reddit 习作和古腾堡老书，没有"当代成熟小说"的文风（对话多、心理描写细、用词规范）。训练时从 BookCorpusOpen
+    # （2015 年前 Smashwords 上的真人小说，ChatGPT 之前）现取若干书的片段；按书名划分训练 / 评估，评估书的片段从不参与训练。
+    # 不把原文提交进公开仓库（受版权保护），只在训练机上临时下载。
+    if args.novel_human > 0:
+        for text, title in novel_excerpts(args.novel_human, rnd):
+            raw.append((text, 0, "novel-human", split_of("novel:" + title), 2))
+    if args.extra_human > 0:
+        for text, key, tag in extra_human_excerpts(args.extra_human, rnd):
+            raw.append((text, 0, f"{tag}-human", split_of(key), 1))
     gen_models = []
     for f in sorted(GEN_DIR.glob("*.jsonl")):
         if f.stem in HUMAN_FILES or any(f.stem.startswith(x) for x in args.skip_prefix):
             continue
         gen_models.append(f.stem)
-        model = re.sub(r"^(pm|tr|us|ge|hu)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味"}.get(f.stem[:2], "")
+        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc|ap)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体", "ap": "-学科论文"}.get(f.stem[:2], "")
         for g in load_jsonl(f):
             raw.append((clean_ai(g["text"]), 1, f"gen-{model}", split_of(g["title"]), 6))
     if not gen_models:
@@ -160,6 +280,8 @@ def main():
     ap.add_argument("--time-budget-min", type=float, default=270)
     ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='en' 为英文）")
     ap.add_argument("--user-docs-reps", type=int, default=3, help="用户英文在训练集里取几个窗口")
+    ap.add_argument("--extra-human", type=int, default=0, help="其他领域真人英文（政府报告、法案、BBC 新闻、维基百科等）每个来源取多少段")
+    ap.add_argument("--novel-human", type=int, default=0, help="从 BookCorpusOpen 取多少段当代真人小说片段（0 = 不用）")
     args = ap.parse_args()
 
     import torch

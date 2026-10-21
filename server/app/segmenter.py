@@ -244,6 +244,29 @@ def is_ci(text: str) -> bool:
     return r is not None and r >= 0.5
 
 
+# 散曲（元曲小令、带过曲）：比宋词多衬字、多白话（"恰便似""直恁""笑杀那争名夺利的人"），白话标志词 4%–8%，
+# is_ci 认不出，以前按现代汉语打分（2026-10 用户的 cs1021：AI 写的《朝天子·叹世》等两首散曲都被当成现代文，0% 漏检）。
+# 条件：小句短（平均 3.5–9 字、最长 12 字）、句末押韵，且有散曲常用的衬字 / 口语词；没有这类词时要求更整齐、更押韵、白话更少。
+# 在约 15 万段现代中文书籍段落上测定：0.35% 被改判为诗词，抽查绝大多数本身就是小说里的曲词、韵文（《西游记》《金瓶梅》的赞词、
+# 戏曲唱段）；古文 4 千余段里 5 段。
+_SANQU_MARK = re.compile(r"俺|恁|兀的|也么哥|那厢|这厢|甚的|怎生|恰便似|则待|倒大来|争如|觑|忒|咱|休|煞|杀|不如|看了|笑杀|直恁|管什么|问什么")
+
+
+def is_sanqu(text: str) -> bool:
+    if re.search(r"[0-9A-Za-z：:“”\"《》]", text):
+        return False
+    clauses = [len(_CJK.findall(c)) for c in _CLAUSE_SPLIT.split(text) if _CJK.search(c)]
+    cjk = len(_CJK.findall(text))
+    if len(clauses) < 5 or not 16 <= cjk <= 300 or max(clauses) > 12:
+        return False
+    mean = sum(clauses) / len(clauses)
+    mr = modern_ratio(text)
+    if not 3.5 <= mean <= 9 or mr > 0.08 or len(_POETRY_FUNC.findall(text)) / cjk > 0.05:
+        return False
+    r = rhyme_ratio(text) or 0
+    return (r >= 0.6 and bool(_SANQU_MARK.search(text))) or (r >= 0.75 and mr <= 0.04 and max(clauses) <= 10 and mean <= 7)
+
+
 _EN_TITLE_SKIP = re.compile(r"^(stage|step|part|phase|section|chapter|appendix|table|figure|fig\.|week|month|day)\b", re.I)
 _EN_SMALL = {"a", "an", "the", "and", "or", "of", "in", "on", "for", "to", "with", "by", "at", "from", "as", "vs", "via", "into"}
 
@@ -402,6 +425,8 @@ def detect_register(text: str) -> str:
                                                           or (cjk >= 60 and cr >= 0.08 and mr <= 2 * config.MODERN_MAX_RATIO)):
         return "zh_classical"
     if cjk >= 12 and is_ci(t):
+        return "zh_poetry"
+    if cjk >= 16 and is_sanqu(t):
         return "zh_poetry"
     # 浅近文言（虚词少、偶有一两个白话字）：2026-10 用户的 gdwx.docx 里 AI 写的墓志、家书、游记有三成被当成现代汉语，
     # 用的是现代文分类器，几乎全部漏检。扩充的文言常用字（尝、皆、亦、吾、汝、未、勿、卒、谓……）占 8% 以上、

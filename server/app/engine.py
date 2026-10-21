@@ -1325,7 +1325,7 @@ def apply_user_calibration(engine: Engine, cal: dict):
     return saved, user
 
 
-AUTOCAL_GUARD = 1
+AUTOCAL_GUARD = 2   # 2：用户样本权重设上限（见 run_calibration）——旧的标注校准在启动后按新规则重新校准一次
 
 
 class AutoCalibrator:
@@ -1341,8 +1341,9 @@ class AutoCalibrator:
         # 安全检查（见 JobQueue 里的 autocalibrate）上线前保存的标注校准：启动后按现有标注重新校准一次
         user = config.load_user_profiles()
         regs = {v["register"] for v in self.labels.values()}
-        for reg, c in user.items():
-            if reg in regs and c.get("guard") != AUTOCAL_GUARD:
+        # 换了模型（旧校准已作废、load_user_profiles 不再返回）的文体也重新校准，免得标注白标
+        for reg in regs:
+            if (user.get(reg) or {}).get("guard") != AUTOCAL_GUARD:
                 self.schedule(reg, 60)
 
     def _save(self):
@@ -1486,7 +1487,11 @@ def run_calibration(engine: Engine, p: dict, progress=None) -> dict:
     builtin = load_builtin_calib(profile) if include_builtin else []
     n_user = len(hs) + len(as_)
     if builtin and n_user:
-        w_user = max(1.0, config.USER_SAMPLE_SHARE * len(builtin) / ((1 - config.USER_SAMPLE_SHARE) * n_user))
+        # 每段标注最多抵 USER_SAMPLE_MAX_WEIGHT 段内置样本：以前固定让用户样本合计占 30%，只标了十几段时每段权重高达约 50 倍，
+        # 校准被这十几段带偏（2026-10：英文 2 段人写 + 11 段 AI 的标注让同一批段落的得分普遍升高 30–40 个百分点，
+        # cs1021 里《At First Sight》的段落因此被判 AI）。标得越多，用户样本占比越接近 30%。
+        w_user = max(1.0, min(config.USER_SAMPLE_MAX_WEIGHT,
+                              config.USER_SAMPLE_SHARE * len(builtin) / ((1 - config.USER_SAMPLE_SHARE) * n_user)))
         bh = [r["s"] for r in builtin if r["y"] == 0]
         ba = [r["s"] for r in builtin if r["y"] == 1]
         H, A = bh + hs, ba + as_
@@ -1507,7 +1512,8 @@ def run_calibration(engine: Engine, p: dict, progress=None) -> dict:
         res["calibration"]["reference_only"] = True
     note = f"{REGISTER_NAMES.get(profile, profile)}：用你的 {len(hs)} 段人写、{len(as_)} 段 AI 样本校准"
     if builtin and n_user:
-        note += f"（并合并内置公开数据 {len(builtin)} 段，你的样本约占 {config.USER_SAMPLE_SHARE:.0%} 权重）"
+        share = w_user * n_user / (w_user * n_user + len(builtin))
+        note += f"（并合并内置公开数据 {len(builtin)} 段，你的样本约占 {share:.0%} 权重）"
     res["calibration"]["note"] = note + "。"
     res["report"]["profile"] = profile
     res["report"]["profile_name"] = REGISTER_NAMES.get(profile, profile)

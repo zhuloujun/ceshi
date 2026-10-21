@@ -51,6 +51,12 @@ on:
       classical_tag:
         description: "用哪一版文言分类器拟合校准（留空 = 当前校准里的版本）"
         default: ""
+      en2_tag:
+        description: "英文第二分类器（逐段）用哪一版（留空 = 当前校准里的版本）"
+        default: ""
+      extra_en:
+        description: "（自动填写）加密的当代小说校准样本 enc:URL#密钥；受版权保护，不进公开仓库，只保存得分"
+        default: ""
 
 permissions:
   contents: write
@@ -86,6 +92,12 @@ jobs:
             echo 'parts=["en_cal1","en_cal2","en_ood","en_para","en_user","en_gen_fit","en_gen_test","cl_cal","cl_test","cl_user","po_cal","po_test","po_story","po_classic","po_user"]' >> "$GITHUB_OUTPUT"
           else
             echo "parts=$PUSH_PARTS" >> "$GITHUB_OUTPUT"
+          fi
+          # 提供了当代小说校准样本时才重打这两份；否则沿用已提交的得分（推送触发的运行不会把它们清空）
+          # （从事件文件里读，不把输入值写进脚本——脚本文本会显示在运行日志里）
+          if [ -n "$(jq -r '.inputs.extra_en // ""' "$GITHUB_EVENT_PATH")" ]; then
+            P=$(grep '^parts=' "$GITHUB_OUTPUT" | tail -1 | sed 's/^parts=//; s/]$/,"en_novel_fit","en_novel_test"]/')
+            echo "parts=$P" >> "$GITHUB_OUTPUT"
           fi
 
   score:
@@ -169,11 +181,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release download english-classifier-v3 -p english-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
+          T="${{ github.event.inputs.en2_tag }}"; [ -z "$T" ] && T=$(grep -oE 'english-classifier-v[0-9]+' server/app/default_calibration.json | head -1); T=${T:-english-classifier-v3}
+          echo "EN2_CLASSIFIER_ID=$T" >> "$GITHUB_ENV"
+          if gh release download "$T" -p english-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
             tar xzf /tmp/english-classifier.tar.gz -C /tmp
             ls /tmp/english-classifier
             echo "EN2_CLASSIFIER_MODEL=/tmp/english-classifier" >> "$GITHUB_ENV"
           fi
+      - name: 解密当代小说校准样本（只在手动运行并提供 extra_en 时）
+        if: ${{ startsWith(matrix.part, 'en_novel') && github.event.inputs.extra_en != '' }}
+        run: |
+          EXTRA=$(jq -r '.inputs.extra_en // ""' "$GITHUB_EVENT_PATH")   # 从事件文件读取，先屏蔽密钥再使用
+          KEY="${EXTRA##*#}"; URL="${EXTRA%#*}"; URL="${URL#enc:}"
+          echo "::add-mask::$KEY"
+          curl -sSL -o /tmp/extra.enc "$URL"
+          printf '%s' "$KEY" > /tmp/extra.key
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:/tmp/extra.key -in /tmp/extra.enc | xz -d > /tmp/extra_en.jsonl
+          rm -f /tmp/extra.key /tmp/extra.enc
+          echo "EXTRA_EN_DOCS=/tmp/extra_en.jsonl" >> "$GITHUB_ENV"
+          wc -l /tmp/extra_en.jsonl
       - name: 打分
         working-directory: server
         env:
@@ -220,6 +246,9 @@ jobs:
           [ -n "$T" ] && export POETRY_CLASSIFIER_ID=$T
           T="${{ github.event.inputs.classical_tag }}"; [ -z "$T" ] && T=$(grep -oE '"classical-classifier-v[0-9]+"' app/default_calibration.json | head -1 | tr -d '"')
           [ -n "$T" ] && export CLASSICAL_CLASSIFIER_ID=$T
+          T="${{ github.event.inputs.en2_tag }}"; [ -z "$T" ] && T=$(grep -oE 'english-classifier-v[0-9]+' app/default_calibration.json | head -1)
+          [ -n "$T" ] && export EN2_CLASSIFIER_ID=$T
+          echo "英文第二分类器 $EN2_CLASSIFIER_ID"
           echo "诗词分类器 $POETRY_CLASSIFIER_ID · 文言分类器 $CLASSICAL_CLASSIFIER_ID"
           mkdir -p tools/scores && cp /tmp/dl/*.json tools/scores/ && ls -la tools/scores
           # 文言各份的打分里带有通用分类器第二意见（classifier_mpu）时，说明是用文言分类器打的分
@@ -239,10 +268,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # 先把结果放到一边，基于最新的 main 再提交，避免与期间的其他提交冲突
           mkdir -p /tmp/result && cp -r server/app/default_calibration.json server/app/calib_data server/tools/EVAL_REPORT.md server/tools/eval_result.json server/tools/scores /tmp/result/
-          git fetch origin main && git reset --hard origin/main
+          # 提交回触发时所在的分支：在功能分支上手动运行时，校准结果随功能分支一起合并（只部署一次）
+          B="${GITHUB_REF_NAME}"
+          git fetch origin "$B" && git reset --hard "origin/$B"
           cp /tmp/result/default_calibration.json server/app/ && cp /tmp/result/EVAL_REPORT.md /tmp/result/eval_result.json server/tools/
           mkdir -p server/tools/scores && cp /tmp/result/scores/*.json server/tools/scores/
           mkdir -p server/app/calib_data && cp /tmp/result/calib_data/*.json server/app/calib_data/
           git add server/app/default_calibration.json server/app/calib_data server/tools/EVAL_REPORT.md server/tools/eval_result.json server/tools/scores
           git commit -m "Update default calibration (modern Chinese, English, classical Chinese, poetry)" || exit 0
-          git push origin HEAD:main
+          git push origin "HEAD:$B"

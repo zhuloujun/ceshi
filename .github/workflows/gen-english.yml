@@ -13,7 +13,7 @@ on:
         description: "每家模型生成多少篇"
         default: "200"
       source:
-        description: "arxiv（摘要）/ pubmed（农业、经济、医学等，含中国作者；生成整篇论文）/ pmc（只抓真人论文正文）/ translate（先写中文再译成英文）/ userstyle（一句中文指令直接写英文论文）/ genre（童话、读后感、清单、议论文等非论文体裁）/ humangenre（只收集非论文体裁的真人英文长文）"
+        description: "arxiv（摘要）/ pubmed（农业、经济、医学等，含中国作者；生成整篇论文）/ pmc（只抓真人论文正文）/ translate（先写中文再译成英文）/ userstyle（一句中文指令直接写英文论文）/ genre（童话、读后感、清单、议论文等非论文体裁）/ novel（当代小说体片段：惊悚、言情、科幻等）/ docs（政府报告、法案、新闻、百科、商业报告等各行业文体）/ papers（历史、哲学、文学、法学、社会学等 30 多个学科的论文）/ humangenre（只收集非论文体裁的真人英文长文）"
         default: "pubmed"
 
 permissions:
@@ -49,4 +49,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add server/tools/data/gen_en
           git commit -m "Add generated English AI training data" || exit 0
-          git pull --rebase origin main && git push origin HEAD:main
+          git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}"   # 提交回触发时所在的分支（在功能分支上生成时不会直接推到 main）
