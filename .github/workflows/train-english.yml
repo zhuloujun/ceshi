@@ -10,13 +10,16 @@ on:
         description: "传给 train_english.py 的额外参数（可留空）"
         default: ""
       backend:
-        description: "在哪里训练：kaggle（免费 GPU，默认）或 modal（付费额度）"
+        description: "在哪里训练：kaggle（免费 GPU，默认）/ modal（付费额度）/ actions（GitHub 免费 CPU，从 base_tag 那版接着训练，限时）"
         default: "kaggle"
       tag:
         description: "发布到哪个 Release（默认 english-classifier-v3；对比实验用别的名字）"
         default: "english-classifier-v3"
       user_docs:
         description: "（自动填写）用户提供的已标注英文，加密传入，不进公开仓库"
+        default: ""
+      base_tag:
+        description: "actions 后端：从哪一版接着训练（如 english-classifier-v14）"
         default: ""
 
 permissions:
@@ -46,9 +49,33 @@ jobs:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           ls server/tools/data/gen_en || { echo "::error::还没有生成数据"; exit 1; }
-          if [ "${{ github.event.inputs.backend || 'kaggle' }}" = "modal" ]; then
+          if [ "${{ github.event.inputs.backend || 'kaggle' }}" = "actions" ]; then
+            # GitHub 免费 CPU（4 核）：从已训练好的版本接着训练，限时 200 分钟（到点保存开发集上最好的一版）。
+            # 2026-10 Kaggle 账号被封、等待申诉期间使用。
+            pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
+            pip install -r server/requirements.txt "datasets>=2.19" huggingface_hub
+            gh release download "${{ github.event.inputs.base_tag }}" -p english-classifier.tar.gz -D /tmp/base -R "${{ github.repository }}"
+            mkdir -p /tmp/basex && tar xzf /tmp/base/english-classifier.tar.gz -C /tmp/basex
+            python - <<'PY'
+          from huggingface_hub import hf_hub_download
+          hf_hub_download("yaful/MAGE", "valid.csv", repo_type="dataset", local_dir="/tmp/mage")
+          PY
+            UD=""
+            EXTRA=$(jq -r '.inputs.user_docs // ""' "$GITHUB_EVENT_PATH")   # 从事件文件读取，先屏蔽密钥
+            if [ -n "$EXTRA" ]; then
+              KEY="${EXTRA##*#}"; URL="${EXTRA%#*}"; URL="${URL#enc:}"
+              echo "::add-mask::$KEY"
+              curl -sSL -o /tmp/ud.enc "$URL"; printf '%s' "$KEY" > /tmp/ud.key
+              openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:/tmp/ud.key -in /tmp/ud.enc | xz -d > /tmp/user_docs.jsonl
+              rm -f /tmp/ud.key /tmp/ud.enc; UD="--user-docs /tmp/user_docs.jsonl"
+            fi
+            cd server && TORCH_THREADS=4 python -u tools/train_english.py --mage-dir /tmp/mage --out /tmp/english-classifier \
+              --base /tmp/basex/english-classifier --lr 1e-5 --time-budget-min 200 $UD ${{ github.event.inputs.args }}
+            cd .. && tar czf english-classifier.tar.gz -C /tmp english-classifier
+          elif [ "${{ github.event.inputs.backend || 'kaggle' }}" = "modal" ]; then
             modal run server/tools/train_english_modal.py --args "${{ github.event.inputs.args }}"
           else
             python -u server/tools/kaggle_train.py --lang en --sha "$GITHUB_SHA" --args "${{ github.event.inputs.args }}"
