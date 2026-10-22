@@ -27,8 +27,12 @@ jobs:
       - run: pip install gdown
       - name: 下载并检查
         run: |
-          gdown --fuzzy "https://drive.google.com/file/d/${{ github.event.inputs.drive_id }}/view" -O "${{ github.event.inputs.name }}.tar.gz"
-          ls -la "${{ github.event.inputs.name }}.tar.gz"
+          F="${{ github.event.inputs.name }}.tar.gz"; ID="${{ github.event.inputs.drive_id }}"
+          # 大文件：直接用云端硬盘的下载地址（confirm=t 跳过"无法扫描病毒"的确认页）；不行再用 gdown
+          curl -sSL -o "$F" "https://drive.usercontent.google.com/download?id=$ID&export=download&confirm=t" || true
+          if ! gzip -t "$F" 2>/dev/null; then gdown --fuzzy "https://drive.google.com/file/d/$ID/view" -O "$F" || true; fi
+          echo "::notice title=下载结果::$(ls -la "$F" | awk '{print $5}') 字节 · $(file -b "$F" | cut -c1-80)"
+          gzip -t "$F" || { echo "::error title=下载失败::文件不是 gzip（可能没有打开链接共享）：$(head -c 200 "$F" | tr -d '\n' | cut -c1-200)"; exit 1; }
           mkdir -p /tmp/x && tar xzf "${{ github.event.inputs.name }}.tar.gz" -C /tmp/x
           test -f "/tmp/x/${{ github.event.inputs.name }}/config.json"
           python3 - <<'PY'
