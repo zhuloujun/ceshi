@@ -1,0 +1,47 @@
+# 把在 Google Colab 上训练好的模型（用户云端硬盘里"知道链接即可查看"的 .tar.gz）发布到本仓库 Release。
+# 2026-10 Kaggle 账号被封期间使用：Colab 笔记本 train_english_colab.ipynb 训练完把模型存进云端硬盘并打开链接共享。只能手动运行。
+name: 导入 Colab 训练的模型
+
+on:
+  workflow_dispatch:
+    inputs:
+      drive_id:
+        description: "云端硬盘文件 ID"
+        required: true
+      tag:
+        description: "发布到哪个 Release（如 english-classifier-v15）"
+        required: true
+      name:
+        description: "包名（english-classifier / poetry-classifier …）"
+        default: "english-classifier"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install gdown
+      - name: 下载并检查
+        run: |
+          gdown --fuzzy "https://drive.google.com/file/d/${{ github.event.inputs.drive_id }}/view" -O "${{ github.event.inputs.name }}.tar.gz"
+          ls -la "${{ github.event.inputs.name }}.tar.gz"
+          mkdir -p /tmp/x && tar xzf "${{ github.event.inputs.name }}.tar.gz" -C /tmp/x
+          test -f "/tmp/x/${{ github.event.inputs.name }}/config.json"
+          python3 - <<'PY'
+          import json, glob
+          f = glob.glob("/tmp/x/*/training_result.json")
+          if f:
+              r = json.load(open(f[0]))
+              print("::notice title=训练结果::" + json.dumps({k: r.get(k) for k in ("test_auroc_all", "dev_auroc", "steps", "minutes", "device", "n_train")}, ensure_ascii=False))
+          PY
+      - name: 发布到 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          T="${{ github.event.inputs.tag }}"
+          gh release view "$T" >/dev/null 2>&1 || gh release create "$T" --title "$T（Colab 训练）" --notes "在 Google Colab 免费 GPU 上训练，导入自用户云端硬盘。"
+          gh release upload "$T" "${{ github.event.inputs.name }}.tar.gz" --clobber
