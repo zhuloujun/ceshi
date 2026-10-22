@@ -151,6 +151,19 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
 ]
 
 
+def _stream(load_dataset, name, cfg):
+    """流式读取；新版 datasets 不再支持"脚本式"数据集（gov_report、multi_news、wikipedia 等 2026-10 实测报错），
+    这时改读 Hugging Face 自动转换好的 parquet 版本（refs/convert/parquet）。"""
+    kw = {"split": "train", "streaming": True}
+    try:
+        return load_dataset(name, cfg, **kw) if cfg else load_dataset(name, **kw)
+    except Exception as e:  # noqa: BLE001
+        if "scripts are no longer supported" not in str(e):
+            raise
+        return load_dataset(name, cfg, revision="refs/convert/parquet", **kw) if cfg else \
+            load_dataset(name, revision="refs/convert/parquet", **kw)
+
+
 def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float = 8.0):
     try:
         from datasets import load_dataset
@@ -161,7 +174,7 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
         t0, got = time.time(), 0
         want = want_each * (mult[0] if mult else 1)
         try:
-            ds = load_dataset(name, cfg, split="train", streaming=True) if cfg else load_dataset(name, split="train", streaming=True)
+            ds = _stream(load_dataset, name, cfg)
             for i, row in enumerate(ds):
                 if got >= want or (time.time() - t0) / 60 > max_minutes:
                     break
