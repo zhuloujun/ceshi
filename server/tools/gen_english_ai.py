@@ -543,6 +543,43 @@ DOC_TOPICS = [
 ]
 
 
+# 非虚构类（2026-10-23）：真人书抽查发现写作教程、饮食健康指南、回忆录、纪录片教材等最容易被误判，
+# AI 一方也要有同类文字（nf_*），与真人非虚构书一起训练。
+NONFIC_STYLE = [
+    "Write about 600 words from a {g} about {t}. Plain text, no Markdown, no title line.",
+    "用英文写一段{g}，主题：{t}。600词左右，像出版过的真人作品，不要使用Markdown符号。",
+    "Write roughly 500 words of a {g} on {t}. Make it sound like a real published human author: concrete anecdotes, "
+    "names, numbers and a distinctive voice, no generic AI phrasing.",
+    "Write one chapter excerpt (about 700 words) of a {g} on {t}, in first person where natural.",
+]
+NONFIC_TOPICS = [
+    ("how-to guide for aspiring authors", "outlining a non-fiction book before writing the first draft"),
+    ("self-publishing handbook", "choosing a book title and cover that sell"),
+    ("creative writing textbook", "writing believable dialogue"),
+    ("healthy eating guide", "why whole grains and legumes should replace processed snacks"),
+    ("diet and nutrition book", "foods that may slow ageing, with simple recipes"),
+    ("food-politics book", "how industrial agriculture shapes what ends up on our plates"),
+    ("memoir", "growing up in a small mining town in the 1960s"),
+    ("memoir", "a diplomat's first posting abroad during the Cold War"),
+    ("memoir", "a son's search for the father he barely knew"),
+    ("memoir", "a playwright's early years of failure in New York"),
+    ("medical case memoir by a doctor", "the patient who changed how I practise medicine"),
+    ("popular science book", "how the immune system learns to recognise invaders"),
+    ("popular science book", "what black holes reveal about space and time"),
+    ("documentary filmmaking textbook", "planning interviews and building trust with subjects"),
+    ("journalism / narrative non-fiction", "a town's struggle after its only factory closes"),
+    ("travel essay", "a winter train journey across Siberia"),
+    ("personal essay", "learning to keep bees on a city rooftop"),
+    ("urban farming memoir", "raising chickens in a vacant lot in Oakland"),
+    ("teaching memoir", "a first year teaching in an underfunded high school"),
+    ("business self-help book", "building daily habits that compound over time"),
+    ("parenting guide", "helping teenagers manage screen time"),
+    ("military history companion", "logistics failures on the Eastern Front in 1941"),
+    ("biography", "a nineteenth-century woman astronomer"),
+    ("Very Short Introduction-style book", "the history and ideas of the Enlightenment"),
+]
+
+
 # 各学科论文（2026-10，用户要求"各行各专业都要有，包括历史、人文社科"）：AI 一方按学科写论文的不同部分（ap_*），
 # 与真人一方的 arXiv / PubMed / PLOS / Elsevier 各学科开放论文、斯坦福哲学百科、欧洲人权法院判决对应。
 PAPER_STYLE = [
@@ -649,27 +686,27 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         styles = [x for pair in zip(USER_STYLE * 2, GENRE_STYLE) for x in pair]
     else:
         topics, styles = (genre_topics(rnd), GENRE_STYLE) if out_f.name.startswith("ge_") else (user_style_topics(rnd), USER_STYLE)
-    if out_f.name.startswith(("nv_", "dc_", "ap_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
-        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS}[out_f.name[:3]]
+    if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
+        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS, "nf_": NONFIC_TOPICS}[out_f.name[:3]]
         pairs = [(g, t) for g, t in tbl for _ in range(4)]
         rnd.shuffle(pairs)
         topics = [f"{g}|{t}" for g, t in pairs]
         seen_k: dict = {}
-        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE}[out_f.name[:3]]
+        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE, "nf_": NONFIC_STYLE}[out_f.name[:3]]
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
             break
         url, model = eps[i % len(eps)]
         key_ = f"{t}|{model}"
-        if out_f.name.startswith(("nv_", "dc_", "ap_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
             seen_k[key_] = seen_k.get(key_, 0) + 1
             key_ += f"#{seen_k[key_]}"
         if key_ in done:
             continue
         done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        if out_f.name.startswith(("nv_", "dc_", "ap_")):
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_")):
             g_, t_ = t.split("|", 1)
             tpl = styles[(i + i // len(styles)) % len(styles)]
             prompt = tpl.format(g=g_, t=t_)
@@ -729,7 +766,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -738,7 +775,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -757,9 +794,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers"):
+        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":

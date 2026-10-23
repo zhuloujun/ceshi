@@ -148,6 +148,9 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     ("orieg/elsevier-oa-cc-by", None, "body_text", "elsevier-paper", 3),
     ("AiresPucrs/stanford-encyclopedia-philosophy", None, "text", "philosophy", 1),
     ("coastalcph/lex_glue", "ecthr_a", "text", "law-ecthr", 1),
+    # 2026-10-23：新闻纪实（CNN / Daily Mail 2007–2015）和 Semantic Scholar 开放论文（peS2o，覆盖人文社科在内的各学科，2023 年前）
+    ("abisee/cnn_dailymail", "3.0.0", "article", "cnn-news", 1),
+    ("allenai/peS2o", "v2", "text", "s2-paper", 2),
 ]
 
 
@@ -236,7 +239,7 @@ def build_rows(args, rnd):
         if f.stem in HUMAN_FILES or any(f.stem.startswith(x) for x in args.skip_prefix):
             continue
         gen_models.append(f.stem)
-        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc|ap)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体", "ap": "-学科论文"}.get(f.stem[:2], "")
+        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc|ap|nf)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体", "ap": "-学科论文", "nf": "-非虚构"}.get(f.stem[:2], "")
         for g in load_jsonl(f):
             raw.append((clean_ai(g["text"]), 1, f"gen-{model}", split_of(g["title"]), 6))
     if not gen_models:
