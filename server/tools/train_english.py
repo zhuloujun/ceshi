@@ -138,6 +138,7 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     ("FiscalNote/billsum", None, "text", "bill"),                  # 美国法案文本
     ("EdinburghNLP/xsum", None, "document", "bbc-news"),            # BBC 新闻（2010–2017）
     ("legacy-datasets/wikipedia", "20220301.en", "text", "wiki"),  # 维基百科 2022-03 快照（ChatGPT 之前）
+    ("wikimedia/wikipedia", "20231101.en", "text", "wiki2"),        # 上一行 2026-10 实测读不到时的替代（2023-11 快照，绝大部分条目写于 2022 年前）
     ("multi_news", None, "document", "multinews"),                 # 多来源新闻报道
     # 论文全文（用户要求加大论文比例：网站上最多的就是论文，真人论文误判代价最大）——各取 2 倍数量
     ("ccdv/arxiv-summarization", None, "article", "arxiv-paper", 2),      # arXiv 论文正文（物理、计算机、数学等，2018 年前）
@@ -151,6 +152,9 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     # 2026-10-23：新闻纪实（CNN / Daily Mail 2007–2015）和 Semantic Scholar 开放论文（peS2o，覆盖人文社科在内的各学科，2023 年前）
     ("abisee/cnn_dailymail", "3.0.0", "article", "cnn-news", 1),
     ("allenai/peS2o", "v2", "text", "s2-paper", 2),
+    # 理工科（2026-10-23 用户要求理工科也要加大）：arXiv 各分类论文全文（数学、计算机、物理、统计等 11 类）、美国专利说明书（工程技术）
+    ("ccdv/arxiv-classification", None, "text", "arxiv-cls-paper", 2),
+    ("ccdv/patent-classification", None, "text", "patent", 2),
 ]
 
 
