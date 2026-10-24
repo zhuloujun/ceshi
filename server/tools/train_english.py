@@ -143,7 +143,7 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     # 论文全文（用户要求加大论文比例：网站上最多的就是论文，真人论文误判代价最大）——各取 2 倍数量
     ("ccdv/arxiv-summarization", None, "article", "arxiv-paper", 2),      # arXiv 论文正文（物理、计算机、数学等，2018 年前）
     ("ccdv/pubmed-summarization", None, "article", "pubmed-paper", 2),    # PubMed 论文正文（医学、生物）
-    ("tomasg25/scientific_lay_summarisation", "plos", "article", "plos-paper", 2),   # PLOS 期刊论文正文
+    ("tomasg25/scientific_lay_summarisation", None, "article", "plos-paper", 2),   # PLOS 期刊论文正文
     # 各学科（含人文社科）：Elsevier 开放获取论文（2014–2020，按学科分类，含艺术人文、社会科学、经济、心理、法律等 27 个大类）、
     # 斯坦福哲学百科、欧洲人权法院判决书（法学）
     ("orieg/elsevier-oa-cc-by", None, "body_text", "elsevier-paper", 3),
@@ -151,7 +151,7 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     ("coastalcph/lex_glue", "ecthr_a", "text", "law-ecthr", 1),
     # 2026-10-23：新闻纪实（CNN / Daily Mail 2007–2015）和 Semantic Scholar 开放论文（peS2o，覆盖人文社科在内的各学科，2023 年前）
     ("abisee/cnn_dailymail", "3.0.0", "article", "cnn-news", 1),
-    ("allenai/peS2o", "v2", "text", "s2-paper", 2),
+    ("allenai/peS2o", None, "text", "s2-paper", 2),
     # 理工科（2026-10-23 用户要求理工科也要加大）：arXiv 各分类论文全文（数学、计算机、物理、统计等 11 类）、美国专利说明书（工程技术）
     ("ccdv/arxiv-classification", None, "text", "arxiv-cls-paper", 2),
     ("ccdv/patent-classification", None, "text", "patent", 2),
