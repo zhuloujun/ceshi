@@ -22,11 +22,11 @@ jobs:
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
         run: |
           for v in KAGGLE_USERNAME KAGGLE_KEY KAGGLE_API_TOKEN; do [ -z "${!v}" ] && unset $v; done
-          echo "已设置的 Kaggle 密钥：$(env | grep -o '^KAGGLE_[A-Z_]*' | tr '\n' ' ')"
+          echo "::notice title=已设置的 Kaggle 密钥（只列名字）::$(env | grep -o '^KAGGLE_[A-Z_]*' | tr '\n' ' ')"
           if out=$(kaggle kernels list --mine --page-size 5 2>&1); then
             echo "::notice title=Kaggle 能用::$(echo "$out" | head -4 | tr '\n' ' ' | cut -c1-300)"
           else
-            echo "::warning title=Kaggle 不能用::$(echo "$out" | tail -3 | tr '\n' ' ' | cut -c1-300)"
+            echo "::warning title=Kaggle 不能用::$(echo "$out" | grep -v -i "token\|key" | head -6 | tr '\n' ' ' | cut -c1-400)"
           fi
       - name: 大模型接口
         env:
