@@ -1,0 +1,52 @@
+# 检查各个外部账户能不能用：Kaggle（训练用 GPU）、DeepSeek / Kimi / 豆包 / 通义 / 文心（生成 AI 对照文字）。
+# 只打印"能用 / 不能用 + 原因"和余额，不打印任何密钥。只能手动运行。
+name: 检查外部账户
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -q "kaggle>=2.0"
+      - name: Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+        run: |
+          if out=$(kaggle kernels list --mine --page-size 5 2>&1); then
+            echo "::notice title=Kaggle 能用::$(echo "$out" | head -4 | tr '\n' ' ' | cut -c1-300)"
+          else
+            echo "::warning title=Kaggle 不能用::$(echo "$out" | tail -3 | tr '\n' ' ' | cut -c1-300)"
+          fi
+      - name: 大模型接口
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY || secrets.MOONSHOT_API_KEY }}
+          WENXIN_API_KEY: ${{ secrets.WENXIN_API_KEY || secrets.APIKey_20260930163541 || secrets.APIKEY_20260930163541 }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY || secrets.QWEN_API_KEY }}
+          DOUBAO_API_KEY: ${{ secrets.DOUBAO_API_KEY || secrets.ARK_API_KEY }}
+          DOUBAO_MODEL: ${{ secrets.DOUBAO_MODEL }}
+        run: |
+          cd server/tools
+          python3 - <<'PY'
+          import os, sys, time
+          sys.argv = ["x"]
+          import gen_english_ai as g
+          for name, (env, eps) in g.PROVIDERS.items():
+              key = os.environ.get(env, "")
+              if not key:
+                  print(f"::warning title={name}::没有设置密钥", flush=True); continue
+              ok = g.working_endpoints(name, key, eps)
+              if ok:
+                  print(f"::notice title={name} 能用::{', '.join(m for _, m in ok)}", flush=True)
+              else:
+                  print(f"::warning title={name} 不能用::详见上面的接口报错", flush=True)
+          PY
