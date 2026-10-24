@@ -158,6 +158,7 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     # 2026-10-24：维基百科 2019 年版（Google wiki40b，干净正文）；Reddit WritingPrompts 网友故事（2018 年前）
     ("google/wiki40b", "en", "text", "wiki40b", 1),
     ("euclaise/writingprompts", None, "story", "writingprompts", 1),
+    ("sedthh/gutenberg_english", None, "TEXT", "gutenberg", 1),      # 古腾堡英文书（各学科非虚构 + 文学，均为公版老书）
 ]
 
 
@@ -198,6 +199,9 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
                 txt = txt.replace("_START_PARAGRAPH_", "\n").replace("_NEWLINE_", "\n").replace("<newline>", "\n")
                 if tag == "elsevier-paper" and len(txt.split("\n")) < 5:
                     txt = re.sub(r"(?<=[.!?]) (?=[A-Z])", "\n", txt, count=60)   # 没有分段的正文按句切开
+                if tag == "gutenberg":                       # 古腾堡正文每行硬换行：按空行分段，去掉开头结尾的版权说明
+                    blocks = re.split(r"\n\s*\n", txt)
+                    txt = "\n".join(" ".join(b.split()) for b in blocks[len(blocks) // 10: len(blocks) * 9 // 10])
                 paras = [" ".join(p.split()) for p in re.split(r"\n+", txt)]
                 paras = [p for p in paras if len(p.split()) >= 12]
                 if sum(len(p.split()) for p in paras) < 220:
