@@ -21,6 +21,8 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
         run: |
+          for v in KAGGLE_USERNAME KAGGLE_KEY KAGGLE_API_TOKEN; do [ -z "${!v}" ] && unset $v; done
+          echo "已设置的 Kaggle 密钥：$(env | grep -o '^KAGGLE_[A-Z_]*' | tr '\n' ' ')"
           if out=$(kaggle kernels list --mine --page-size 5 2>&1); then
             echo "::notice title=Kaggle 能用::$(echo "$out" | head -4 | tr '\n' ' ' | cut -c1-300)"
           else
