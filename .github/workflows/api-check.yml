@@ -22,6 +22,9 @@ jobs:
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
         run: |
           for v in KAGGLE_USERNAME KAGGLE_KEY KAGGLE_API_TOKEN; do [ -z "${!v}" ] && unset $v; done
+          # Kaggle 2025 年以后新建的是 "API Token"（KGAT_ 开头），要放在 KAGGLE_API_TOKEN 里；用户可能填在了 KAGGLE_KEY
+          if [ -n "$KAGGLE_KEY" ] && [ -z "$KAGGLE_API_TOKEN" ] && [[ "$KAGGLE_KEY" == KGAT_* ]]; then export KAGGLE_API_TOKEN="$KAGGLE_KEY"; unset KAGGLE_KEY; echo "::notice title=Kaggle::KAGGLE_KEY 里是新式 API Token，改按 KAGGLE_API_TOKEN 使用"; fi
+          echo "::notice title=Kaggle 密钥格式::长度 ${#KAGGLE_KEY}${KAGGLE_API_TOKEN:+ / API Token 长度 ${#KAGGLE_API_TOKEN}}，$( [[ "${KAGGLE_KEY}${KAGGLE_API_TOKEN}" == KGAT_* ]] && echo 新式 || echo 旧式 )"
           echo "::notice title=已设置的 Kaggle 密钥（只列名字）::$(env | grep -o '^KAGGLE_[A-Z_]*' | tr '\n' ' ')"
           if out=$(kaggle kernels list --mine --page-size 5 2>&1); then
             echo "::notice title=Kaggle 能用::$(echo "$out" | head -4 | tr '\n' ' ' | cut -c1-300)"
