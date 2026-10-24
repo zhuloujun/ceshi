@@ -155,6 +155,9 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     # 理工科（2026-10-23 用户要求理工科也要加大）：arXiv 各分类论文全文（数学、计算机、物理、统计等 11 类）、美国专利说明书（工程技术）
     ("ccdv/arxiv-classification", None, "text", "arxiv-cls-paper", 2),
     ("ccdv/patent-classification", None, "text", "patent", 2),
+    # 2026-10-24：维基百科 2019 年版（Google wiki40b，干净正文）；Reddit WritingPrompts 网友故事（2018 年前）
+    ("google/wiki40b", "en", "text", "wiki40b", 1),
+    ("euclaise/writingprompts", None, "story", "writingprompts", 1),
 ]
 
 
@@ -191,6 +194,8 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
                 if isinstance(v, list):                    # 正文按句 / 按段存成列表（Elsevier、lex_glue）
                     v = "\n".join(x.get("sentence") or x.get("text") or "" if isinstance(x, dict) else str(x) for x in v)
                 txt = str(v).replace("|||||", "\n")
+                txt = re.sub(r"_START_ARTICLE_\n?[^\n]*|_START_SECTION_\n?[^\n]*", "\n", txt)   # wiki40b 的标记
+                txt = txt.replace("_START_PARAGRAPH_", "\n").replace("_NEWLINE_", "\n").replace("<newline>", "\n")
                 if tag == "elsevier-paper" and len(txt.split("\n")) < 5:
                     txt = re.sub(r"(?<=[.!?]) (?=[A-Z])", "\n", txt, count=60)   # 没有分段的正文按句切开
                 paras = [" ".join(p.split()) for p in re.split(r"\n+", txt)]
