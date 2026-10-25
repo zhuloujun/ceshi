@@ -159,6 +159,9 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     ("google/wiki40b", "en", "text", "wiki40b", 1),
     ("euclaise/writingprompts", None, "story", "writingprompts", 1),
     ("sedthh/gutenberg_english", None, "TEXT", "gutenberg", 1),      # 古腾堡英文书（各学科非虚构 + 文学，均为公版老书）
+    # 2026-10-25：StackExchange 技术问答的真人回答（数学、物理、编程、工程等理工科站点，教程讲解类文字）；IvyPanda 学生论文（各学科课程论文）
+    ("ArmelR/stack-exchange-instruction", None, "response", "stackexchange", 1),
+    ("qwedsacf/ivypanda-essays", None, "TEXT", "student-essay", 1),
 ]
 
 
