@@ -30,4 +30,12 @@ jobs:
               with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=H), timeout=600) as r:
                   d = json.loads(r.read())
               print(f"::notice title={path}::" + json.dumps(d, ensure_ascii=False)[:3800], flush=True)
+              def walk(o, pre=""):   # 各文体实际生效的阈值 / 或规则 / 标注校准版本
+                  if isinstance(o, dict):
+                      if "threshold" in o and ("lr" in o or "signals" in o):
+                          print(f"::notice title={path} {pre}::threshold={o.get('threshold')} or_rule={o.get('or_rule')} guard={o.get('guard')} "
+                                f"features={(o.get('lr') or {}).get('features')} note={str(o.get('note'))[:120]}", flush=True)
+                      for k, v in o.items():
+                          walk(v, pre + "/" + str(k))
+              walk(d)
           PY
