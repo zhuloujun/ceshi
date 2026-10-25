@@ -26,7 +26,7 @@ jobs:
           _o = urllib.request.build_opener(); _o.addheaders = [("X-ATC-Proxy", _h.new(_at, b"ai-text-checker/worker-proxy/v1", _hl.sha256).hexdigest())]
           urllib.request.install_opener(_o)
           H = {"X-Admin-Token": os.environ["ADMIN_TOKEN"]}
-          for path in ("/admin/api/labels", "/admin/api/calibration"):
+          for path in ("/admin/api/labels", "/admin/api/calibration?full=1"):
               with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=H), timeout=600) as r:
                   d = json.loads(r.read())
               print(f"::notice title={path}::" + json.dumps(d, ensure_ascii=False)[:3800], flush=True)
