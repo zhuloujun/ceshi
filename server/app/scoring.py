@@ -97,6 +97,15 @@ def combine(scores: dict, cal: dict) -> dict:
                 num += w * p
                 den += w
         prob = num / den if den else None
+    rule = cal.get("or_rule")
+    if rule and prob is not None:
+        # "或"规则（2026-10-25）：专用分类器自己就很有把握（≥ rule["t"]）时，不让较弱的旧信号把它拉到阈值以下。
+        # 组合分数照常计算；只是在专用分类器超过 t 时，把结果至少抬到阈值，越接近 1 抬得越高。
+        v = scores.get(rule.get("feature"))
+        t = rule.get("t", 1.0)
+        if v is not None and v >= t:
+            thr = cal.get("threshold", 0.5)
+            prob = max(prob, thr + (1 - thr) * (v - t) / max(1e-6, 1 - t))
     return {"prob": prob, "signals": per}
 
 
@@ -142,7 +151,7 @@ def _fit_logreg(X: list[list[float]], y: list[int], l2: float = 1.0, iters: int 
 
 def calibrate(human: list[dict], ai: list[dict], target_fpr: float = 0.05, features: list | None = None,
               human_w: list | None = None, ai_w: list | None = None,
-              human_user: list | None = None, ai_user: list | None = None) -> dict:
+              human_user: list | None = None, ai_user: list | None = None, or_feature: str | None = None) -> dict:
     """human / ai：每个元素是一段文字的原始分数字典。返回新的校准 JSON 和评估指标。
     human_w / ai_w：各样本权重；human_user / ai_user：是否为用户自己标注的样本（单独报告这部分的效果）。"""
     human_w = human_w or [1.0] * len(human)
@@ -176,6 +185,7 @@ def calibrate(human: list[dict], ai: list[dict], target_fpr: float = 0.05, featu
     n_each = min(len(human), len(ai))
     candidates = list(features) if features else (EXTENDED_FEATURES if n_each >= 30 else BASE_FEATURES)
     all_rows = [(features_of(s, candidates), 0) for s in human] + [(features_of(s, candidates), 1) for s in ai]
+    all_raw = list(human) + list(ai)
     all_w = list(human_w) + list(ai_w)
     all_u = list(human_user) + list(ai_user)
     # 丢掉缺失太多的特征（例如没有语言模型时的那些）
@@ -189,11 +199,11 @@ def calibrate(human: list[dict], ai: list[dict], target_fpr: float = 0.05, featu
             if au is not None:
                 report["auroc"][n] = round(max(au, 1 - au), 4)
     idx = [candidates.index(n) for n in names]
-    X, ys, ws, us = [], [], [], []
-    for (r, y), w_, u_ in zip(all_rows, all_w, all_u):
+    X, ys, ws, us, raws = [], [], [], [], []
+    for (r, y), w_, u_, s_ in zip(all_rows, all_w, all_u, all_raw):
         vals = [r[j] for j in idx]
         if sum(v is None for v in vals) <= 1:
-            X.append(vals); ys.append(y); ws.append(w_); us.append(u_)
+            X.append(vals); ys.append(y); ws.append(w_); us.append(u_); raws.append(s_)
     hw, uw = None, None
     if names and len(X) >= 10 and len(set(ys)) == 2:
         Xa = np.array([[np.nan if v is None else v for v in row] for row in X], dtype=float)
@@ -252,6 +262,17 @@ def calibrate(human: list[dict], ai: list[dict], target_fpr: float = 0.05, featu
     else:
         thr = 0.5
     cal["threshold"] = round(min(thr, 0.99), 4)
+    cal.pop("or_rule", None)
+    if or_feature and report.get("cross_validated"):
+        rule = _fit_or_rule(oof, ya, wa_, [s_.get(or_feature) for s_ in raws], target_fpr)
+        if rule:
+            cal["threshold"], cal["or_rule"] = rule["threshold"], {"feature": or_feature, "t": rule["t"]}
+            report["or_rule"] = rule
+            # 下面报告用的概率按"或"规则重算（交叉验证的组合概率 + 专用分类器）
+            adj = lambda p_, v_: max(p_, cal["threshold"] + 1e-9) if (v_ is not None and v_ >= rule["t"]) else p_
+            vv = [s_.get(or_feature) for s_ in raws]
+            hp = sorted(adj(oof[i], vv[i]) for i in range(len(ya)) if ya[i] == 0)
+            ap = [adj(oof[i], vv[i]) for i in range(len(ya)) if ya[i] == 1]
     fpr = sum(p >= cal["threshold"] for p in hp) / len(hp) if hp else None
     tpr = sum(p >= cal["threshold"] for p in ap) / len(ap) if ap else None
     report["combined_auroc"] = round(_auroc(ap, hp), 4) if hp and ap else None
@@ -270,6 +291,32 @@ def calibrate(human: list[dict], ai: list[dict], target_fpr: float = 0.05, featu
     cal["calibrated"] = True
     cal["note"] = f"已用 {len(human)} 段人写文本、{len(ai)} 段 AI 文本校准。"
     return {"calibration": cal, "report": report}
+
+
+def _fit_or_rule(oof, ya, wa, v, target_fpr):
+    """在交叉验证的组合概率 oof 与专用分类器分数 v 上，找"v ≥ t 或 组合 ≥ 阈值"的两条线，
+    使人写样本（加权）误判率不超过 target_fpr，同时 AI（加权）检出最多。
+    2026-10-25 分析：英文第二分类器单独的 AUROC（论文 0.999、小说 0.995）高于它与 fastdetect、binoculars
+    组合后的 AUROC（0.990、0.988）——校准集里 MAGE 网络短文多，逻辑回归把权重分给了旧信号，
+    在书和论文上反而拖累了最准的那个信号。或规则保留组合的稳健性（改写过的 AI 文字靠旧信号），又不浪费分类器的把握。"""
+    import numpy as np
+    vv = np.array([np.nan if x is None else x for x in v], dtype=float)
+    if np.isnan(vv).mean() > 0.1:
+        return None
+    vv = np.nan_to_num(vv, nan=0.0)
+    h, a = ya == 0, ya == 1
+    wh, wa1 = wa[h] / wa[h].sum(), wa[a] / wa[a].sum()
+    best = None
+    for t in np.arange(0.88, 0.996, 0.005):
+        for thr in np.arange(0.5, 0.99, 0.005):
+            fp = float(((vv[h] >= t) | (oof[h] >= thr)) @ wh)
+            if fp <= target_fpr:
+                rec = float(((vv[a] >= t) | (oof[a] >= thr)) @ wa1)
+                if best is None or rec > best["ai_caught"] + 1e-9:
+                    best = {"t": round(float(t), 4), "threshold": round(float(thr), 4),
+                            "ai_caught": round(rec, 4), "human_flagged": round(fp, 4)}
+                break        # 同一个 t 下，阈值再高只会更保守
+    return best
 
 
 # ---------------- 按文体分别校准 ----------------

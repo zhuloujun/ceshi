@@ -1503,7 +1503,8 @@ def run_calibration(engine: Engine, p: dict, progress=None) -> dict:
     cur = scoring.profile_for(engine.cal, profile)[0]
     feats = (cur.get("lr") or {}).get("features") or scoring.PROFILE_FEATURES.get(profile)
     res = scoring.calibrate(H, A, float(p.get("target_fpr", 0.05)), features=feats,
-                            human_w=hw, ai_w=aw, human_user=hu, ai_user=au)
+                            human_w=hw, ai_w=aw, human_user=hu, ai_user=au,
+                            or_feature=(cur.get("or_rule") or {}).get("feature"))
     res["calibration"]["models"] = {"observer": config.OBSERVER_MODEL, "performer": config.PERFORMER_MODEL,
                                     "classifier": config.classifier_for(profile)}
     res["calibration"]["profile"] = profile

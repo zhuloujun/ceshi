@@ -138,16 +138,27 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     ("FiscalNote/billsum", None, "text", "bill"),                  # 美国法案文本
     ("EdinburghNLP/xsum", None, "document", "bbc-news"),            # BBC 新闻（2010–2017）
     ("legacy-datasets/wikipedia", "20220301.en", "text", "wiki"),  # 维基百科 2022-03 快照（ChatGPT 之前）
+    ("wikimedia/wikipedia", "20231101.en", "text", "wiki2"),        # 上一行 2026-10 实测读不到时的替代（2023-11 快照，绝大部分条目写于 2022 年前）
     ("multi_news", None, "document", "multinews"),                 # 多来源新闻报道
     # 论文全文（用户要求加大论文比例：网站上最多的就是论文，真人论文误判代价最大）——各取 2 倍数量
     ("ccdv/arxiv-summarization", None, "article", "arxiv-paper", 2),      # arXiv 论文正文（物理、计算机、数学等，2018 年前）
     ("ccdv/pubmed-summarization", None, "article", "pubmed-paper", 2),    # PubMed 论文正文（医学、生物）
-    ("tomasg25/scientific_lay_summarisation", "plos", "article", "plos-paper", 2),   # PLOS 期刊论文正文
+    ("tomasg25/scientific_lay_summarisation", None, "article", "plos-paper", 2),   # PLOS 期刊论文正文
     # 各学科（含人文社科）：Elsevier 开放获取论文（2014–2020，按学科分类，含艺术人文、社会科学、经济、心理、法律等 27 个大类）、
     # 斯坦福哲学百科、欧洲人权法院判决书（法学）
     ("orieg/elsevier-oa-cc-by", None, "body_text", "elsevier-paper", 3),
     ("AiresPucrs/stanford-encyclopedia-philosophy", None, "text", "philosophy", 1),
     ("coastalcph/lex_glue", "ecthr_a", "text", "law-ecthr", 1),
+    # 2026-10-23：新闻纪实（CNN / Daily Mail 2007–2015）和 Semantic Scholar 开放论文（peS2o，覆盖人文社科在内的各学科，2023 年前）
+    ("abisee/cnn_dailymail", "3.0.0", "article", "cnn-news", 1),
+    ("allenai/peS2o", None, "text", "s2-paper", 2),
+    # 理工科（2026-10-23 用户要求理工科也要加大）：arXiv 各分类论文全文（数学、计算机、物理、统计等 11 类）、美国专利说明书（工程技术）
+    ("ccdv/arxiv-classification", None, "text", "arxiv-cls-paper", 2),
+    ("ccdv/patent-classification", None, "text", "patent", 2),
+    # 2026-10-24：维基百科 2019 年版（Google wiki40b，干净正文）；Reddit WritingPrompts 网友故事（2018 年前）
+    ("google/wiki40b", "en", "text", "wiki40b", 1),
+    ("euclaise/writingprompts", None, "story", "writingprompts", 1),
+    ("sedthh/gutenberg_english", None, "TEXT", "gutenberg", 1),      # 古腾堡英文书（各学科非虚构 + 文学，均为公版老书）
 ]
 
 
@@ -184,8 +195,13 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
                 if isinstance(v, list):                    # 正文按句 / 按段存成列表（Elsevier、lex_glue）
                     v = "\n".join(x.get("sentence") or x.get("text") or "" if isinstance(x, dict) else str(x) for x in v)
                 txt = str(v).replace("|||||", "\n")
+                txt = re.sub(r"_START_ARTICLE_\n?[^\n]*|_START_SECTION_\n?[^\n]*", "\n", txt)   # wiki40b 的标记
+                txt = txt.replace("_START_PARAGRAPH_", "\n").replace("_NEWLINE_", "\n").replace("<newline>", "\n")
                 if tag == "elsevier-paper" and len(txt.split("\n")) < 5:
                     txt = re.sub(r"(?<=[.!?]) (?=[A-Z])", "\n", txt, count=60)   # 没有分段的正文按句切开
+                if tag == "gutenberg":                       # 古腾堡正文每行硬换行：按空行分段，去掉开头结尾的版权说明
+                    blocks = re.split(r"\n\s*\n", txt)
+                    txt = "\n".join(" ".join(b.split()) for b in blocks[len(blocks) // 10: len(blocks) * 9 // 10])
                 paras = [" ".join(p.split()) for p in re.split(r"\n+", txt)]
                 paras = [p for p in paras if len(p.split()) >= 12]
                 if sum(len(p.split()) for p in paras) < 220:
@@ -236,7 +252,7 @@ def build_rows(args, rnd):
         if f.stem in HUMAN_FILES or any(f.stem.startswith(x) for x in args.skip_prefix):
             continue
         gen_models.append(f.stem)
-        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc|ap)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体", "ap": "-学科论文"}.get(f.stem[:2], "")
+        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc|ap|nf)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体", "ap": "-学科论文", "nf": "-非虚构"}.get(f.stem[:2], "")
         for g in load_jsonl(f):
             raw.append((clean_ai(g["text"]), 1, f"gen-{model}", split_of(g["title"]), 6))
     if not gen_models:
