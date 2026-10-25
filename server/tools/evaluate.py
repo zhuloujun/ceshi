@@ -576,7 +576,8 @@ def fit_profile(prof, parts, target_fpr):
     if prof == "zh_poetry":
         return fit_poetry(parts, target_fpr, hs, as_)
     if fixed:
-        res = scoring.calibrate(hs, as_, target_fpr, features=fixed)
+        res = scoring.calibrate(hs, as_, target_fpr, features=fixed,
+                                or_feature="classifier_en2" if use_en2 else None)
     else:
         # 在校准集上用 5 折交叉验证比较几组特征，选区分能力最好的（不看评估集，避免"偷看答案"）
         tried = {}

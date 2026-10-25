@@ -141,6 +141,9 @@ def main():
     a = ap.parse_args()
     for k in [k for k, v in os.environ.items() if k.startswith("KAGGLE_") and not v.strip()]:
         del os.environ[k]          # 没设置的 Secret 在工作流里是空字符串，删掉以免干扰 Kaggle 的登录方式判断
+    # Kaggle 2025 年以后新建的是 "API Token"（KGAT_ 开头），应放在 KAGGLE_API_TOKEN；用户填在 KAGGLE_KEY 里时自动改用
+    if os.getenv("KAGGLE_KEY", "").startswith("KGAT_") and not os.getenv("KAGGLE_API_TOKEN"):
+        os.environ["KAGGLE_API_TOKEN"] = os.environ.pop("KAGGLE_KEY")
 
     user = os.getenv("KAGGLE_USERNAME", "").strip()
     if not user:
