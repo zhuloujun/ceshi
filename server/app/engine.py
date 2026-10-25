@@ -293,6 +293,31 @@ class Engine:
 
     def reload_calibration(self):
         self.cal, self.cal_source = self._load_cal()
+        try:
+            self._cal_mtime = config.USER_CALIBRATION_FILE.stat().st_mtime
+        except OSError:
+            self._cal_mtime = None
+
+    def maybe_refresh_calibration(self, every: float = 300.0):
+        """服务同时运行多个副本：标注校准在某一个副本里重新拟合后，只有那个副本立即生效（2026-10-25 发现）。
+        每个副本每隔 every 秒从共享存储重新读取一次，文件变了就重新加载。"""
+        now = time.time()
+        if now - getattr(self, "_cal_checked", 0.0) < every:
+            return
+        self._cal_checked = now
+        if config.CALIBRATION_VOLUME:
+            try:
+                import modal
+                modal.Volume.from_name(config.CALIBRATION_VOLUME).reload()
+            except Exception:  # noqa: BLE001  有文件正在使用时 reload 会失败，下次再试
+                pass
+        try:
+            m = config.USER_CALIBRATION_FILE.stat().st_mtime
+        except OSError:
+            m = None
+        if m != getattr(self, "_cal_mtime", None):
+            log.info("user calibration changed on disk; reloading")
+            self.reload_calibration()
 
     def _load_base_cal(self):
         default = config.load_default_calibration()
@@ -479,6 +504,7 @@ class Engine:
                 flag_quotations: bool = True, progress=None, genre: str = "auto") -> dict:
         t_start = time.time()
         self.wait_loaded()
+        self.maybe_refresh_calibration()
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 全文都被判为引文/参考文献时，退回为全部计入，否则报告里没有任何数值
         fallback_all = bool(segs) and not any(s.counted for s in segs)
