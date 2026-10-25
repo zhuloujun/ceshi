@@ -1325,7 +1325,8 @@ def apply_user_calibration(engine: Engine, cal: dict):
     return saved, user
 
 
-AUTOCAL_GUARD = 2   # 2：用户样本权重设上限（见 run_calibration）——旧的标注校准在启动后按新规则重新校准一次
+AUTOCAL_GUARD = 3   # 2：用户样本权重设上限（见 run_calibration）——旧的标注校准在启动后按新规则重新校准一次
+#                     3（2026-10-25）：内置校准加入"或"规则后，用户标注校准也要按内置校准的或规则重新拟合（否则旧的标注校准一直盖住新规则）
 
 
 class AutoCalibrator:
@@ -1504,7 +1505,8 @@ def run_calibration(engine: Engine, p: dict, progress=None) -> dict:
     feats = (cur.get("lr") or {}).get("features") or scoring.PROFILE_FEATURES.get(profile)
     res = scoring.calibrate(H, A, float(p.get("target_fpr", 0.05)), features=feats,
                             human_w=hw, ai_w=aw, human_user=hu, ai_user=au,
-                            or_feature=(cur.get("or_rule") or {}).get("feature"))
+                            or_feature=((((config.load_default_calibration() or {}).get("profiles") or {})
+                                         .get(profile) or {}).get("or_rule") or cur.get("or_rule") or {}).get("feature"))
     res["calibration"]["models"] = {"observer": config.OBSERVER_MODEL, "performer": config.PERFORMER_MODEL,
                                     "classifier": config.classifier_for(profile)}
     res["calibration"]["profile"] = profile
