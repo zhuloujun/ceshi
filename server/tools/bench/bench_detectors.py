@@ -30,12 +30,15 @@ import evaluate as ev  # noqa: E402
 from app import config  # noqa: E402
 
 PARTS = {
-    "zh": {"fit": ["cal1", "cal2"], "eval": ["test", "csl", "tests"]},
+    "zh": {"fit": ["cal1", "cal2"], "eval": ["test", "csl"]},
+    "zhs": {"fit": ["cal1s", "cal2s"], "eval": ["tests"]},          # 现代汉语短段：线上单独校准（zh_short）
     "en": {"fit": ["en_cal1", "en_cal2", "en_gen_fit"], "eval": ["en_gen_test", "en_ood", "en_para", "en_user"]},
 }
-FEATS = {   # 与线上校准一致的现有特征
+FEATS = {   # 与线上校准一致的现有特征（zhs 与 zh 相同，见下）
     "zh": ["fastdetect", "binoculars", "classifier", "fastdetect_norm", "lrr", "log_rank", "entropy", "top10",
            "lp_burstiness", "style_cv", "style_phrases"],
+    "zhs": ["fastdetect", "binoculars", "classifier", "fastdetect_norm", "lrr", "log_rank", "entropy", "top10",
+            "lp_burstiness", "style_cv", "style_phrases"],
     "en": ["fastdetect", "binoculars", "classifier", "classifier_en2"],
 }
 AI_WORDS = re.compile(r"fake|machine|generated|chatgpt|gpt|ai\b|^ai|llm|label_1|^1$", re.I)
@@ -164,7 +167,7 @@ def logit(p):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--lang", choices=["zh", "en"], required=True)
+    ap.add_argument("--lang", choices=["zh", "zhs", "en"], required=True)
     ap.add_argument("--models", required=True)
     ap.add_argument("--data"); ap.add_argument("--mage-dir")
     ap.add_argument("--out", default="/tmp/bench")
@@ -182,7 +185,13 @@ def main():
     for name in [m.strip() for m in args.models.split(",") if m.strip()]:
         t0 = time.time()
         try:
-            c = Lexicon(name.split(":", 1)[1]) if name.startswith("lexicon:") else Cand(name)
+            if name.startswith("lexicon:"):
+                c = Lexicon(name.split(":", 1)[1])
+            elif name.startswith("release:"):        # 本仓库 Release 里的分类器（工作流已下载解压到 /tmp/rel/<标签>/）
+                root = Path("/tmp/rel") / name.split(":", 1)[1]
+                c = Cand(str(next(p_ for p_ in root.rglob("config.json")).parent))
+            else:
+                c = Cand(name)
         except Exception as e:  # noqa: BLE001
             print(f"::warning title={name} 加载失败::{str(e)[:300]}", flush=True)
             continue
@@ -213,12 +222,23 @@ def main():
                     tt = thr_at(yf, oof, 0.05)
                     d[f"combo_{tag}_auroc"] = auroc(y, pe)
                     d[f"combo_{tag}_caught@5%"], d[f"combo_{tag}_fp@5%"] = rates(y, pe, tt)
+            if fit_ok and aligned[p]:
+                # "或"规则（与线上 scoring._fit_or_rule 相同）：候选分数 ≥ t 或 现有组合 ≥ 阈值，在校准集上同一误判率预算下拟合
+                from app.scoring import _fit_or_rule
+                oof0, pe0 = lr_fit_predict(Xf0, np.asarray(yf), feat_matrix(scored[p], FEATS[args.lang]))
+                rule = _fit_or_rule(oof0, np.asarray(yf), np.ones(len(yf)), sf, 0.05)
+                if rule:
+                    fl = (np.asarray(s) >= rule["t"]) | (pe0 >= rule["threshold"])
+                    yy = np.asarray(y)
+                    d["or_rule"] = rule
+                    d["or_caught"] = float(fl[yy == 1].mean()) if (yy == 1).any() else None
+                    d["or_fp"] = float(fl[yy == 0].mean()) if (yy == 0).any() else None
             rep["parts"][p] = d
         report[name] = rep
         print(f"::warning title={name}（{time.time() - t0:.0f} 秒）::" + json.dumps(
             {"fit_auroc": round(rep["fit_auroc"] or 0, 4), "flipped": flip, **{p: {k: (round(v, 4) if isinstance(v, float) else v)
              for k, v in d.items() if k in ("auroc", "caught@5%", "fp@5%", "combo_base_auroc", "combo_plus_auroc",
-                                            "combo_base_caught@5%", "combo_plus_caught@5%", "combo_base_fp@5%", "combo_plus_fp@5%")} for p, d in rep["parts"].items()}},
+                                            "combo_base_caught@5%", "combo_plus_caught@5%", "combo_base_fp@5%", "combo_plus_fp@5%", "or_caught", "or_fp")} for p, d in rep["parts"].items()}},
             ensure_ascii=False), flush=True)
     (out / f"report_{args.lang}.json").write_text(json.dumps(report, ensure_ascii=False, indent=1), "utf-8")
 

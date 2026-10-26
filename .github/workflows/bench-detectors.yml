@@ -26,7 +26,7 @@ jobs:
           ZH: ${{ github.event.inputs.zh_models }}
           EN: ${{ github.event.inputs.en_models }}
         run: |
-          python3 -c 'import json,os; m=[{"lang":"zh","model":x.strip()} for x in os.environ["ZH"].split(",") if x.strip()]+[{"lang":"en","model":x.strip()} for x in os.environ["EN"].split(",") if x.strip()]; print("m="+json.dumps({"include":m}))' >> "$GITHUB_OUTPUT"
+          python3 -c 'import json,os; m=[{"lang":l,"model":x.strip()} for x in os.environ["ZH"].split(",") if x.strip() for l in ("zh","zhs")]+[{"lang":"en","model":x.strip()} for x in os.environ["EN"].split(",") if x.strip()]; print("m="+json.dumps({"include":m}))' >> "$GITHUB_OUTPUT"
   bench:
     needs: plan
     name: ${{ matrix.lang }} ${{ matrix.model }}
@@ -48,13 +48,21 @@ jobs:
           pip install -r server/requirements.txt openpyxl opencc-python-reimplemented scikit-learn
       - name: 下载数据集
         run: |
-          if [ "${{ matrix.lang }}" = zh ]; then git clone --depth 1 https://github.com/NLP2CT/NLPCC-2025-Task1 /tmp/nlpcc; else
+          if [ "${{ matrix.lang }}" != en ]; then git clone --depth 1 https://github.com/NLP2CT/NLPCC-2025-Task1 /tmp/nlpcc; else
           python - <<'PY'
           from huggingface_hub import hf_hub_download
           for f in ["test.csv", "test_ood_set_gpt.csv", "test_ood_set_gpt_para.csv"]:
               hf_hub_download("yaful/MAGE", f, repo_type="dataset", local_dir="/tmp/mage")
           PY
           fi
+      - name: 下载本仓库 Release 里的候选分类器
+        if: startsWith(matrix.model, 'release:')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          T="${{ matrix.model }}"; T="${T#release:}"; mkdir -p /tmp/rel/$T
+          gh release download "$T" -p "*.tar.gz" -D /tmp/rel/$T -R "${{ github.repository }}"
+          for f in /tmp/rel/$T/*.tar.gz; do tar xzf "$f" -C /tmp/rel/$T; done; find /tmp/rel/$T -name config.json
       - name: 打分与比较
         working-directory: server
         run: python -u tools/bench/bench_detectors.py --lang ${{ matrix.lang }} --models "${{ matrix.model }}" --data /tmp/nlpcc/data --mage-dir /tmp/mage --out /tmp/bench
