@@ -34,7 +34,8 @@ PARTS = {
     "en": {"fit": ["en_cal1", "en_cal2", "en_gen_fit"], "eval": ["en_gen_test", "en_ood", "en_para", "en_user"]},
 }
 FEATS = {   # 与线上校准一致的现有特征
-    "zh": ["fastdetect", "binoculars", "classifier"],
+    "zh": ["fastdetect", "binoculars", "classifier", "fastdetect_norm", "lrr", "log_rank", "entropy", "top10",
+           "lp_burstiness", "style_cv", "style_phrases"],
     "en": ["fastdetect", "binoculars", "classifier", "classifier_en2"],
 }
 AI_WORDS = re.compile(r"fake|machine|generated|chatgpt|gpt|ai\b|^ai|llm|label_1|^1$", re.I)
@@ -137,10 +138,17 @@ def lr_fit_predict(Xf, yf, Xe):
     return oof, m.predict_proba(sc.transform(Xe))[:, 1] if len(Xe) else np.array([])
 
 
+def _lg(p):
+    if p is None:
+        return None
+    p = min(max(float(p), 1e-6), 1 - 1e-6)
+    return float(np.log(p / (1 - p)))
+
+
 def feat_matrix(scored, feats, extra=None):
     X = []
     for i, r in enumerate(scored):
-        v = [r["s"].get(f) for f in feats]
+        v = [(_lg(r["s"].get(f)) if f.startswith("classifier") else r["s"].get(f)) for f in feats]
         if any(x is None for x in v):
             v = [0.0 if x is None else x for x in v]
         if extra is not None:
