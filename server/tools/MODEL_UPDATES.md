@@ -121,3 +121,21 @@ v20（Kaggle，加入 nf_ AI 非虚构 342 篇、ChatGPT 学科长文 20 册、G
 
 结论：保留 v14。v20 明显减少了真人小说误判，但用户短篇漏判增加；合议版在改写文本上最好，但论文误判略升、计算量翻倍。
 三者差距多在 1–2 个百分点（478 篇真人里约 5–10 篇），已接近这份考卷的分辨极限，继续单纯加数据重训收益很小。
+
+## 2026-10-26：公开"神经网络检测器"擂台（tools/bench/bench_detectors.py、bench-detectors.yml，只用 GitHub 免费 CPU）
+
+在本项目自己的考卷上实测 Hugging Face 公开检测器：单独成绩（AUROC；5% 误判率下的检出），以及加进线上同一套特征的逻辑回归后考卷 AUROC 是否提高。
+
+| 候选 | 语言 | 结果 |
+|---|---|---|
+| Juner/AI-generated-text-detection | 中 | 校准集 AUROC 0.56，NLPCC 测试 0.72、短段 0.29；加入组合无提升 → 不用 |
+| Juner/AI-generated-text-detection-pair | 中 | 校准集 0.54，测试 0.41、CSL 0.28 → 不用 |
+| Juner/AI-generated-detection-wwm-ext | 中 | 配置文件缺 model_type，无法加载 → 不用 |
+| Hello-SimpleAI/chatgpt-detector-roberta-chinese | 中 | 单独 0.93；加入线上 11 个特征后 NLPCC 测试 AUROC 0.9758 → 0.9808（检出 97% → 98%，误判 15% → 15.5%），短段 0.933 → 0.944 但误判 20% → 25%。提升很小、短段误判变多，还要多跑一个模型 → 暂不用 |
+| fakespot-ai/roberta-base-ai-text-detection-v1 | 英 | 国产模型论文 0.866、MAGE 0.932、改写 0.860（线上 v14 论文约 0.999）→ 不用 |
+| openai-community/roberta-large-openai-detector | 英 | 0.79 / 0.37 / 0.53（GPT-2 时代）→ 不用 |
+| Hello-SimpleAI/chatgpt-detector-roberta | 英 | 0.40 / 0.94 / 0.74 → 不用 |
+| yaful/MAGE（Longformer） | 英 | 0.57 / 0.92 / 0.73（只认 MAGE 自家数据）→ 不用 |
+| 数据统计"AI 腔"词表 lexicon_en_v1（4486 个词 / 词组） | 英 | 0.74 / 0.62 / 0.67，单独太弱 → 只作特征研究参考 |
+
+结论：2023 年前后用 ChatGPT-3.5 等旧模型训练的公开检测器，对 GPT-5 / Claude / DeepSeek 等新文本基本失效；本项目自己用新文本训练的分类器 + 零样本统计（Fast-DetectGPT、Binoculars）+ 校准的混合结构明显更强。以后有新的公开检测器，用这个擂台实测，过线才接入。
