@@ -224,24 +224,45 @@ _SENT_EN = re.compile(r"[^.!?\n]*(?:[.!?]+[\"'”’)]*\s*|\n|$)")
 
 
 def window_spans(text: str, register: str) -> list[tuple[int, int]]:
-    """把一段文字按句子切成约 WIN_ZH_CHARS 字 / WIN_EN_WORDS 词的窗口（不重叠，首尾相接覆盖全段）。
-    段落不到两个窗口长时返回空列表（短段落本身就是一个窗口，不必再切）。"""
+    """把一段文字切成约 WIN_ZH_CHARS 字 / WIN_EN_WORDS 词的窗口（不重叠，首尾相接覆盖全段）。
+    2026-10-26 起窗口按原文段落对齐：检测段落常由几个原文段落合并而成，真人文章里夹入的一整段 AI 文字以前会被
+    按句子切到两个窗口里、各掺上前后的人写句子，分数被稀释（公版小说里插入 2 段 ChatGPT，整篇只测出 2%）。
+    现在先按换行分出原文段落：不到两个窗口长的原文段落整段作为一个窗口（太短的并入相邻窗口），更长的再按句子切。
+    整段不到两个窗口长时返回空列表（短段落本身就是一个窗口，不必再切）。"""
     en = register == "en"
     size = (lambda a, b: len(text[a:b].split())) if en else (lambda a, b: len(re.findall(r"[\u4e00-\u9fff]", text[a:b])))
     target = config.WIN_EN_WORDS if en else config.WIN_ZH_CHARS
     if size(0, len(text)) < 2 * target:
         return []
-    bounds = [m.end() for m in (_SENT_EN if en else _SENT_ZH).finditer(text) if m.end() > m.start()]
-    spans, a = [], 0
-    for b in bounds:
-        if size(a, b) >= target:
-            spans.append((a, b))
-            a = b
+    sent = _SENT_EN if en else _SENT_ZH
+    paras, a = [], 0
+    for m in re.finditer(r"\n+", text):
+        if m.start() > a:
+            paras.append((a, m.end()))
+        a = m.end()
     if a < len(text):
-        if spans and size(a, len(text)) < target // 2:
-            spans[-1] = (spans[-1][0], len(text))
-        else:
-            spans.append((a, len(text)))
+        paras.append((a, len(text)))
+    spans = []
+    for pa, pb in paras:
+        if size(pa, pb) < 2 * target:
+            if spans and (size(pa, pb) < target // 2 or size(*spans[-1]) < target // 2):
+                spans[-1] = (spans[-1][0], pb)          # 很短的原文段落（标题、一两句话）并入前一个窗口
+            else:
+                spans.append((pa, pb))
+            continue
+        bounds = [m.end() + pa for m in sent.finditer(text[pa:pb]) if m.end() > m.start()]
+        c = pa
+        for b in bounds:
+            if size(c, b) >= target:
+                spans.append((c, b))
+                c = b
+        if c < pb:
+            if spans and size(c, pb) < target // 2:
+                spans[-1] = (spans[-1][0], pb)
+            else:
+                spans.append((c, pb))
+    if spans and spans[0][0] > 0:
+        spans[0] = (0, spans[0][1])
     return spans if len(spans) >= 2 else []
 
 
