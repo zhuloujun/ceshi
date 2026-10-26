@@ -57,7 +57,7 @@ jobs:
           fi
       - name: 打分与比较
         working-directory: server
-        run: python -u tools/bench/bench_detectors.py --lang ${{ matrix.lang }} --models "${{ matrix.model }}" --data /tmp/nlpcc --mage-dir /tmp/mage --out /tmp/bench
+        run: python -u tools/bench/bench_detectors.py --lang ${{ matrix.lang }} --models "${{ matrix.model }}" --data /tmp/nlpcc/data --mage-dir /tmp/mage --out /tmp/bench
       - uses: actions/upload-artifact@v4
         if: always()
         with:
