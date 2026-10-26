@@ -207,10 +207,10 @@ def main():
                     d[f"combo_{tag}_caught@5%"], d[f"combo_{tag}_fp@5%"] = rates(y, pe, tt)
             rep["parts"][p] = d
         report[name] = rep
-        print(f"::notice title={name}（{time.time() - t0:.0f} 秒）::" + json.dumps(
+        print(f"::warning title={name}（{time.time() - t0:.0f} 秒）::" + json.dumps(
             {"fit_auroc": round(rep["fit_auroc"] or 0, 4), "flipped": flip, **{p: {k: (round(v, 4) if isinstance(v, float) else v)
              for k, v in d.items() if k in ("auroc", "caught@5%", "fp@5%", "combo_base_auroc", "combo_plus_auroc",
-                                            "combo_base_caught@5%", "combo_plus_caught@5%")} for p, d in rep["parts"].items()}},
+                                            "combo_base_caught@5%", "combo_plus_caught@5%", "combo_base_fp@5%", "combo_plus_fp@5%")} for p, d in rep["parts"].items()}},
             ensure_ascii=False), flush=True)
     (out / f"report_{args.lang}.json").write_text(json.dumps(report, ensure_ascii=False, indent=1), "utf-8")
 
