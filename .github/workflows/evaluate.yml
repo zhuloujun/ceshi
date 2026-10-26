@@ -62,7 +62,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: evaluate
+  group: evaluate-${{ github.ref }}
   cancel-in-progress: true
 
 env:
