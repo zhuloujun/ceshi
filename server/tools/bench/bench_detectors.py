@@ -59,6 +59,23 @@ def load_scored(part):
     return json.loads(f.read_text("utf-8")) if f.exists() else None
 
 
+class Lexicon:
+    """数据统计出的"AI 腔"词表（tools/bench/lexicon_*.json，词 → 对数几率权重）：段落得分 = 命中词的平均权重。"""
+    def __init__(self, path):
+        self.w = json.loads((Path(__file__).resolve().parent / path).read_text("utf-8"))
+        self.labels, self.ai_idx = {1: "lexicon"}, 1
+
+    def score(self, texts, bs=0):
+        out = []
+        for t in texts:
+            w = re.findall(r"[a-z]+(?:'[a-z]+)?", t.lower().replace("’", "'"))
+            terms = w + [a + " " + b for a, b in zip(w, w[1:])]
+            v = [self.w[x] for x in terms if x in self.w]
+            m = sum(v) / max(len(w), 1) * 4
+            out.append(1 / (1 + np.exp(-m)))
+        return out
+
+
 class Cand:
     def __init__(self, name):
         import torch
@@ -157,7 +174,7 @@ def main():
     for name in [m.strip() for m in args.models.split(",") if m.strip()]:
         t0 = time.time()
         try:
-            c = Cand(name)
+            c = Lexicon(name.split(":", 1)[1]) if name.startswith("lexicon:") else Cand(name)
         except Exception as e:  # noqa: BLE001
             print(f"::warning title={name} 加载失败::{str(e)[:300]}", flush=True)
             continue
