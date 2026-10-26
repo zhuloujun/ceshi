@@ -278,6 +278,10 @@ def window_flag(prob, second, seg_second=None, register: str = "") -> str | None
         return None
     if prob >= config.WIN_AI_PROB and (second is None or second >= config.WIN_AI_SECOND):
         return "ai"
+    # 英文：第二分类器对这个窗口非常肯定（≥ WIN_EN2_AI）时，综合分数只要 ≥ WIN_EN2_PROB。2026-10-26：插进公版小说里的
+    # ChatGPT / Claude / Gemini 段落，单独检测综合分数 0.90–0.95、第二分类器 0.95–0.96，以前要求综合 ≥ 0.95，大多漏掉
+    if register == "en" and second is not None and second >= config.WIN_EN2_AI and prob >= config.WIN_EN2_PROB:
+        return "ai"
     if prob < config.WIN_HUMAN_PROB and (second is None or second < config.WIN_HUMAN_SECOND):
         return "human"
     return None
