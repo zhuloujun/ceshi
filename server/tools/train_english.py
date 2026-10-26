@@ -162,6 +162,7 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     # 2026-10-25：StackExchange 技术问答的真人回答（数学、物理、编程、工程等理工科站点，教程讲解类文字）；IvyPanda 学生论文（各学科课程论文）
     ("ArmelR/stack-exchange-instruction", None, "response", "stackexchange", 1),
     ("qwedsacf/ivypanda-essays", None, "TEXT", "student-essay", 1),
+    ("vblagoje/cc_news", None, "text", "cc-news", 1),            # 2026-10-26：CC-News 英文新闻（2017–2019，ChatGPT 之前）
 ]
 
 
