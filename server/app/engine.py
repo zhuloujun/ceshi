@@ -908,6 +908,31 @@ class Engine:
                     and sum(len(segs_by_idx[i].text) for i in over) < config.ISOLATED_MAX_SHARE * tot):
                 zh_human_work.update(over)
                 isolated.update(over)
+        # 7.5) 英文孤立段落保护（2026-10-26，与 7b 对应）：英文以前没有这一条。用户提供的真人畅销小说（Sparks）有 15% 的段落
+        #      被判为 AI——这些段落语言模型信号、通用分类器、第二分类器全都偏高（畅销书文字简单流畅，且可能被语言模型"见过"），
+        #      单看一段无法区分；但整本书第二分类器加权中位数只有 0.09，过线段落零零星星。
+        #      规则：同一篇英文作品至少 EN_ISOLATED_MIN_SEGS 段、第二分类器整篇加权中位数 < EN_ISOLATED_WORK_EN2、过线文字合计
+        #      < EN_ISOLATED_MAX_SHARE，其中"轻度过线"（综合分数与第二分类器都 < EN_ISOLATED_SEG_CAP）的段落不计入，标"接近阈值"供复核。
+        #      整篇像 AI 的作品（第二分类器中位数几乎都 ≥ 0.9）不受影响；代价：长篇真人文章里零星插入、且只是轻度过线的 AI 段落不计入
+        #      （与 Turnitin 对 20% 以下结果不给确定数字的做法一致），仍以"接近阈值"标出。
+        en_isolated = set()
+        for (blk, reg), idxs in groups.items():
+            if reg != "en" or len(idxs) < config.EN_ISOLATED_MIN_SEGS:
+                continue
+            e2 = [(results[i]["classifier_en2"], len(segs_by_idx[i].text)) for i in idxs
+                  if results[i].get("classifier_en2") is not None]
+            med2 = _wmedian(e2) if len(e2) >= config.EN_ISOLATED_MIN_SEGS else None
+            if med2 is None or med2 >= config.EN_ISOLATED_WORK_EN2:
+                continue
+            over = [i for i in idxs if smoothed.get(i) is not None and smoothed[i] >= float(prof[i][0].get("threshold", 0.5))
+                    and i not in paper_ai and i not in zh2_ai]
+            tot = sum(len(segs_by_idx[i].text) for i in idxs)
+            if not over or sum(len(segs_by_idx[i].text) for i in over) >= config.EN_ISOLATED_MAX_SHARE * tot:
+                continue
+            soft = {i for i in over if smoothed[i] < config.EN_ISOLATED_SEG_CAP
+                    and (results[i].get("classifier_en2") or 0) < config.EN_ISOLATED_SEG_CAP}
+            zh_human_work |= soft
+            en_isolated |= soft
         work_ai -= zh_human_work
 
         def human_ref_of(i, pr):
@@ -939,7 +964,8 @@ class Engine:
             by_work = s.index in work_ai or s.index in paper_ai or s.index in zh2_ai
             if s.index in zh_human_work:
                 level, near = "low", True
-                label = ("接近阈值（疑似名篇，未计入）" if s.index in famous_like else
+                label = ("接近阈值（整篇像人写的孤立段落，未计入）" if s.index in en_isolated else
+                         "接近阈值（疑似名篇，未计入）" if s.index in famous_like else
                          "接近阈值（孤立段落，未计入）" if s.index in isolated else "接近阈值（整篇像人写，未计入）")
             elif s.index in zh2_seg:
                 level, label, near = "mid", "中度疑似（单段：带有国产大模型写作风格）", False
@@ -1092,7 +1118,11 @@ class Engine:
         if isolated:
             notes.append(f"有 {len(isolated)} 段中文单看过了阈值，但所在文章整体像人写、过线文字不足四分之一且只是轻度疑似"
                          "（孤立段落误判较多，参照 Turnitin 对低占比结果的处理），未计入 AI 率，标为“接近阈值”供复核。")
-        rest = zh_human_work - famous_like - isolated
+        if en_isolated:
+            notes.append(f"有 {len(en_isolated)} 段英文单看过了阈值，但所在文章整体像人写（第二分类器整篇中位数很低）、过线文字不足五分之一"
+                         "且只是轻度过线（畅销小说、文风简洁流畅的真人作品常见这种零星误判，参照 Turnitin 对低占比结果的处理），"
+                         "未计入 AI 率，标为“接近阈值”供复核。")
+        rest = zh_human_work - famous_like - isolated - en_isolated
         if rest:
             notes.append(f"有 {len(rest)} 段中文单看过了阈值，但中文分类器判为人写、所在文章整体也像人写"
                          "（常见于被大模型部分背过的名篇、文风工整的范文），未计入 AI 率，标为“接近阈值”供复核。")

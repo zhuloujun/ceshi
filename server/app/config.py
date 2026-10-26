@@ -134,6 +134,11 @@ FAMOUS_WORK_BURST = float(os.getenv("FAMOUS_WORK_BURST", "0.9") or 0.9)
 # 孤立段落：整篇像人写（中文分类器加权中位数 < 0.5）时，过线字数不足本篇此比例、且未达"高度疑似"的段落不计入
 # （参照 Turnitin：AI 占比低于 20% 时不给具体数字，因为这一区间误判明显增多）
 ISOLATED_MAX_SHARE = float(os.getenv("ISOLATED_MAX_SHARE", "0.25") or 0.25)
+# 英文孤立段落保护（engine 7.5）：长篇英文作品整体像人写时，零星轻度过线的段落不计入
+EN_ISOLATED_MIN_SEGS = _int("EN_ISOLATED_MIN_SEGS", 6)
+EN_ISOLATED_WORK_EN2 = float(os.getenv("EN_ISOLATED_WORK_EN2", "0.3") or 0.3)
+EN_ISOLATED_MAX_SHARE = float(os.getenv("EN_ISOLATED_MAX_SHARE", "0.2") or 0.2)
+EN_ISOLATED_SEG_CAP = float(os.getenv("EN_ISOLATED_SEG_CAP", "0.95") or 0.95)
 MEMORIZED_PPL = float(os.getenv("MEMORIZED_PPL", "3.5") or 3.5)
 # 管理页校准时，用户样本与内置公开数据合并，用户样本合计所占的权重比例
 USER_SAMPLE_SHARE = float(os.getenv("USER_SAMPLE_SHARE", "0.3") or 0.3)
