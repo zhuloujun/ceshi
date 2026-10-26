@@ -1,0 +1,65 @@
+# 候选检测器擂台：把 Hugging Face 上公开的神经网络检测器放到本项目自己的考卷上实测（单独成绩 + 加进现有组合后有没有提升）。
+# 只用 GitHub 的免费 CPU，不唤醒 Modal。只能手动运行。结果在运行页面的注释里，详细数字在 bench-* 附件里。
+name: 候选检测器擂台
+
+on:
+  workflow_dispatch:
+    inputs:
+      zh_models:
+        description: "中文候选模型（逗号分隔，Hugging Face 名称）"
+        default: "Juner/AI-generated-text-detection,Juner/AI-generated-text-detection-pair,Juner/AI-generated-detection-wwm-ext,Hello-SimpleAI/chatgpt-detector-roberta-chinese"
+      en_models:
+        description: "英文候选模型（逗号分隔）"
+        default: "Hello-SimpleAI/chatgpt-detector-roberta,fakespot-ai/roberta-base-ai-text-detection-v1,openai-community/roberta-large-openai-detector,yaful/MAGE"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      m: ${{ steps.p.outputs.m }}
+    steps:
+      - id: p
+        env:
+          ZH: ${{ github.event.inputs.zh_models }}
+          EN: ${{ github.event.inputs.en_models }}
+        run: |
+          python3 -c 'import json,os; m=[{"lang":"zh","model":x.strip()} for x in os.environ["ZH"].split(",") if x.strip()]+[{"lang":"en","model":x.strip()} for x in os.environ["EN"].split(",") if x.strip()]; print("m="+json.dumps({"include":m}))' >> "$GITHUB_OUTPUT"
+  bench:
+    needs: plan
+    name: ${{ matrix.lang }} ${{ matrix.model }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.m) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+      - name: 安装依赖
+        run: |
+          pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r server/requirements.txt openpyxl opencc-python-reimplemented scikit-learn
+      - name: 下载数据集
+        run: |
+          if [ "${{ matrix.lang }}" = zh ]; then git clone --depth 1 https://github.com/NLP2CT/NLPCC-2025-Task1 /tmp/nlpcc; else
+          python - <<'PY'
+          from huggingface_hub import hf_hub_download
+          for f in ["test.csv", "test_ood_set_gpt.csv", "test_ood_set_gpt_para.csv"]:
+              hf_hub_download("yaful/MAGE", f, repo_type="dataset", local_dir="/tmp/mage")
+          PY
+          fi
+      - name: 打分与比较
+        working-directory: server
+        run: python -u tools/bench/bench_detectors.py --lang ${{ matrix.lang }} --models "${{ matrix.model }}" --data /tmp/nlpcc --mage-dir /tmp/mage --out /tmp/bench
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-${{ matrix.lang }}-${{ strategy.job-index }}
+          path: /tmp/bench/report_*.json
