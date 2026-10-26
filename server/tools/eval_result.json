@@ -509,7 +509,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v14"
+   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v20"
   }
  },
  "en_paper": {
@@ -582,7 +582,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v14"
+   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v20"
   }
  },
  "zh_classical": {
