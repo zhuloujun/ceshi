@@ -72,6 +72,10 @@ EN3_JOINT2_THRESHOLD = float(os.getenv("EN3_JOINT2_THRESHOLD", "0.75") or 0.75)
 EN4_JOINT2_THRESHOLD = float(os.getenv("EN4_JOINT2_THRESHOLD", "0.94") or 0.94)
 # 整篇判断只带上自己的整篇分类器得分 ≥ 这个值的段落（插在 AI 文章中间的真人段落不跟着计入）
 DOC_CARRY_FLOOR = float(os.getenv("DOC_CARRY_FLOOR", "0.5") or 0.5)
+# 整篇像 AI 时，本段的整篇分类器（v7）自己也 ≥ 这个值，也跟着计入（2026-10-27）：EN4 与逐段的第二分类器是同一个模型（v14），
+# 对公式多、术语密的段落（Gemini《后量子密码》《火山碎屑流》等）只有 0.1–0.3，原来只看它就被挡在整篇判断之外；
+# 这些段落 v7 都 ≥ 0.9。用户 59 篇纯 AI 文档中有 15 段属于这种情况，16 本真人自我提升书中 0 段。
+EN3_OWN_CARRY = float(os.getenv("EN3_OWN_CARRY", "0.9") or 0.9)
 # 国产大模型中文分类器整篇中位数低于这个值（明确像人写）时，不用 MPU 中文分类器的整篇判断
 ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
 # v3（2026-10-04）：加入 287 篇"去 AI 味"改写的中文（五家国产模型先写再按"降 AI 率"指令改写，或一步要求"写得不像 AI"）。
@@ -184,6 +188,12 @@ WIN_HUMAN_SECOND = float(os.getenv("WIN_HUMAN_SECOND", "0.3") or 0.3)
 WIN_ZH2_AI = float(os.getenv("WIN_ZH2_AI", "0.95") or 0.95)
 WIN_ZH2_SEG = float(os.getenv("WIN_ZH2_SEG", "0.85") or 0.85)
 WIN_PARTIAL_MIN_SHARE = float(os.getenv("WIN_PARTIAL_MIN_SHARE", "0.3") or 0.3)   # 人写窗口至少占整段这么多，才按“部分疑似”扣除
+# 英文段落综合分数和第二分类器都 ≥ 0.95 时不做"部分疑似"扣除（2026-10-27）：用户 39 篇纯 AI 文档（ChatGPT / Claude）里，
+# 112 段被按"部分句子像人写"打了折，其中 16 段两项都 ≥ 0.95，平均被扣掉 42%（如 ChatGPT《graph coloring》只剩 72%）；
+# 16 本真人自我提升书被扣折的 11 段，综合分数最高 0.91、第二分类器最高 0.94，没有一段达到这条线。
+# 整段两种检测器都极有把握时，单个短窗口的低分多半是短文本的噪声，不是插入的真人句子。
+WIN_PARTIAL_SKIP_PROB = float(os.getenv("WIN_PARTIAL_SKIP_PROB", "0.95") or 0.95)
+WIN_PARTIAL_SKIP_EN2 = float(os.getenv("WIN_PARTIAL_SKIP_EN2", "0.95") or 0.95)
 COUPLET_CLASSIFIER_THRESHOLD = float(os.getenv("COUPLET_CLASSIFIER_THRESHOLD", "0.975") or 0.975)
 CLASSICAL_THRESHOLD = float(os.getenv("CLASSICAL_THRESHOLD", "0.03") or 0.03)
 MODERN_MAX_RATIO = float(os.getenv("MODERN_MAX_RATIO", "0.015") or 0.015)
