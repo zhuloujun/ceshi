@@ -75,7 +75,7 @@ env:
   N_CL_HUMAN_TEST: "160"
   N_PO_CAL: "800"
   N_PO_TEST: "600"
-  PUSH_PARTS: '["en_cal1","en_cal2","en_ood","en_para","en_user","en_gen_fit","en_gen_test"]'
+  PUSH_PARTS: '["en_cal1","en_cal2","en_ood","en_para","en_user","en_gen_fit","en_gen_test","en_po_fit","en_po_test"]'
 
 jobs:
   plan:
@@ -86,10 +86,10 @@ jobs:
       - id: p
         run: |
           if [ "${{ github.event.inputs.include_zh }}" = "true" ]; then
-            echo 'parts=["cal1","cal2","test","csl","cal1s","cal2s","tests","en_cal1","en_cal2","en_ood","en_para","cl_cal","cl_test","po_cal","po_test","po_story","po_classic","cl_user","po_user","en_user","en_gen_fit","en_gen_test"]' >> "$GITHUB_OUTPUT"
+            echo 'parts=["cal1","cal2","test","csl","cal1s","cal2s","tests","en_cal1","en_cal2","en_ood","en_para","cl_cal","cl_test","po_cal","po_test","po_story","po_classic","cl_user","po_user","en_user","en_gen_fit","en_gen_test","en_po_fit","en_po_test"]' >> "$GITHUB_OUTPUT"
           elif [ -n "${{ github.event.inputs.poetry_tag }}${{ github.event.inputs.classical_tag }}" ]; then
             # 换诗词 / 文言分类器：英文照常重打，诗词与文言全部重打
-            echo 'parts=["en_cal1","en_cal2","en_ood","en_para","en_user","en_gen_fit","en_gen_test","cl_cal","cl_test","cl_user","po_cal","po_test","po_story","po_classic","po_user"]' >> "$GITHUB_OUTPUT"
+            echo 'parts=["en_cal1","en_cal2","en_ood","en_para","en_user","en_gen_fit","en_gen_test","en_po_fit","en_po_test","cl_cal","cl_test","cl_user","po_cal","po_test","po_story","po_classic","po_user"]' >> "$GITHUB_OUTPUT"
           else
             echo "parts=$PUSH_PARTS" >> "$GITHUB_OUTPUT"
           fi
@@ -139,6 +139,38 @@ jobs:
           for f in ["test.csv", "test_ood_set_gpt.csv", "test_ood_set_gpt_para.csv"]:
               print(hf_hub_download("yaful/MAGE", f, repo_type="dataset", local_dir="/tmp/mage"))
           PY
+      - name: 下载数据集（英文诗：Poetry Foundation 真人诗，只保存得分）
+        if: ${{ startsWith(matrix.part, 'en_po_') }}
+        run: |
+          pip install -q pandas pyarrow
+          python - <<'PY'
+          import json, os, re
+          import pandas as pd
+          from huggingface_hub import hf_hub_download, list_repo_files
+          os.makedirs("/tmp/enpoetry", exist_ok=True)
+          rows = []
+          for repo in ["shahules786/PoetryFoundationData", "suayptalha/Poetry-Foundation-Poems"]:
+              try:
+                  files = [f for f in list_repo_files(repo, repo_type="dataset", revision="refs/convert/parquet") if f.endswith(".parquet")]
+                  df = pd.concat([pd.read_parquet(hf_hub_download(repo, f, repo_type="dataset", revision="refs/convert/parquet")) for f in files])
+              except Exception as e:
+                  print("skip", repo, e); continue
+              strs = [c for c in df.columns if df[c].dtype == object]
+              tc = max(strs, key=lambda c: df[c].astype(str).str.len().mean())
+              ac = next((c for c in df.columns if re.search("author|poet", c, re.I)), None)
+              print(repo, len(df), "text:", tc, "author:", ac)
+              for _, r in df.iterrows():
+                  t = re.sub(r"\r", "", str(r[tc])).strip()
+                  t = re.sub(r"\n[ \t]*\n+", "\n", t)       # 网页抓取时每行之间多出的空行
+                  lines = [l for l in t.splitlines() if l.strip()]
+                  if 4 <= len(lines) <= 60 and 200 <= len(t) <= 2500:
+                      rows.append({"text": t, "author": str(r[ac]) if ac else "?"})
+              break
+          with open("/tmp/enpoetry/human.jsonl", "w") as f:
+              for r in rows:
+                  f.write(json.dumps(r, ensure_ascii=False) + "\n")
+          print("真人英文诗", len(rows))
+          PY
       - name: 下载数据集（诗词：ChangAn）和诗词分类器（本仓库 Release）
         if: ${{ startsWith(matrix.part, 'po_') }}
         env:
@@ -181,7 +213,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          T="${{ github.event.inputs.en2_tag }}"; [ -z "$T" ] && T=$(grep -oE 'english-classifier-v[0-9]+' server/app/default_calibration.json | head -1); T=${T:-english-classifier-v3}
+          T="${{ github.event.inputs.en2_tag }}"; [ -z "$T" ] && T=$(grep -oE 'english-classifier-v[0-9]+[a-z]*' server/app/default_calibration.json | head -1); T=${T:-english-classifier-v3}
           echo "EN2_CLASSIFIER_ID=$T" >> "$GITHUB_ENV"
           if gh release download "$T" -p english-classifier.tar.gz -D /tmp -R "${{ github.repository }}"; then
             tar xzf /tmp/english-classifier.tar.gz -C /tmp
@@ -246,7 +278,7 @@ jobs:
           [ -n "$T" ] && export POETRY_CLASSIFIER_ID=$T
           T="${{ github.event.inputs.classical_tag }}"; [ -z "$T" ] && T=$(grep -oE '"classical-classifier-v[0-9]+"' app/default_calibration.json | head -1 | tr -d '"')
           [ -n "$T" ] && export CLASSICAL_CLASSIFIER_ID=$T
-          T="${{ github.event.inputs.en2_tag }}"; [ -z "$T" ] && T=$(grep -oE 'english-classifier-v[0-9]+' app/default_calibration.json | head -1)
+          T="${{ github.event.inputs.en2_tag }}"; [ -z "$T" ] && T=$(grep -oE 'english-classifier-v[0-9]+[a-z]*' app/default_calibration.json | head -1)
           [ -n "$T" ] && export EN2_CLASSIFIER_ID=$T
           echo "英文第二分类器 $EN2_CLASSIFIER_ID"
           echo "诗词分类器 $POETRY_CLASSIFIER_ID · 文言分类器 $CLASSICAL_CLASSIFIER_ID"
