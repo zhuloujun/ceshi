@@ -585,6 +585,104 @@
    "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v14"
   }
  },
+ "en_poetry": {
+  "calibration_report": {
+   "n_human": 456,
+   "n_ai": 205,
+   "auroc": {
+    "fastdetect": 0.8255,
+    "binoculars": 0.8126,
+    "classifier": 0.8471
+   },
+   "features_used": [
+    "fastdetect",
+    "binoculars",
+    "logit_classifier",
+    "logit_classifier_en2"
+   ],
+   "cross_validated": true,
+   "or_rule": {
+    "t": 0.945,
+    "threshold": 0.795,
+    "ai_caught": 0.9317,
+    "human_flagged": 0.0285
+   },
+   "combined_auroc": 0.9836,
+   "threshold": 0.795,
+   "human_flagged_rate": 0.0285,
+   "ai_caught_rate": 0.9317,
+   "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
+  },
+  "evaluation": [
+   {
+    "name": "英文诗：没参与校准的作者（Poetry Foundation 真人诗）与没参与校准的主题（各家模型写的英文诗）",
+    "n_human": 444,
+    "n_ai": 333,
+    "auroc": 0.9879,
+    "ai_caught": 0.8949,
+    "human_flagged": 0.0315,
+    "per_signal_auroc": {
+     "fastdetect": 0.812,
+     "binoculars": 0.1957,
+     "logit_classifier": 0.834,
+     "fastdetect_norm": 0.8051,
+     "lrr": 0.5899,
+     "log_rank": 0.2977,
+     "entropy": 0.4124,
+     "top10": 0.66,
+     "lp_burstiness": 0.5955,
+     "style_cv": 0.3372,
+     "style_phrases": 0.4904,
+     "logit_classifier_en2": 0.97
+    },
+    "ai_caught_by_model": {
+     "poem-deepseek": 0.9135,
+     "poem-doubao": 0.9038,
+     "poem-qwen": 0.8654,
+     "poem-claude": 0.9048
+    },
+    "human_flagged_by_source": {
+     "poetryfoundation": 0.0315
+    }
+   },
+   {
+    "name": "英文诗：没参与校准的作者（Poetry Foundation 真人诗）与没参与校准的主题（各家模型写的英文诗）【对照：不用英文第二分类器】",
+    "n_human": 444,
+    "n_ai": 333,
+    "auroc": 0.8808,
+    "ai_caught": 0.3363,
+    "human_flagged": 0.0203,
+    "per_signal_auroc": {
+     "fastdetect": 0.812,
+     "binoculars": 0.1957,
+     "logit_classifier": 0.834,
+     "fastdetect_norm": 0.8051,
+     "lrr": 0.5899,
+     "log_rank": 0.2977,
+     "entropy": 0.4124,
+     "top10": 0.66,
+     "lp_burstiness": 0.5955,
+     "style_cv": 0.3372,
+     "style_phrases": 0.4904,
+     "logit_classifier_en2": 0.97
+    },
+    "ai_caught_by_model": {
+     "poem-deepseek": 0.4615,
+     "poem-doubao": 0.125,
+     "poem-qwen": 0.4423,
+     "poem-claude": 0.2381
+    },
+    "human_flagged_by_source": {
+     "poetryfoundation": 0.0203
+    }
+   }
+  ],
+  "models": {
+   "observer": "Qwen/Qwen2.5-0.5B",
+   "performer": "Qwen/Qwen2.5-0.5B-Instruct",
+   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v14"
+  }
+ },
  "zh_classical": {
   "calibration_report": {
    "n_human": 373,
