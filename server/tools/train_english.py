@@ -275,7 +275,7 @@ def build_rows(args, rnd):
     # 用户提供的已标注英文（私有 Kaggle 脚本传入，不进公开仓库）：{t, y, r:'en', d, split?}
     if getattr(args, "user_docs", ""):
         n_ud = 0
-        for line in Path(args.user_docs).read_text("utf-8").splitlines():
+        for line in Path(args.user_docs).read_text("utf-8").split("\n"):   # 不用 splitlines：书里的 U+2028 等字符会被当成换行
             if not line.strip():
                 continue
             r = json.loads(line)
@@ -316,6 +316,21 @@ def main():
     ap.add_argument("--extra-human", type=int, default=0, help="其他领域真人英文（政府报告、法案、BBC 新闻、维基百科等）每个来源取多少段")
     ap.add_argument("--novel-human", type=int, default=0, help="从 BookCorpusOpen 取多少段当代真人小说片段（0 = 不用）")
     args = ap.parse_args()
+    if args.base.startswith("release:"):
+        # 从本仓库已发布的版本接着训练（2026-10-27：v17–v21 从头训练都没超过 v14，改为在 v14 上小步微调，
+        # 只补它的短板——真人自我提升 / 非虚构书、AI 励志文、Gemini / ChatGPT 学科长文），减少"学会新的、忘了旧的"
+        import tarfile
+        import urllib.request
+        tag = args.base.split(":", 1)[1]
+        dst = Path(f"/tmp/base_{tag}")
+        if not (dst / "english-classifier" / "config.json").exists():
+            dst.mkdir(parents=True, exist_ok=True)
+            url = f"https://github.com/zhuloujun/ceshi/releases/download/{tag}/english-classifier.tar.gz"
+            urllib.request.urlretrieve(url, dst / "m.tar.gz")
+            with tarfile.open(dst / "m.tar.gz") as t:
+                t.extractall(dst)
+        args.base = str(dst / "english-classifier")
+        print("从", tag, "接着训练：", args.base, flush=True)
 
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup

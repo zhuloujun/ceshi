@@ -324,7 +324,7 @@ def _fit_or_rule(oof, ya, wa, v, target_fpr):
 # 各文体的文字特征差别很大（英文用英文分类器；文言的困惑度分布与白话完全不同），不能共用一套阈值。
 
 PROFILE_NAMES = {"zh": "现代汉语", "zh_short": "现代汉语短段", "zh_classical": "文言", "zh_poetry": "诗词", "en": "英文",
-                 "en_paper": "英文学术论文"}
+                 "en_paper": "英文学术论文", "en_poetry": "英文诗"}
 # 各文体用哪些特征做组合（用训练时没见过的评估集比较后选定，见 tools/EVAL_REPORT.md）：
 # 英文：分类器 + Fast-DetectGPT + Binoculars 三个主信号，在 GPT-4 新领域和改写文本上都优于全部特征；
 # 现代汉语：全部扩展特征更好。
@@ -351,8 +351,8 @@ def profile_for(cal: dict, register: str):
         merged = dict(DEFAULTS)
         merged.update(prof)
         return merged, bool(prof.get("calibrated"))
-    if register == "en_paper":
-        return profile_for(cal, "en")      # 没有学术论文专门校准时，沿用通用英文
+    if register in ("en_paper", "en_poetry"):
+        return profile_for(cal, "en")      # 没有学术论文 / 英文诗专门校准时，沿用通用英文
     if register == "en":
         # 英文没有专门校准时，现代汉语的参数没有意义（分类器都不一样），退回经验值
         return dict(DEFAULTS), False
