@@ -11,7 +11,7 @@ get() {  # $1 = Release 标签  $2 = 包名  $3 = 解压后的目录名  $4 = �
 }
 P=$(grep -oE '"poetry-classifier-v[0-9]+"' app/default_calibration.json | head -1 | tr -d '"')
 C=$(grep -oE '"classical-classifier-v[0-9]+"' app/default_calibration.json | head -1 | tr -d '"')
-E2=$(grep -oE 'english-classifier-(exp-)?v[0-9]+' app/default_calibration.json | head -1 || true)
+E2=$(grep -oE 'english-classifier-(exp-)?v[0-9]+[a-z]*' app/default_calibration.json | head -1 || true)
 Z2=$(grep -oE 'chinese-classifier-[A-Za-z0-9.-]+' app/config.py | head -1 || true)
 E3=$(grep -oE 'EN3_CLASSIFIER_ID", "english-classifier-[A-Za-z0-9.-]+' app/config.py | grep -oE 'english-classifier-[A-Za-z0-9.-]+' || true)
 E4=$(grep -oE 'EN4_CLASSIFIER_ID", "english-classifier-[A-Za-z0-9.-]+' app/config.py | grep -oE 'english-classifier-[A-Za-z0-9.-]+' || true)
