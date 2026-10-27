@@ -185,7 +185,7 @@
    "n_human": 1232,
    "n_ai": 866,
    "auroc": {
-    "fastdetect": 0.6933,
+    "fastdetect": 0.6932,
     "binoculars": 0.6901,
     "classifier": 0.9052
    },
