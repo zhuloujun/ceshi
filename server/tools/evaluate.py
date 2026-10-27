@@ -64,6 +64,9 @@ PART_PROFILE = {
     # 只在手动运行时通过加密的 extra_en 输入传入（EXTRA_EN_DOCS 指向解密后的 jsonl）。按书划分：一半参与校准、一半只评估。
     # 打分结果（只有各项得分，没有原文）照常保存。
     "en_novel_fit": "en", "en_novel_test": "en",
+    # 英文诗（2026-10）：Poetry Foundation 真人诗（含当代诗人，受版权保护，只保存得分）+ 各家模型写的英文诗
+    # （tools/data/gen_en/po_*.jsonl、tools/data/ai_poems_en_claude.txt）。真人按作者、AI 按主题对半分：一半校准、一半只评估。
+    "en_po_fit": "en", "en_po_test": "en",
 }
 USER_MODELS = {"deepseek": "DeepSeek", "kimi": "Kimi", "wenxin": "文心一言"}
 USER_PARTS = {"cl_user": "classical", "po_user": "poem", "en_user": "english"}
@@ -88,6 +91,9 @@ PROFILE_PARTS = {
     "en_paper": {"fit": ["en_gen_fit"],
                  "eval": [("en_gen_test", "英文学术论文：没参与训练和校准的题目（国产模型写的论文 vs arXiv / PubMed / PMC 真人，含中国作者）"),
                           ("en_user_test", "国产新模型 AI 英文短篇（用户提供，没参与训练的那 1/3）")]},
+    # 英文诗：分行的诗与散文的信号分布不同（整篇分类器对诗不可靠，散文的阈值认不出 AI 诗），单独校准
+    "en_poetry": {"fit": ["en_po_fit"],
+                  "eval": [("en_po_test", "英文诗：没参与校准的作者（Poetry Foundation 真人诗）与没参与校准的主题（各家模型写的英文诗）")]},
     "zh_classical": {"fit": ["cl_cal"], "eval": [("cl_test", "文言保留集（另一组古籍 + 未参与校准的 AI 文言）"),
                                                                 ("cl_user", "国产新模型 AI 文言故事（DeepSeek / Kimi / 文心一言；不参与校准，但其中 2/3 用于训练文言分类器，没见过的那 1/3 见分类器训练报告）")]},
 }
@@ -98,6 +104,7 @@ PROFILE_SOURCE = {
     "zh_poetry": "ChangAn 当代旧体诗词（人写）+ DeepSeek / 豆包 / GPT-4.1 生成诗词；诗词专用分类器（ChangAn 训练集微调）",
     "zh_short": "NLPCC 2025 Task 1 样本截成 80–260 字的短段",
     "en_paper": "arXiv / PubMed / PMC 真人学术英文（含中国作者）+ DeepSeek / 文心一言 / Kimi 写的英文论文",
+    "en_poetry": "Poetry Foundation 真人英文诗 + DeepSeek / Kimi / 通义千问 / 豆包 / Claude 写的英文诗",
 }
 
 # 文言：校准用的书 / 评估用的书（互不重叠）
@@ -434,6 +441,41 @@ def en_gen_parts():
     return out
 
 
+EN_POETRY_HUMAN = os.getenv("EN_POETRY_HUMAN", "/tmp/enpoetry/human.jsonl")
+
+
+def en_poetry_parts(n_human=900):
+    """英文诗：真人来自 EN_POETRY_HUMAN（工作流从 Poetry Foundation 数据集整理的 jsonl：text、author），按作者对半分；
+    AI 来自 gen_en/po_*.jsonl（按主题对半分）和 ai_poems_en_claude.txt（按内容对半分）。"""
+    out = {"en_po_fit": [], "en_po_test": []}
+    half = lambda key: "en_po_fit" if _md5_int("enpo|" + key) % 2 == 0 else "en_po_test"
+    hp = Path(EN_POETRY_HUMAN)
+    if hp.exists():
+        rows = [json.loads(l) for l in hp.read_text("utf-8").splitlines() if l.strip()]
+        rnd = random.Random(7)
+        rnd.shuffle(rows)
+        per_author: dict = {}
+        for r in rows:
+            a = (r.get("author") or "?").strip()
+            if per_author.get(a, 0) >= 3:          # 每位诗人最多 3 首，避免少数高产诗人占满
+                continue
+            per_author[a] = per_author.get(a, 0) + 1
+            out[half(a)].append({"text": r["text"], "y": 0, "model": "poetryfoundation"})
+            if sum(per_author.values()) >= n_human:
+                break
+    for f in sorted(GEN_EN_DIR.glob("po_*.jsonl")):
+        for line in f.read_text("utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                subj = r["title"].split("|", 1)[-1]
+                out[half(subj)].append({"text": r["text"], "y": 1, "model": f"poem-{f.stem[3:]}"})
+    cf = DATA_DIR / "ai_poems_en_claude.txt"
+    if cf.exists():
+        for t in read_blocks(cf):
+            out[half(t[:80])].append({"text": t, "y": 1, "model": "poem-claude"})
+    return out
+
+
 def split_user_parts(parts):
     for base in USER_PARTS:
         rows = parts.get(base)
@@ -456,6 +498,8 @@ def build_part(args, part):
         return en_novel_rows(part)
     if part in ("en_gen_fit", "en_gen_test"):
         return en_gen_parts()[part]
+    if part in ("en_po_fit", "en_po_test"):
+        return en_poetry_parts()[part]
     if part in USER_PARTS:
         return user_ai_rows(USER_PARTS[part])
     prof = PART_PROFILE[part]
@@ -554,7 +598,7 @@ def evaluate_rows(rows, cal, name):
 # 所以预先定得更严（与 Turnitin 对短文本从严的做法一致）。诗词同理：宁可少抓，也不冤枉写诗的人。
 # 英文 0.035：英文第二分类器 v2（加入 Kimi 数据）按 3.5% 拟合时，MAGE 新领域 96% / 误判 7.3%、改写 74% / 13.3%，
 # 都比 v1（94.7% / 8.7%、73.4% / 14.7%）检出多且误判少；国产模型论文段落 86%（含 Kimi 71%）/ arXiv 误判 3%。
-PROFILE_TARGET_FPR = {"zh_short": 0.01, "zh_poetry": 0.03, "zh_classical": 0.02, "en": 0.035, "en_paper": 0.01}
+PROFILE_TARGET_FPR = {"zh_short": 0.01, "zh_poetry": 0.03, "zh_classical": 0.02, "en": 0.035, "en_paper": 0.01, "en_poetry": 0.03}
 # 自动选特征时，其他组合要比"全部特征"高出这么多才换（避免被交叉验证的随机波动带偏）
 SELECTION_MARGIN = 0.005
 
@@ -570,7 +614,7 @@ def fit_profile(prof, parts, target_fpr):
     fixed = scoring.PROFILE_FEATURES.get(prof)
     if prof == "en_paper" and not all(scoring.feature_value(r, "logit_classifier_en2") is not None for r in hs[:20]):
         return None
-    use_en2 = prof == "en" and all(scoring.feature_value(r, "logit_classifier_en2") is not None for r in hs[:20])
+    use_en2 = prof in ("en", "en_poetry") and all(scoring.feature_value(r, "logit_classifier_en2") is not None for r in hs[:20])
     if use_en2:
         fixed = scoring.EN2_FEATURES
     if prof == "zh_poetry":
@@ -708,7 +752,7 @@ def stage_fit(args):
             parts[name] = json.loads(f.read_text("utf-8"))
     split_user_parts(parts)
     fitted = {}
-    for prof in ("zh", "zh_short", "en", "en_paper", "zh_classical", "zh_poetry"):
+    for prof in ("zh", "zh_short", "en", "en_paper", "en_poetry", "zh_classical", "zh_poetry"):
         r = fit_profile(prof, parts, args.target_fpr)
         if r:
             fitted[prof] = r

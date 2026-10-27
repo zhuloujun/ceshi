@@ -281,6 +281,7 @@ def is_en_verse(text: str) -> bool:
     lower = sum(l[:1].islower() for l in lines) / len(lines)
     return punct >= 0.5 or lower >= 0.3
 
+
 class Engine:
     def __init__(self):
         self.lm = LMScorer() if config.ENABLE_LM else None
@@ -424,7 +425,7 @@ class Engine:
                             "profiles": profiles,
                             # 各文体实际使用的阈值，以及哪些文体叠加了用户自己的标注校准（排查"为什么没判出来"时用）
                             "thresholds": {k: round(scoring.profile_for(self.cal, k)[0].get("threshold", 0), 4)
-                                           for k in ("zh", "zh_short", "en", "en_paper", "zh_classical", "zh_poetry")},
+                                           for k in ("zh", "zh_short", "en", "en_paper", "en_poetry", "zh_classical", "zh_poetry")},
                             "user_profiles": getattr(self, "user_profiles", [])},
             "tokens_per_sec": self.tokens_per_sec,
         }
@@ -641,12 +642,16 @@ class Engine:
         paper_blocks = ({b for b, t in blk_text.items() if is_english_paper("\n".join(t))}
                         if (cal.get("profiles") or {}).get("en_paper") else set())
         en_paper = bool(paper_blocks)
+        has_en_poetry = bool((cal.get("profiles") or {}).get("en_poetry"))
         for s in segs:
             reg = s.register
             if reg == "zh" and has_short and len(score_text(s)) < config.SHORT_SEGMENT_CHARS:
                 reg = "zh_short"
             if reg == "en" and s.block in paper_blocks:
                 reg = "en_paper"
+            elif reg == "en" and has_en_poetry and is_en_verse(s.text):
+                # 英文诗单独校准（2026-10：散文的阈值认不出 AI 写的十四行诗，用户的 Gemini 诗组 4 首全部漏判）
+                reg = "en_poetry"
             prof[s.index] = scoring.profile_for(cal, reg)
             prof_name[s.index] = reg
             if reg == "zh_poetry" and is_couplet(score_text(s)):
@@ -1064,6 +1069,8 @@ class Engine:
                 r_ = "zh_short"
             if r_ == "en" and s_.block in paper_blocks:
                 r_ = "en_paper"
+            elif r_ == "en" and prof_name.get(s_.index) == "en_poetry":
+                r_ = "en_poetry"
             if r_ not in used_profiles:
                 used_profiles.append(r_)
         flagged_chars = chars_by_level["high"] + chars_by_level["mid"] + chars_by_level["light"]
@@ -1189,6 +1196,8 @@ class Engine:
                 r_ = "zh_short"
             if r_ == "en" and s_.block in paper_blocks:
                 r_ = "en_paper"
+            elif r_ == "en" and prof_name.get(s_.index) == "en_poetry":
+                r_ = "en_poetry"
             n_judged += 1
             expected_false += fpr_of.get(r_, fpr_of.get(s_.register, 0.02))
         n_flagged = sum(1 for x in seg_out if x["prob"] is not None and (x["level"] in ("high", "mid", "light") or x.get("partial") == "local"))
