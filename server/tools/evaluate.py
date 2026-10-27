@@ -451,7 +451,7 @@ def en_poetry_parts(n_human=900):
     half = lambda key: "en_po_fit" if _md5_int("enpo|" + key) % 2 == 0 else "en_po_test"
     hp = Path(EN_POETRY_HUMAN)
     if hp.exists():
-        rows = [json.loads(l) for l in hp.read_text("utf-8").splitlines() if l.strip()]
+        rows = [json.loads(l) for l in hp.read_text("utf-8").split("\n") if l.strip()]
         rnd = random.Random(7)
         rnd.shuffle(rows)
         per_author: dict = {}
