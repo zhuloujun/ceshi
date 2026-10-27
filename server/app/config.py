@@ -184,6 +184,12 @@ WIN_HUMAN_SECOND = float(os.getenv("WIN_HUMAN_SECOND", "0.3") or 0.3)
 WIN_ZH2_AI = float(os.getenv("WIN_ZH2_AI", "0.95") or 0.95)
 WIN_ZH2_SEG = float(os.getenv("WIN_ZH2_SEG", "0.85") or 0.85)
 WIN_PARTIAL_MIN_SHARE = float(os.getenv("WIN_PARTIAL_MIN_SHARE", "0.3") or 0.3)   # 人写窗口至少占整段这么多，才按“部分疑似”扣除
+# 英文段落综合分数和第二分类器都 ≥ 0.95 时不做"部分疑似"扣除（2026-10-27）：用户 39 篇纯 AI 文档（ChatGPT / Claude）里，
+# 112 段被按"部分句子像人写"打了折，其中 16 段两项都 ≥ 0.95，平均被扣掉 42%（如 ChatGPT《graph coloring》只剩 72%）；
+# 16 本真人自我提升书被扣折的 11 段，综合分数最高 0.91、第二分类器最高 0.94，没有一段达到这条线。
+# 整段两种检测器都极有把握时，单个短窗口的低分多半是短文本的噪声，不是插入的真人句子。
+WIN_PARTIAL_SKIP_PROB = float(os.getenv("WIN_PARTIAL_SKIP_PROB", "0.95") or 0.95)
+WIN_PARTIAL_SKIP_EN2 = float(os.getenv("WIN_PARTIAL_SKIP_EN2", "0.95") or 0.95)
 COUPLET_CLASSIFIER_THRESHOLD = float(os.getenv("COUPLET_CLASSIFIER_THRESHOLD", "0.975") or 0.975)
 CLASSICAL_THRESHOLD = float(os.getenv("CLASSICAL_THRESHOLD", "0.03") or 0.03)
 MODERN_MAX_RATIO = float(os.getenv("MODERN_MAX_RATIO", "0.015") or 0.015)
