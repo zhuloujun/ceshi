@@ -142,8 +142,9 @@ jobs:
       - name: 下载数据集（英文诗：Poetry Foundation 真人诗，只保存得分）
         if: ${{ startsWith(matrix.part, 'en_po_') }}
         run: |
-          pip install -q pandas pyarrow "datasets>=2.19"
-          python - <<'PY'
+          # 装在单独的目录里，只给这一步用：datasets 会升级 huggingface_hub 等包，弄坏后面打分要用的 transformers
+          python -m venv /tmp/dsenv && /tmp/dsenv/bin/pip install -q pandas pyarrow "datasets>=2.19"
+          /tmp/dsenv/bin/python - <<'PY'
           import json, os, re
           from datasets import load_dataset
           os.makedirs("/tmp/enpoetry", exist_ok=True)
