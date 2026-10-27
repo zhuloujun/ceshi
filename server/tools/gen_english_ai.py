@@ -633,6 +633,44 @@ PAPER_TOPICS = [
 # 英文诗（2026-10）：用户的 Gemini 十四行诗组（GEM_122）每首只有 31–78%，全部漏判。英文诗此前没有专门的校准，只能套用散文的阈值。
 # 生成各种诗体（十四行诗、自由诗、维拉内拉、俳句组诗、民谣、挽歌、散文诗、说唱式歌词……），配合 Poetry Foundation 的真人诗，
 # 给英文诗单独拟合一套校准（evaluate.py 的 en_poetry）。部分提示要求"写得像真人诗人，不押韵、意象具体"（规避检测的常见用法）。
+# 自我提升 / 理财 / 领导力 / 专注力类书籍（2026-10）：16 本这类真人书里，Focus（Leo Babauta）被判 73%、I Will Teach You to Be Rich
+# 65%、Dreams from My Father 33%……第二分类器把"第二人称、条目式、励志口吻"的真人写法学成了 AI 特征。真人一方加入这类书后，
+# AI 一方也要有同样文体（否则模型会学成"励志书 = 真人"），让模型学会区分的是写作方式而不是题材。
+SELFHELP_STYLE = [
+    "Write about 600 words from a {g} on {t}. Talk directly to the reader in second person. Plain text, no Markdown.",
+    "Write roughly 600 words of a {g} about {t} in the voice of a popular blogger-turned-author: short paragraphs, "
+    "personal anecdotes, a few numbered tips, conversational and a bit funny. No headings.",
+    "用英文写一段{g}的章节（约600词），主题：{t}。要像畅销书作者写的，口语化，有个人故事和具体例子，不要Markdown。",
+    "Write a 600-word excerpt from a {g} on {t}. Make it read like a real bestselling human author, not AI: blunt "
+    "opinions, specific numbers, contractions, uneven rhythm, no summary at the end.",
+    "Write one chapter section (about 700 words) of a {g} on {t}, mixing a story from the author's own life with "
+    "practical advice.",
+]
+SELFHELP_TOPICS = [
+    ("personal finance book for young adults", "automating your savings so you never have to think about it"),
+    ("personal finance book", "negotiating a raise and why most people never ask"),
+    ("personal finance book", "why you should stop feeling guilty about lattes and focus on big wins"),
+    ("productivity book", "single-tasking in a world built for distraction"),
+    ("minimalism and focus book", "clearing your desk, your inbox and your calendar"),
+    ("habit-building book", "starting with habits so small you can't fail"),
+    ("happiness and meditation guide", "a ten-minute daily breathing practice for beginners"),
+    ("leadership book for new managers", "giving honest feedback without crushing morale"),
+    ("leadership memoir by a former CEO", "the hiring mistake that nearly sank the company"),
+    ("entrepreneurship book", "launching a small business with almost no money"),
+    ("small-business marketing guide", "getting your first hundred customers through word of mouth"),
+    ("negotiation book", "finding out what the other side really wants"),
+    ("career advice book", "quitting a stable job to do work you care about"),
+    ("Christian purpose-driven living book", "serving others as the path to a meaningful life"),
+    ("relationships advice book", "staying faithful and keeping a long marriage alive"),
+    ("motivational book", "achieving long-term goals by managing your energy, not your time"),
+    ("startup memoir", "the early days of a search-engine company and its odd culture"),
+    ("customer-service business book", "building a company culture around delivering happiness"),
+    ("time-management book", "saying no to good opportunities to protect great ones"),
+    ("self-improvement book", "dealing with procrastination and perfectionism"),
+    ("personal memoir with life lessons", "a year of travel after a painful divorce"),
+    ("writing-craft memoir", "the daily routine of a working novelist"),
+]
+
 POEM_STYLE = [
     "Write a {g} about {t}. Output only the poem, with a title.",
     "Write a {g} about {t} in the voice of a contemporary American poet. Avoid cliches; use concrete, surprising images. Only the poem.",
@@ -728,27 +766,27 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         topics = [f"{g}|{t}" for g, t in poem_topics(rnd)]
         seen_k = {}
         styles = POEM_STYLE
-    elif out_f.name.startswith(("nv_", "dc_", "ap_", "nf_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
-        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS, "nf_": NONFIC_TOPICS}[out_f.name[:3]]
+    elif out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "sh_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
+        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS, "nf_": NONFIC_TOPICS, "sh_": SELFHELP_TOPICS}[out_f.name[:3]]
         pairs = [(g, t) for g, t in tbl for _ in range(4)]
         rnd.shuffle(pairs)
         topics = [f"{g}|{t}" for g, t in pairs]
         seen_k: dict = {}
-        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE, "nf_": NONFIC_STYLE}[out_f.name[:3]]
+        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE, "nf_": NONFIC_STYLE, "sh_": SELFHELP_STYLE}[out_f.name[:3]]
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
             break
         url, model = eps[i % len(eps)]
         key_ = f"{t}|{model}"
-        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
             seen_k[key_] = seen_k.get(key_, 0) + 1
             key_ += f"#{seen_k[key_]}"
         if key_ in done:
             continue
         done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_")):
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_")):
             g_, t_ = t.split("|", 1)
             tpl = styles[(i + i // len(styles)) % len(styles)]
             prompt = tpl.format(g=g_, t=t_)
@@ -808,7 +846,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -817,7 +855,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -836,9 +874,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl", "selfhelp": f"sh_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem"):
+        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
