@@ -74,6 +74,18 @@
   - 各来源检出率：repo-ai-deepseek 100%，repo-ai-kimi 100%，repo-ai-wenxin 100%
   - 各特征 AUROC：
 
+## 英文诗
+- 数据：Poetry Foundation 真人英文诗 + DeepSeek / Kimi / 通义千问 / 豆包 / Claude 写的英文诗
+- 校准集 456 人写 / 205 AI；阈值 0.795；交叉验证 AUROC 0.9836；特征 fastdetect, binoculars, logit_classifier, logit_classifier_en2
+- **英文诗：没参与校准的作者（Poetry Foundation 真人诗）与没参与校准的主题（各家模型写的英文诗）**（333 AI / 444 人写）：AUROC 0.9879；检出率 89.5%；误判率 3.1%
+  - 各来源检出率：poem-deepseek 91%，poem-doubao 90%，poem-qwen 87%，poem-claude 90%
+  - 各来源误判率：poetryfoundation 3%
+  - 各特征 AUROC：fastdetect 0.812，binoculars 0.1957，logit_classifier 0.834，fastdetect_norm 0.8051，lrr 0.5899，log_rank 0.2977，entropy 0.4124，top10 0.66，lp_burstiness 0.5955，style_cv 0.3372，style_phrases 0.4904，logit_classifier_en2 0.97
+- **英文诗：没参与校准的作者（Poetry Foundation 真人诗）与没参与校准的主题（各家模型写的英文诗）【对照：不用英文第二分类器】**（333 AI / 444 人写）：AUROC 0.8808；检出率 33.6%；误判率 2.0%
+  - 各来源检出率：poem-deepseek 46%，poem-doubao 12%，poem-qwen 44%，poem-claude 24%
+  - 各来源误判率：poetryfoundation 2%
+  - 各特征 AUROC：fastdetect 0.812，binoculars 0.1957，logit_classifier 0.834，fastdetect_norm 0.8051，lrr 0.5899，log_rank 0.2977，entropy 0.4124，top10 0.66，lp_burstiness 0.5955，style_cv 0.3372，style_phrases 0.4904，logit_classifier_en2 0.97
+
 ## 文言
 - 数据：NiuTrans 古文语料（人写）+ 大语言模型生成的文言样本
 - 校准集 373 人写 / 198 AI；阈值 0.5；交叉验证 AUROC 0.9999；特征 fastdetect, binoculars, logit_classifier
