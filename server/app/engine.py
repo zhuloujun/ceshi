@@ -262,6 +262,25 @@ def window_flag(prob, second, seg_second=None, register: str = "") -> str | None
     return None
 
 
+
+def is_en_verse(text: str) -> bool:
+    """英文诗 / 分行散文诗：多数行很短、按行断开（第一行当作标题不算）。"""
+    lines = [l.strip() for l in text.splitlines() if l.strip()][1:] or [""]
+    # 清单 / 配料表（"Fine salt: 5 g"）行也很短，但不是诗：带冒号或数字的短行占三成以上就不算
+    listy = sum(bool(re.search(r":\s|\d", l)) for l in lines) >= 0.3 * len(lines)
+    # 夹着项目符号列表的论文段落（"Examples include:""Measure:"后面几行短语）也有很多短行，但有两行以上以冒号结尾、引出列表，
+    # 诗几乎不这样写（2026-10 用户的 pol.docx：两段这样的段落被当成诗，没有参与整篇判断）
+    prose_lines = sum(l.endswith((":", "：")) for l in lines) >= 2
+    if not (len(lines) >= 4 and sorted(len(l) for l in lines)[len(lines) // 2] <= 80 and not listy and not prose_lines):
+        return False
+    # 从 .docx 表格、公式块、"■ ... INSIGHT" 框里取出的文字也是一行一个短语（2026-10-27：用户 160 篇 AI 文档里 44 段这样的
+    # 表格 / 公式被当成诗，因而不参与整篇判断，Gemini《沉积学》《历史语言学》只剩 64–67%）。诗的行尾多有标点（逗号、句号），
+    # 或者一句跨行、下一行小写开头；表格单元格两样都很少（44 段里行尾有标点的最多 45%，小写开头的最多 12%；
+    # 用户的 Gemini 十四行诗 81–100%）。
+    punct = sum(bool(re.search(r"[.,;:!?\"”’)—–-]$", l)) for l in lines) / len(lines)
+    lower = sum(l[:1].islower() for l in lines) / len(lines)
+    return punct >= 0.5 or lower >= 0.3
+
 class Engine:
     def __init__(self):
         self.lm = LMScorer() if config.ENABLE_LM else None
@@ -703,18 +722,7 @@ class Engine:
 
         # 英文诗 / 分行散文诗（Whitman、泰戈尔《The Journey》）：多数行很短、按行断开。整篇分类器是用散文训练的，
         # 对分行的诗不可靠（泰戈尔《吉檀迦利》两个整篇分类器都打到 0.88–0.95），这类段落只按自己的得分判断，不参与整篇判断。
-        en_verse = set()
-        for s_ in segs:
-            if s_.register != "en":
-                continue
-            lines = [l.strip() for l in s_.text.splitlines() if l.strip()][1:] or [""]
-            # 清单 / 配料表（"Fine salt: 5 g"）行也很短，但不是诗：带冒号或数字的短行占三成以上就不算
-            listy = sum(bool(re.search(r":\s|\d", l)) for l in lines) >= 0.3 * len(lines)
-            # 夹着项目符号列表的论文段落（"Examples include:""Measure:"后面几行短语）也有很多短行，但有两行以上以冒号结尾、引出列表，
-            # 诗几乎不这样写（2026-10 用户的 pol.docx：两段这样的段落被当成诗，没有参与整篇判断）
-            prose_lines = 2 * (sum(l.endswith((":", "：")) for l in lines) >= 2)
-            if len(lines) >= 4 and sorted(len(l) for l in lines)[len(lines) // 2] <= 80 and not listy and prose_lines < 2:
-                en_verse.add(s_.index)
+        en_verse = {s_.index for s_ in segs if s_.register == "en" and is_en_verse(s_.text)}
 
         paper_ai = set()
         if en_paper:
