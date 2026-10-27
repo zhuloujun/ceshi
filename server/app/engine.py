@@ -997,7 +997,10 @@ class Engine:
                 tot_w = sum(w["chars"] for w in wins_out) or 1
                 hum_w = sum(w["chars"] for w in wins_out if w["flag"] == "human")
                 ai_w = sum(w["chars"] for w in wins_out if w["flag"] == "ai")
-                if level in ("high", "mid", "light") and not by_work and hum_w >= config.WIN_PARTIAL_MIN_SHARE * tot_w:
+                sure_en = (s.register == "en" and prob >= config.WIN_PARTIAL_SKIP_PROB
+                           and (sc.get("classifier_en2") or 0) >= config.WIN_PARTIAL_SKIP_EN2)
+                if level in ("high", "mid", "light") and not by_work and not sure_en \
+                        and hum_w >= config.WIN_PARTIAL_MIN_SHARE * tot_w:
                     ai_chars = round(len(s.text) * (1 - hum_w / tot_w))
                     partial = "partial"
                     label = f"{label}（部分句子明显像人写，按约 {ai_chars / len(s.text):.0%} 计入）"
