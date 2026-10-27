@@ -142,34 +142,35 @@ jobs:
       - name: 下载数据集（英文诗：Poetry Foundation 真人诗，只保存得分）
         if: ${{ startsWith(matrix.part, 'en_po_') }}
         run: |
-          pip install -q pandas pyarrow
+          pip install -q pandas pyarrow "datasets>=2.19"
           python - <<'PY'
           import json, os, re
-          import pandas as pd
-          from huggingface_hub import hf_hub_download, list_repo_files
+          from datasets import load_dataset
           os.makedirs("/tmp/enpoetry", exist_ok=True)
           rows = []
-          for repo in ["shahules786/PoetryFoundationData", "suayptalha/Poetry-Foundation-Poems"]:
+          for repo in ["shahules786/PoetryFoundationData", "suayptalha/Poetry-Foundation-Poems", "merve/poetry", "DanFosing/public-domain-poetry"]:
               try:
-                  files = [f for f in list_repo_files(repo, repo_type="dataset", revision="refs/convert/parquet") if f.endswith(".parquet")]
-                  df = pd.concat([pd.read_parquet(hf_hub_download(repo, f, repo_type="dataset", revision="refs/convert/parquet")) for f in files])
+                  df = load_dataset(repo, split="train").to_pandas()
               except Exception as e:
-                  print("skip", repo, e); continue
+                  print(f"::warning title=英文诗数据 {repo}::下载失败 {str(e)[:200]}"); continue
               strs = [c for c in df.columns if df[c].dtype == object]
               tc = max(strs, key=lambda c: df[c].astype(str).str.len().mean())
               ac = next((c for c in df.columns if re.search("author|poet", c, re.I)), None)
-              print(repo, len(df), "text:", tc, "author:", ac)
+              n0 = len(rows)
               for _, r in df.iterrows():
-                  t = re.sub(r"\r", "", str(r[tc])).strip()
-                  t = re.sub(r"\n[ \t]*\n+", "\n", t)       # 网页抓取时每行之间多出的空行
+                  t = str(r[tc]).replace("\r", "").strip()
+                  t = re.sub(r"\n[ \t]*\n+", "\n", t)
                   lines = [l for l in t.splitlines() if l.strip()]
                   if 4 <= len(lines) <= 60 and 200 <= len(t) <= 2500:
-                      rows.append({"text": t, "author": str(r[ac]) if ac else "?"})
-              break
+                      rows.append({"text": t, "author": (str(r[ac]) if ac else "?").strip(), "src": repo})
+              print(f"::notice title=英文诗数据 {repo}::{len(df)} 行，列 {list(df.columns)[:8]}，正文列 {tc}，作者列 {ac}，可用 {len(rows) - n0} 首")
+              if len(rows) >= 3000:
+                  break
           with open("/tmp/enpoetry/human.jsonl", "w") as f:
               for r in rows:
-                  f.write(json.dumps(r, ensure_ascii=False) + "\n")
-          print("真人英文诗", len(rows))
+                  f.write(json.dumps(r, ensure_ascii=True) + "\n")
+          if not rows:
+              raise SystemExit("没有取到任何真人英文诗")
           PY
       - name: 下载数据集（诗词：ChangAn）和诗词分类器（本仓库 Release）
         if: ${{ startsWith(matrix.part, 'po_') }}
