@@ -870,8 +870,10 @@ class Engine:
                 if med >= config.EN3_DOC_THRESHOLD or joint:
                     en3_hit = {i for i in idxs if smoothed.get(i) is not None
                                and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
-                               and own_ok(i, "classifier_en4" if results[i].get("classifier_en4") is not None
-                                          else "classifier_en3")}
+                               and (own_ok(i, "classifier_en4" if results[i].get("classifier_en4") is not None
+                                           else "classifier_en3")
+                                    or (i not in en_verse
+                                        and (results[i].get("classifier_en3") or 0) >= config.EN3_OWN_CARRY))}
                     zh2_ai |= en3_hit
                     en3_ai.update(en3_hit)
         work_ai -= zh2_ai
