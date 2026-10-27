@@ -1,0 +1,582 @@
+# 本文件中的英文诗全部由 AI（Claude）写成，2026-10-27，作为英文诗校准（en_poetry）的 AI 样本。
+# 诗体与写法尽量多样：格律诗、自由诗、"模仿真人诗人"的写法、带口语和具体细节的写法。
+===
+# The Night Ferry
+The ferry hums across the harbor dark,
+its wake a silver seam that will not hold;
+a gull rides on the railing like a mark
+of punctuation in a sentence, cold.
+
+The passengers are strangers, half asleep,
+their faces lit by phones in blue and white;
+a child presses her forehead to the deep
+and counts the buoys blinking in the night.
+
+We carry what we cannot put to words:
+the meeting that went wrong, the unpaid bill,
+the voice of someone gone, like distant birds
+that call across the water and are still.
+
+And when the engines slow and ropes are thrown,
+we step into the city, each alone.
+===
+# Inventory of My Father's Garage
+Three coffee cans of screws, unsorted.
+A calendar from 1994, still on March.
+A radio that only gets the ballgame.
+Rags that used to be my brother's shirts.
+
+I came to clear it out. I've been here
+two hours holding a tape measure,
+pulling the yellow tongue out, letting it snap back,
+the way he did when he was thinking.
+
+There is a jar of keys to nothing.
+There is a level with its bubble
+drifted slightly left, which explains
+every shelf in the house.
+
+I put the tape measure in my pocket.
+I leave the rest exactly where it is.
+===
+# Villanelle for the Rising Water
+The river rises slowly through the town;
+we stack the sandbags higher every year.
+We tell ourselves the water won't come down.
+
+The church bell rings, the mayor wears a frown,
+the radio repeats what we all fear:
+the river rises slowly through the town.
+
+The children float their paper boats and drown
+them laughing in the puddles by the pier.
+We tell ourselves the water won't come down.
+
+The old men argue in the coffee shop, renown
+for knowing every flood since they were here.
+The river rises slowly through the town.
+
+We pack the photographs, the wedding gown,
+the letters that we never meant to clear.
+We tell ourselves the water won't come down.
+
+And when at last the levee lets it drown
+the streets we loved, we'll stand and hold what's dear.
+The river rises slowly through the town.
+We tell ourselves the water won't come down.
+===
+# Haiku for a Hospital Window
+first light on the glass
+the IV drips its slow count
+somewhere a bird starts
+
+visiting hours end
+my mother folds the blanket
+corners like a flag
+
+snow on the car roofs
+the parking lot attendant
+waves at no one, smiles
+
+her hand in my hand
+lighter than it was last week
+the monitor hums
+===
+# What the Beekeeper Knows in January
+The hives are wrapped in tar paper,
+humming like a refrigerator in another room.
+You don't open them. You put your ear
+against the wood and listen for the cluster,
+that low gold sound of forty thousand bodies
+shivering to keep the queen alive.
+
+My grandfather did this every morning,
+boots in the snow, coffee steaming,
+saying nothing, then saying, good, good,
+as if the bees could hear him,
+as if the whole house depended on it.
+
+Which it did, in a way. Which it does.
+===
+# Ode to a Secondhand Coat
+O coat of someone else's winters,
+your pockets keep a stranger's lint,
+a ticket stub, a peppermint,
+a button sewn with thread that splinters.
+
+You've walked through cities I won't see,
+been hung on hooks in kitchens warm,
+and shielded someone from a storm
+before you came at last to me.
+
+I wear you now to catch the bus;
+you smell of smoke and cedar chests.
+You fit me well, as if you guessed
+how cold the world can be to us.
+===
+# Last Bus
+The 2 a.m. bus is a lit aquarium
+gliding down Fulton Street.
+A nurse in purple scrubs, asleep sitting up.
+Two boys sharing earbuds, one left, one right,
+nodding to the same song at different speeds.
+A man with a bag of oranges he keeps counting.
+
+The driver knows everyone and no one.
+At every stop she says goodnight,
+the way you would say it to a child,
+the way nobody said it to me in years.
+
+I ride past my stop on purpose.
+One more block of being carried.
+===
+# Pantoum of the Moving Day
+The boxes say KITCHEN in my mother's hand.
+The house is louder now that it is bare.
+We sweep the floor and leave a ring of sand.
+I didn't know the light came in from there.
+
+The house is louder now that it is bare;
+our voices bounce like tennis balls on tile.
+I didn't know the light came in from there,
+across the stairs, where no one stood a while.
+
+Our voices bounce like tennis balls on tile.
+My father checks the windows one last time
+across the stairs, where no one stood a while,
+and turns the key as if it were a crime.
+
+My father checks the windows one last time.
+We sweep the floor and leave a ring of sand.
+He turns the key as if it were a crime.
+The boxes say KITCHEN in my mother's hand.
+===
+# Diner, Route 9
+Pie under plastic domes like museum pieces.
+The waitress, Darlene, calls everybody hon,
+pours coffee before you ask, and refills it
+before you've decided whether you want more.
+
+A trucker draws a map on a napkin for his son
+on the phone, explaining Ohio.
+The cook sings Patsy Cline off-key behind the window.
+Eggs hiss. A spoon rings against a cup.
+
+Nothing here is beautiful, exactly.
+But at four in the morning, with rain
+pulling the neon into long red threads,
+it is the closest thing I know to church.
+===
+# Elegy for a Dog Named Biscuit
+You waited by the door for fourteen years,
+your tail a metronome of pure belief
+that every car was us. Now no one hears
+the clicking of your nails. The house is brief
+
+with silence where you were. Your leash still hangs
+beside the coats. Your bowl is in the sink.
+I keep forgetting, and the kitchen pangs
+each time I drop a crust and start to think
+
+you'll catch it. You were never very wise,
+you barked at mailmen, pumpkins, and the wind,
+but you looked at us with such forgiving eyes
+it felt as if we'd never really sinned.
+
+Sleep under the lilac, Biscuit, sleep.
+The yard is yours. The promise is ours to keep.
+===
+# Learning English at Forty-Six
+In my language, the word for window
+also means a small opportunity.
+Here it is only glass.
+
+I practice in the car: the, the, the,
+my tongue between my teeth like a child
+caught stealing. My daughter corrects me
+gently, the way I once corrected her
+when she said the moon was following us.
+
+At the pharmacy I point. At the bank I nod.
+At night I dream in both languages
+and wake up homeless in each.
+
+Still, yesterday the cashier laughed at my joke.
+It was a small window. I climbed through.
+===
+# Ghazal of the Empty Station
+The trains don't stop here anymore; the station waits.
+The clock above the platform stopped at four; the station waits.
+
+The benches carved with names of lovers long since wed
+still face the tracks as if they knew the score; the station waits.
+
+A sparrow nests inside the ticket booth's cracked glass,
+and ivy climbs the waiting room's locked door; the station waits.
+
+My grandfather left from here for the war in '43;
+he came back thinner, quiet to the core. The station waits.
+
+I come on Sundays, sit, and listen for the whistle,
+as if the past could arrive once more. The station waits.
+===
+# Prose Poem: The Piano on the Curb
+Someone has left an upright piano on the curb of Elm Street with a sign that says FREE, WORKS MOSTLY. All afternoon people stop. A man in a delivery uniform plays the first four bars of something and leaves. Two girls play chopsticks until their mother calls them. An old woman sits down and plays, very slowly, a waltz that nobody on the street recognizes, and when she finishes she closes the lid like a coffin and pats it twice. By evening it starts to rain. No one has taken it. Water beads on the black wood. In the morning, the garbage truck comes, and the men stand around it for a long time, deciding, before they lift.
+===
+# Small Hours
+I am awake again at 3:12.
+The refrigerator is making its speech
+about cold and patience. A car passes,
+its headlights sweeping the ceiling
+like someone looking for a lost earring.
+
+I think about the email I sent,
+the thing I said to my sister in 2009,
+whether the stove is off. It is off.
+I check anyway, barefoot on the tile.
+
+Outside, the neighbor's cat sits on the fence
+like it has been hired to.
+We look at each other. Neither of us
+is going to explain anything.
+===
+# Sonnet for the Night Nurse
+She walks the corridor at half past three,
+her shoes so quiet that the sleepers stay
+asleep; she checks the charts, the IV's sway,
+and smooths a blanket no one else will see.
+
+She knows which patient likes the window cracked,
+which one will cry at four and want to talk,
+which one has no one coming. In her walk
+there is a kind of mercy, plain and exact.
+
+At seven she will drive home through the sun,
+eat cereal standing up, and close the blind,
+and sleep while all the healthy world goes on,
+the faces of the night still in her mind.
+
+We never learn her name. We should. We don't.
+She'll come again tonight. Of course she won't
+
+forget us.
+===
+# Harvest, Late
+The combine sits in the north field like a dinosaur
+that died mid-sentence. Too wet to cut.
+My father stands at the kitchen window
+with his coffee, saying the weather report
+back to the television, word for word,
+as if repeating it might change it.
+
+The bank called twice. Mom answered once.
+The soybeans are fine, he says, they're fine,
+another week won't hurt them.
+His jaw says something else.
+
+I am nineteen and home for the weekend.
+I don't know anything about soybeans.
+I stand next to him at the window anyway,
+and we both watch it rain.
+===
+# Ballad of the Lighthouse Keeper
+The keeper climbed the iron stair
+each night for forty years,
+he lit the lamp with steady hands
+and swallowed all his fears.
+
+The ships went by like passing thoughts,
+some near and some afar;
+he never knew the sailors' names,
+but they all knew his star.
+
+One winter came a dreadful gale,
+the waves rose up like hills;
+he kept the light alight till dawn
+with nothing but his will.
+
+They found him sleeping by the lamp,
+his coat still wet with spray,
+the light still burning through the fog
+long after it was day.
+===
+# Tercets for My Mother's Hands
+Her hands smelled of onions and Jergens lotion,
+of the pennies she counted at the kitchen table
+the week before payday, lips moving.
+
+Her knuckles got big the way her mother's did.
+She'd hold them up and laugh, look at these,
+like two bags of walnuts, and keep on peeling.
+
+Now they rest on the hospital sheet, quiet,
+the wedding ring loose, turned the wrong way.
+I turn it back. She doesn't wake.
+
+I have her hands. I notice it typing,
+or holding a cup, or reaching across
+a table for someone who isn't there.
+===
+# Spoken Word: Overtime
+They say hustle like it's a hymn,
+like the alarm clock is a prayer bell,
+like double shifts are a kind of grace.
+My uncle worked thirty years at the plant,
+got a plaque, a handshake, a bad back,
+and a pension that disappeared the same year as his hair.
+He used to say, a job is a job,
+and I used to think that was a shrug.
+Now I know it was a whole philosophy:
+you show up, you do the thing,
+you come home and you kiss your kids
+with hands that still smell like machine oil,
+and you don't let the world tell you
+that's not a kind of poetry.
+It is. It was. It always was.
+===
+# Orchard in Four Seasons
+I. Spring
+White petals on the grass like spilled confetti
+after a wedding nobody invited us to.
+
+II. Summer
+The ladder leans into the tree.
+My brother at the top, throwing down
+the bruised ones at my head.
+
+III. Autumn
+Crates stacked by the road, a coffee can for money,
+the honor system working, mostly.
+
+IV. Winter
+Bare branches drawn in pencil on the sky.
+My grandfather pruning, saying
+you have to cut to make it give.
+===
+# The Weather Inside
+Some days I am a front moving in from the west,
+low pressure, unsettled, scattered showers
+over the kitchen and the living room.
+My children check my face like a forecast
+and pack umbrellas without being told.
+
+Other days I'm clear skies, seventy-two degrees,
+the kind of mother who says yes to pancakes
+on a Tuesday, who sings in the car.
+
+I want to tell them it's not their fault,
+the weather. That it comes from somewhere far,
+some ocean I was born beside,
+and that I am trying, every morning,
+to change the climate.
+===
+# Blank Verse: The Surveyor
+He walked the land before the land had lines,
+a tripod on his shoulder, chain in hand,
+and where he stopped, a county came to be.
+The creek became a border, and the hill
+a property; the oak tree turned a corner
+of someone's farm that someone else would lose.
+He never thought of that. He thought of angles,
+of how the sun at noon would fix the north,
+of how a careful man could pin the world
+with numbers to a page and call it known.
+And yet at night, beside his little fire,
+he'd hear the coyotes singing past his marks,
+and wonder who had drawn the lines for them.
+===
+# Dramatic Monologue: The Retiring Teacher
+You want to know what thirty-four years teaches?
+That every September smells like pencil shavings
+and floor wax and fear, mine as much as theirs.
+That the quiet ones are not always fine.
+That the loud ones are almost never fine.
+That a boy named Danny Ruiz in 1997
+couldn't read until he was twelve, and then
+read every book on my shelf, and wrote to me
+from Iraq, and then didn't write again.
+I keep his letters in my desk. I'm taking those.
+The rest, the posters, the stapler, the plants,
+you can have them. The new teacher can have them.
+Tell her to learn their names in the first week.
+Tell her it matters more than she thinks.
+===
+# Ocean, Storm
+The sea comes up the beach like a creditor,
+demanding what it's owed. The dunes give way.
+The fence posts lean like drunks. A plastic chair
+cartwheels down the empty boardwalk.
+
+We stand at the window of the rented house
+with our wine and our safe opinions,
+saying wow, saying look at that,
+as if the ocean were a show put on for us.
+
+By morning it is calm and blue and innocent,
+a dog chasing its own reflection in the shallows.
+Only the beach remembers, rearranged,
+a staircase ending three feet above the sand.
+===
+# Small-Town Friday
+The whole town comes out for the game,
+the bleachers creaking under casseroles and gossip.
+The band plays the fight song slightly flat,
+the cheerleaders' breath making clouds.
+
+Coach Miller paces like a man whose house is on fire.
+The quarterback is the dentist's son.
+The kicker is a Guatemalan kid who learned the game
+two years ago and never misses.
+
+We lose by three. Nobody minds that much.
+Afterward the parking lot is a constellation
+of taillights and goodnights,
+and someone's grandmother hands out cookies
+to both teams, like a peace treaty.
+===
+# A Letter Never Sent
+Dear brother, I've started this letter
+eleven times. The first ten
+were angry. This one is just tired.
+
+I saw your daughter's picture online.
+She has Mom's chin. I didn't know
+whether to like it, so I didn't.
+
+I still have your baseball glove.
+I don't know why. It doesn't fit me,
+and I don't play. It's just there,
+in the closet, being yours.
+
+If you called, I would answer.
+I want you to know that.
+I'm not going to mail this.
+===
+# Song for the Night Shift at the Warehouse
+Forklifts beep their backward hymns,
+the conveyor belts run on and on;
+we load the boxes, stretch our limbs,
+and dream of morning, dream of dawn.
+
+The packages are someone's joy,
+a birthday gift, a pair of shoes,
+a sweater for a little boy,
+a book of poems, or the blues.
+
+We never see the ones who wait;
+we only see the barcode's lines.
+We clock out at a quarter eight
+beneath the blinking exit signs.
+===
+# Commute
+Every morning the same eleven faces
+on the 7:42. We have never spoken.
+I know the man with the crossword
+does it in pen. I know the woman
+with the red scarf cried once in March,
+quietly, behind her sunglasses,
+and that nobody said anything,
+and that this was a kindness.
+
+When the young guy with the guitar case
+stopped riding, we all noticed.
+We looked at each other for a moment
+like a family at a funeral,
+then went back to our phones.
+===
+# After the Fire
+The hills above town are black now,
+burnt matchsticks where the pines were.
+Ash fell for three days like gray snow
+and the kids wrote their names on the cars.
+
+The Hendersons lost everything but the chimney.
+It stands there like a man refusing to leave.
+Mrs. Henderson goes up every afternoon
+and sweeps the hearth. Nobody asks why.
+
+In April, green will come back, people say.
+The fireweed first, then the grasses.
+It's what the land does, they say.
+It's not the same thing as forgiving.
+===
+# Stars Over the Desert
+Out past the last gas station
+the sky stops pretending.
+No streetlight, no window, no excuse;
+just the whole spilled jar of it,
+the Milky Way like a crack in the ceiling
+where something older leaks through.
+
+My son lies on the hood of the car,
+naming them wrong on purpose
+to make me laugh. That one's Kevin.
+That one's Grandma's cat.
+
+I don't correct him.
+They have had enough names.
+Tonight they can have his.
+===
+# Coffee at Dawn
+Before the house wakes up I own the kitchen:
+the kettle's rising argument, the blue
+flame lapping at the pot, the window glistening
+with dew, the neighbor's porch light coming through.
+
+This is the hour I don't belong to anyone,
+not to the job, the kids, the phone, the news;
+the coffee's bitter and the day's not begun,
+and nothing has been asked that I could lose.
+
+Then footsteps on the stairs, a sleepy voice,
+a request for cereal, a missing shoe,
+and I set down my cup, not by choice,
+but gladly, mostly. Mostly. It's true.
+===
+# The Library on Sunday
+Radiators knocking like polite guests.
+An old man reading the same newspaper
+he read yesterday, at the same table,
+licking his finger before each page.
+
+A girl in a hijab studies chemistry
+with headphones on, mouthing the formulas.
+A homeless man sleeps by the atlases,
+and the librarian lets him, and I love her for it.
+
+Outside it's cold and the world is selling things.
+In here, for free, anyone can sit
+and be warm and be quiet and be
+for a few hours, someone who reads.
+===
+# Watching My Father Get Old
+He asks me to read the menu to him.
+He says the print is small. It isn't.
+I read it slowly, the way he read to me
+Goodnight Moon a thousand times,
+and he orders what he always orders,
+and I pretend that this is normal.
+
+In the parking lot he hands me the keys
+without a word. That's the first time.
+I adjust the seat. He looks out the window
+at the town he built houses in for forty years,
+pointing, that one, and that one, and that one,
+as if he is signing his name.
+===
+# Hope, After
+The doctor said the word remission
+like she was handing me a bird,
+something small and alive and likely
+to fly off if I held it wrong.
+
+I drove home with it in my chest.
+I didn't play the radio.
+At the light on Grant Street
+a man was selling roses from a bucket
+and I bought all of them, eleven roses,
+and he looked at me like I was crazy,
+and I was, a little,
+and I said thank you, thank you,
+and he said, ma'am, it's just flowers.
+It wasn't.
