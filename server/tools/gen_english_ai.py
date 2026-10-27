@@ -630,6 +630,44 @@ PAPER_TOPICS = [
 ]
 
 
+# 英文诗（2026-10）：用户的 Gemini 十四行诗组（GEM_122）每首只有 31–78%，全部漏判。英文诗此前没有专门的校准，只能套用散文的阈值。
+# 生成各种诗体（十四行诗、自由诗、维拉内拉、俳句组诗、民谣、挽歌、散文诗、说唱式歌词……），配合 Poetry Foundation 的真人诗，
+# 给英文诗单独拟合一套校准（evaluate.py 的 en_poetry）。部分提示要求"写得像真人诗人，不押韵、意象具体"（规避检测的常见用法）。
+POEM_STYLE = [
+    "Write a {g} about {t}. Output only the poem, with a title.",
+    "Write a {g} about {t} in the voice of a contemporary American poet. Avoid cliches; use concrete, surprising images. Only the poem.",
+    "用英文写一首{g}，主题是{t}。只输出诗歌本身（带标题）。",
+    "Write a {g} about {t} that reads like it was written by a real human poet, not an AI: irregular rhythm, specific "
+    "personal details, no tidy moral at the end. Output only the poem.",
+    "帮我写一首英文{g}，关于{t}，要有画面感和情感，适合发表在诗歌杂志上。只要诗。",
+    "Write a sequence of three short connected poems ({g}) about {t}. Give each part a title. Output only the poems.",
+]
+POEM_FORMS = ["Shakespearean sonnet", "Petrarchan sonnet", "free verse poem", "villanelle", "sequence of haiku",
+              "ballad in quatrains", "elegy", "prose poem", "ode", "pantoum", "ghazal", "poem in tercets",
+              "short lyric poem", "dramatic monologue", "spoken-word poem", "blank verse meditation"]
+POEM_SUBJECTS = [
+    "a lighthouse keeper's last night on duty", "the smell of a grandmother's kitchen", "a city bus at 2 a.m.",
+    "migrating geese over a frozen lake", "a father teaching his daughter to drive", "grief after a dog dies",
+    "a factory town after the plant closed", "first snow in a hospital parking lot", "an old piano left on the curb",
+    "learning a second language as an adult", "tide pools and hermit crabs", "the night shift at a diner",
+    "a wedding seen from the kitchen staff's view", "drought on a family farm", "a phone call from a long-lost brother",
+    "the moon over a refugee camp", "teenage summer jobs", "autumn leaves in a cemetery", "a beekeeper in winter",
+    "a mother's hands", "insomnia and the refrigerator hum", "a soldier writing home", "the first heartbreak",
+    "an abandoned railway station", "the ocean during a storm", "a garden after the gardener has died",
+    "commuting on a crowded subway", "a small-town Friday football game", "watching a parent grow old",
+    "coffee at dawn before anyone wakes", "a forest fire seen from far away", "moving out of a childhood home",
+    "a jazz club in the rain", "the stars seen from a desert", "a nurse finishing a twelve-hour shift",
+    "fishing with an uncle who never talks", "a library on a Sunday afternoon", "the sound of a train at night",
+    "a lost glove on a fence post", "time and memory", "hope after a long illness", "the four seasons of an orchard",
+]
+
+
+def poem_topics(rnd):
+    pairs = [(f, t) for t in POEM_SUBJECTS for f in rnd.sample(POEM_FORMS, 4)]
+    rnd.shuffle(pairs)
+    return pairs
+
+
 def genre_topics(rnd):
     ts = GENRE_TOPICS * 3
     rnd.shuffle(ts)
@@ -686,7 +724,11 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         styles = [x for pair in zip(USER_STYLE * 2, GENRE_STYLE) for x in pair]
     else:
         topics, styles = (genre_topics(rnd), GENRE_STYLE) if out_f.name.startswith("ge_") else (user_style_topics(rnd), USER_STYLE)
-    if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
+    if out_f.name.startswith("po_"):                           # 英文诗：诗体 × 主题
+        topics = [f"{g}|{t}" for g, t in poem_topics(rnd)]
+        seen_k = {}
+        styles = POEM_STYLE
+    elif out_f.name.startswith(("nv_", "dc_", "ap_", "nf_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
         tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS, "nf_": NONFIC_TOPICS}[out_f.name[:3]]
         pairs = [(g, t) for g, t in tbl for _ in range(4)]
         rnd.shuffle(pairs)
@@ -699,14 +741,14 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
             break
         url, model = eps[i % len(eps)]
         key_ = f"{t}|{model}"
-        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
             seen_k[key_] = seen_k.get(key_, 0) + 1
             key_ += f"#{seen_k[key_]}"
         if key_ in done:
             continue
         done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_")):
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_")):
             g_, t_ = t.split("|", 1)
             tpl = styles[(i + i // len(styles)) % len(styles)]
             prompt = tpl.format(g=g_, t=t_)
@@ -720,7 +762,7 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         if humanize and text and kind == "user_style" and len(text) > 800:
             text = chat(url, key, model, rnd.choice(HUMANIZE_EN).format(text=clean(text)[:9000]), 0.9, 4000)
             kind = "humanize_rewrite"
-        if text and len(text) > 800:
+        if text and len(text) > (200 if out_f.name.startswith("po_") else 800):
             with lock, out_f.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps({"title": t, "kind": kind, "model": name, "ver": model, "text": clean(text),
                                      **({"k": key_[key_.rfind("#"):]} if "#" in key_ else {})},
@@ -766,7 +808,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -775,7 +817,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -794,9 +836,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction"):
+        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
