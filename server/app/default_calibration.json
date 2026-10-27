@@ -409,6 +409,72 @@
    },
    "source": "ChangAn 当代旧体诗词（人写）+ DeepSeek / 豆包 / GPT-4.1 生成诗词；诗词专用分类器（ChangAn 训练集微调）",
    "profile": "zh_poetry"
+  },
+  "en_poetry": {
+   "version": 1,
+   "calibrated": true,
+   "signals": {
+    "fastdetect": {
+     "center": -0.3341228016340603,
+     "scale": 1.2607767183732295,
+     "direction": 1
+    },
+    "binoculars": {
+     "center": 1.0161300993916877,
+     "scale": 0.06339146439859408,
+     "direction": -1
+    },
+    "classifier": {
+     "center": 0.0674272533506155,
+     "scale": 0.244263030527475,
+     "direction": 1
+    }
+   },
+   "weights": {
+    "fastdetect": 0.35,
+    "binoculars": 0.25,
+    "classifier": 0.4
+   },
+   "threshold": 0.795,
+   "note": "内置默认校准（英文诗）：用公开数据 456 段人写、205 段 AI 文本拟合；建议再用你自己的文字校准。",
+   "lr": {
+    "w": [
+     0.9670742789328214,
+     0.04341038987044454,
+     1.0543841543994499,
+     2.4932667180931016
+    ],
+    "b": -1.4494806710150592,
+    "mean": [
+     -0.6008310249536446,
+     1.0283268952759592,
+     -3.788720207765237,
+     -0.8295472348417233
+    ],
+    "std": [
+     1.433723440612792,
+     0.07116507121624609,
+     3.1417171680256546,
+     2.584434106377786
+    ],
+    "features": [
+     "fastdetect",
+     "binoculars",
+     "logit_classifier",
+     "logit_classifier_en2"
+    ]
+   },
+   "or_rule": {
+    "feature": "classifier_en2",
+    "t": 0.945
+   },
+   "models": {
+    "observer": "Qwen/Qwen2.5-0.5B",
+    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
+    "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v14"
+   },
+   "source": "Poetry Foundation 真人英文诗 + DeepSeek / Kimi / 通义千问 / 豆包 / Claude 写的英文诗",
+   "profile": "en_poetry"
   }
  }
 }
