@@ -183,11 +183,11 @@
  "en": {
   "calibration_report": {
    "n_human": 1232,
-   "n_ai": 800,
+   "n_ai": 807,
    "auroc": {
-    "fastdetect": 0.6963,
-    "binoculars": 0.693,
-    "classifier": 0.9344
+    "fastdetect": 0.6925,
+    "binoculars": 0.6897,
+    "classifier": 0.9297
    },
    "features_used": [
     "fastdetect",
@@ -197,15 +197,15 @@
    ],
    "cross_validated": true,
    "or_rule": {
-    "t": 0.91,
-    "threshold": 0.785,
-    "ai_caught": 0.9413,
+    "t": 0.915,
+    "threshold": 0.765,
+    "ai_caught": 0.943,
     "human_flagged": 0.0349
    },
-   "combined_auroc": 0.9866,
-   "threshold": 0.785,
+   "combined_auroc": 0.9864,
+   "threshold": 0.765,
    "human_flagged_rate": 0.0349,
-   "ai_caught_rate": 0.9412,
+   "ai_caught_rate": 0.943,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
   },
   "evaluation": [
@@ -213,8 +213,8 @@
     "name": "国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准",
     "n_human": 478,
     "n_ai": 551,
-    "auroc": 0.993,
-    "ai_caught": 0.9909,
+    "auroc": 0.9926,
+    "ai_caught": 0.9891,
     "human_flagged": 0.0418,
     "per_signal_auroc": {
      "fastdetect": 0.6292,
@@ -257,9 +257,9 @@
     "name": "当代出版小说（真人，没参与校准的那一半书）与 AI 写的小说段落",
     "n_human": 616,
     "n_ai": 47,
-    "auroc": 0.9924,
+    "auroc": 0.992,
     "ai_caught": 0.9787,
-    "human_flagged": 0.0325,
+    "human_flagged": 0.0373,
     "per_signal_auroc": {
      "fastdetect": 0.7359,
      "binoculars": 0.2868,
@@ -279,8 +279,8 @@
      "cs1021-ai": 1.0
     },
     "human_flagged_by_source": {
-     "novel-human": 0.0148,
-     "novel-human-sparks": 0.15,
+     "novel-human": 0.0185,
+     "novel-human-sparks": 0.1667,
      "cs1021-human": 0.1875
     }
    },
@@ -288,9 +288,9 @@
     "name": "MAGE：GPT-4 在未见过的领域生成的文本",
     "n_human": 150,
     "n_ai": 150,
-    "auroc": 0.9836,
+    "auroc": 0.9835,
     "ai_caught": 0.9333,
-    "human_flagged": 0.08,
+    "human_flagged": 0.0933,
     "per_signal_auroc": {
      "fastdetect": 0.8273,
      "binoculars": 0.1768,
@@ -312,8 +312,8 @@
      "dialogsum_gpt4": 0.9688
     },
     "human_flagged_by_source": {
-     "pubmed_human": 0.1837,
-     "dialogsum_human": 0.0882,
+     "pubmed_human": 0.2041,
+     "dialogsum_human": 0.1176,
      "imdb_human": 0.0,
      "cnn_human": 0.0
     }
@@ -322,7 +322,7 @@
     "name": "MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）",
     "n_human": 150,
     "n_ai": 173,
-    "auroc": 0.9085,
+    "auroc": 0.908,
     "ai_caught": 0.7168,
     "human_flagged": 0.0867,
     "per_signal_auroc": {
@@ -361,9 +361,9 @@
     "name": "国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准【对照：不用英文第二分类器】",
     "n_human": 478,
     "n_ai": 551,
-    "auroc": 0.8959,
-    "ai_caught": 0.7042,
-    "human_flagged": 0.0335,
+    "auroc": 0.8964,
+    "ai_caught": 0.7024,
+    "human_flagged": 0.0314,
     "per_signal_auroc": {
      "fastdetect": 0.6292,
      "binoculars": 0.3676,
@@ -380,7 +380,7 @@
     },
     "ai_caught_by_model": {},
     "human_flagged_by_source": {
-     "arxiv-human": 0.0455,
+     "arxiv-human": 0.0303,
      "genre-human": 0.0173,
      "pmc-human": 0.0345,
      "pubmed-human": 0.0442
@@ -405,7 +405,7 @@
     "name": "当代出版小说（真人，没参与校准的那一半书）与 AI 写的小说段落【对照：不用英文第二分类器】",
     "n_human": 616,
     "n_ai": 47,
-    "auroc": 0.8488,
+    "auroc": 0.8452,
     "ai_caught": 0.5106,
     "human_flagged": 0.0276,
     "per_signal_auroc": {
@@ -436,7 +436,7 @@
     "name": "MAGE：GPT-4 在未见过的领域生成的文本【对照：不用英文第二分类器】",
     "n_human": 150,
     "n_ai": 150,
-    "auroc": 0.9824,
+    "auroc": 0.9822,
     "ai_caught": 0.9533,
     "human_flagged": 0.06,
     "per_signal_auroc": {
@@ -470,7 +470,7 @@
     "name": "MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）【对照：不用英文第二分类器】",
     "n_human": 150,
     "n_ai": 173,
-    "auroc": 0.8846,
+    "auroc": 0.8844,
     "ai_caught": 0.7457,
     "human_flagged": 0.14,
     "per_signal_auroc": {
@@ -515,11 +515,11 @@
  "en_paper": {
   "calibration_report": {
    "n_human": 480,
-   "n_ai": 500,
+   "n_ai": 507,
    "auroc": {
-    "fastdetect": 0.6527,
-    "binoculars": 0.6557,
-    "classifier": 0.9083
+    "fastdetect": 0.6471,
+    "binoculars": 0.6512,
+    "classifier": 0.9011
    },
    "features_used": [
     "logit_classifier_en2",
@@ -527,10 +527,10 @@
     "binoculars"
    ],
    "cross_validated": true,
-   "combined_auroc": 0.9978,
-   "threshold": 0.9298,
+   "combined_auroc": 0.998,
+   "threshold": 0.9326,
    "human_flagged_rate": 0.0104,
-   "ai_caught_rate": 0.972,
+   "ai_caught_rate": 0.9704,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
   },
   "evaluation": [
@@ -538,9 +538,9 @@
     "name": "英文学术论文：没参与训练和校准的题目（国产模型写的论文 vs arXiv / PubMed / PMC 真人，含中国作者）",
     "n_human": 478,
     "n_ai": 551,
-    "auroc": 0.9986,
-    "ai_caught": 0.9855,
-    "human_flagged": 0.0272,
+    "auroc": 0.9987,
+    "ai_caught": 0.9837,
+    "human_flagged": 0.0251,
     "per_signal_auroc": {
      "fastdetect": 0.6292,
      "binoculars": 0.3676,
@@ -558,7 +558,7 @@
     "ai_caught_by_model": {},
     "human_flagged_by_source": {
      "arxiv-human": 0.1212,
-     "genre-human": 0.0058,
+     "genre-human": 0.0,
      "pmc-human": 0.0,
      "pubmed-human": 0.0221
     }
@@ -688,7 +688,7 @@
     "诗词分类器 + 语言模型": 0.3831,
     "诗词分类器 + 通用分类器 + 语言模型": 0.3434,
     "通用分类器 + 语言模型": 0.1325,
-    "只用语言模型": 0.1128
+    "只用语言模型": 0.1127
    },
    "feature_set": "只用诗词分类器",
    "variant_table": {
@@ -703,7 +703,7 @@
     "诗词分类器 + 语言模型": {
      "ChangAn 保留集": 0.9513,
      "故事诗 vs 当代人写": 0.7208,
-     "ChangAn AI vs 唐宋名篇": 0.7902,
+     "ChangAn AI vs 唐宋名篇": 0.7903,
      "故事诗 vs 唐宋名篇": 0.3831,
      "国产新模型诗 vs 当代人写": 0.9878,
      "国产新模型诗 vs 唐宋名篇": 0.8844
@@ -721,14 +721,14 @@
      "故事诗 vs 当代人写": 0.5923,
      "ChangAn AI vs 唐宋名篇": 0.3359,
      "故事诗 vs 唐宋名篇": 0.1325,
-     "国产新模型诗 vs 当代人写": 0.8361,
+     "国产新模型诗 vs 当代人写": 0.836,
      "国产新模型诗 vs 唐宋名篇": 0.3113
     },
     "只用语言模型": {
      "ChangAn 保留集": 0.8379,
      "故事诗 vs 当代人写": 0.676,
      "ChangAn AI vs 唐宋名篇": 0.2267,
-     "故事诗 vs 唐宋名篇": 0.1128,
+     "故事诗 vs 唐宋名篇": 0.1127,
      "国产新模型诗 vs 当代人写": 0.9366,
      "国产新模型诗 vs 唐宋名篇": 0.3101
     }
@@ -759,7 +759,7 @@
     "ai_caught": 0.6733,
     "human_flagged": 0.03,
     "per_signal_auroc": {
-     "fastdetect": 0.7596,
+     "fastdetect": 0.7595,
      "binoculars": 0.2502,
      "logit_classifier": 0.9543,
      "fastdetect_norm": 0.7519,
