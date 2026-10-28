@@ -238,7 +238,7 @@
    "models": {
     "observer": "Qwen/Qwen2.5-0.5B",
     "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-    "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v14"
+    "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v26"
    },
    "source": "MAGE（人写文本与 GPT-3.5 / GPT-4 等生成文本）",
    "profile": "en"
@@ -296,7 +296,7 @@
    "models": {
     "observer": "Qwen/Qwen2.5-0.5B",
     "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-    "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v14"
+    "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v26"
    },
    "source": "arXiv / PubMed / PMC 真人学术英文（含中国作者）+ DeepSeek / 文心一言 / Kimi 写的英文论文",
    "profile": "en_paper"
@@ -362,7 +362,7 @@
    "models": {
     "observer": "Qwen/Qwen2.5-0.5B",
     "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-    "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v14"
+    "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v26"
    },
    "source": "Poetry Foundation 真人英文诗 + DeepSeek / Kimi / 通义千问 / 豆包 / Claude 写的英文诗",
    "profile": "en_poetry"
