@@ -151,7 +151,25 @@ def _deepseek_style(text: str):
         h = _style_lex_hits(" ".join(w[i:i + 4000]), "deepseek_lex.json")
         if len(h) >= config.DS_LEX_MIN:
             return h
+    n = _thing_that_density(text)
+    if n >= config.DS_THING_MIN:
+        return [f"…is the thing that…（1000 词内 {n} 次）"]
     return None
+
+
+_THING_RE = re.compile(r"\b(?:is|are|was|were)\s+the\s+things?\s+that\b", re.I)
+
+
+def _thing_that_density(text: str) -> int:
+    """任意 1000 词窗口（步长 500）里 "is/are the thing(s) that" 的最多次数。DeepSeek 网页版 2026-10 的英文论文和回忆录
+    反复用 "the X is the thing that the Y is made of" 造句，每篇 20–50 次。
+    依据（2026-10-28）：用户上传的 DeepSeek 第 4 批 20 篇 19 篇 ≥ 8 次（含句式表漏掉的回忆录和产品评测）；
+    4383 篇真人论文/摘要/散文/新闻 0 次；580 本真人英文书最高 4 次；其他平台 724 篇 AI 文 1 篇 9 次。"""
+    w = (text or "").split()
+    b = 0
+    for i in range(0, max(1, len(w) - 999), 500):
+        b = max(b, len(_THING_RE.findall(" ".join(w[i:i + 1000]))))
+    return b
 
 
 _QW_LEX = None
@@ -1262,7 +1280,11 @@ class Engine:
             notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] if k in _qn else "“" + k[4:] + "”" for k in qw_kinds[:6]) + "）。"
                          "580 本真人英文书没有一本出现这种组合"
                          + (f"；据此另有 {len(qw_style_ai)} 段按“中度疑似（整篇判断）”计入。" if qw_style_ai else "。"))
-        if ds_hits:
+        if ds_hits and ds_hits[0].startswith("…is the thing"):
+            notes.append("文中反复用“…is the thing that…”造句（" + ds_hits[0][ds_hits[0].index("（") + 1:-1] + "），这是 DeepSeek 网页版英文作品的典型句式。"
+                         "4383 篇真人论文、摘要、散文的任意 1000 词里都没有出现过，580 本真人书最多 4 次"
+                         + (f"；据此另有 {len(ds_style_ai)} 段按“中度疑似（整篇判断）”计入。" if ds_style_ai else "。"))
+        elif ds_hits:
             notes.append("文中集中出现 DeepSeek 网页版英文作品的固定句式（" + "、".join("“" + g + "”" for g in ds_hits[:5]) + " 等 "
                          + f"{len(ds_hits)} 条）。4425 篇真人论文、摘要、散文和 580 本真人书都没有达到这个数量"
                          + (f"；据此另有 {len(ds_style_ai)} 段按“中度疑似（整篇判断）”计入。" if ds_style_ai else "。"))
