@@ -69,6 +69,18 @@ def _repeated_blocks(text: str, min_chars: int = 25, min_times: int = 4, min_sha
     return (len(reps), max(reps.values()), share) if reps and share >= min_share else None
 
 
+def _verbal_tic(text: str):
+    """固定口头禅：DeepSeek 2026-10 英文文学作品大量使用 "the whole of"（"...is the whole of the record"）。
+    依据（2026-10-28）：用户上传的 DeepSeek 作品每千词中位 3.7–13.3 次、最高 47 次；580 本真人英文书任意 1500 词
+    窗口最高 2.7 次（柏拉图对话录、Kershaw 史书），整本最高 0.2 次；ChatGPT/千问/Gemini 为 0–0.5 次。
+    出现 ≥ 8 次且每千词 ≥ 5 次时返回 (次数, 每千词次数)，否则 None。"""
+    import re as _re
+    n = len(_re.findall(r"\bthe whole of\b", text or "", _re.I))
+    w = max(1, len((text or "").split()))
+    r = 1000 * n / w
+    return (n, r) if n >= 8 and r >= 5 else None
+
+
 def is_short(seg, text: str) -> bool:
     if seg.register == "zh_poetry":
         return False
@@ -1107,6 +1119,10 @@ class Engine:
             notes.append(f"文中有 {rep[0]} 段（行）文字逐字重复出现（最多一段重复 {rep[1]} 次，重复部分约占全文 {rep[2]:.0%}）。大面积原样重复在真人写作中很少见，"
                          "常见于大模型为凑字数而循环输出（例如 Gemini 长文把同一组段落或诗句重复多遍）；也可能是复制粘贴失误或模板。"
                          "此项只作提示，不改变 AI 率。")
+        tic = _verbal_tic(text)
+        if tic:
+            notes.append(f"文中“the whole of”出现 {tic[0]} 次（每千词约 {tic[1]:.0f} 次）。这是 DeepSeek 英文文学作品的典型口头禅"
+                         "（“…is the whole of the record”），真人英文书每千词一般不超过 2–3 次。此项只作提示，不改变 AI 率。")
         if counted_chars and 0 < flagged_chars / counted_chars < 0.2:
             notes.append("整体 AI 率低于 20%：这一区间误判的可能性较高（Turnitin 对 1%–19% 只显示星号“*%”，不给具体数值），"
                          "数字后加 * 表示仅作提示，请逐段复核被标出的部分，不宜据此下结论。")
