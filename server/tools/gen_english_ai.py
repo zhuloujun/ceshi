@@ -700,6 +700,54 @@ POEM_SUBJECTS = [
 ]
 
 
+# 文学类（2026-10-28）：v23 / v25 在 v14 上加了 552 本真人书（小说、回忆录、散文……），AI 一方的同类文字太少，
+# 模型学成了"文学体 = 真人"，把 AI 写的诗、回忆录、神话全判成人写（用户的 ChatGPT 回忆录 82% → 0%）。
+# 这里批量生成与真人书同类的 AI 文学文字，让两边题材对齐，模型只能靠写法来区分。
+LITERARY_STYLE = [
+    "Write about 800 words of a {g}: {t}. Literary, specific, no title, no headings, no moral at the end. Output only the text.",
+    "Write a {g} (about 800 words) about {t}, in the style of a piece published in a serious literary magazine. "
+    "First person where natural. Avoid cliches and tidy conclusions.",
+    "用英文写一篇{g}（约800词），内容：{t}。要像出版过的真人作家写的，有具体的人名、地名、细节和对话，不要标题，不要总结。",
+    "Write about 700 words of a {g} about {t}. Make it read like it was written by a real human author, not an AI: "
+    "uneven rhythm, digressions, odd specific details, some sentence fragments.",
+    "Write the middle section (about 800 words) of a {g} about {t}. Start mid-scene. No title.",
+]
+LITERARY_TOPICS = [
+    ("memoir", "growing up above a family laundry in a northern English town"),
+    ("memoir", "a father's ledger found after his death"),
+    ("memoir", "the year spent caring for a grandmother with dementia"),
+    ("memoir", "learning to fish with a silent uncle on a Scottish loch"),
+    ("memoir", "a childhood split between two countries and two languages"),
+    ("memoir", "working nights in a hospital kitchen at nineteen"),
+    ("personal essay", "why I keep a notebook of overheard sentences"),
+    ("personal essay", "the last video rental shop in town"),
+    ("personal essay", "learning to swim at forty"),
+    ("personal essay", "living next to a railway line for twenty years"),
+    ("literary essay", "silence and omission in short fiction"),
+    ("literary essay", "why old maps are more honest than new ones"),
+    ("nature essay", "a winter of watching one heron on the same canal"),
+    ("nature essay", "the life of an abandoned quarry"),
+    ("short story", "a piano tuner who visits the same blind client for thirty years"),
+    ("short story", "two sisters clearing out their mother's flat"),
+    ("short story", "a night bus driver and a passenger who never gets off"),
+    ("short story", "a beekeeper's widow deciding whether to keep the hives"),
+    ("literary novel", "a sound archivist who finds a confession hidden on an old tape"),
+    ("literary novel", "a lighthouse keeper's daughter returning after the light is automated"),
+    ("literary novel", "an elderly translator finishing her last book"),
+    ("historical novel", "a cartographer's apprentice in eighteenth-century Lisbon"),
+    ("myth retelling", "a river goddess who refuses to flood the valley"),
+    ("myth retelling", "the smith who forged the first bell"),
+    ("creation myth", "how the northern lights were woven"),
+    ("fable", "a crow who collects lost keys"),
+    ("folk tale", "the miller's third son and the talking millstone"),
+    ("legend", "a drowned village whose church bell still rings at low tide"),
+    ("prose poem", "a kitchen at four in the morning"),
+    ("free verse poem sequence", "a year of weather in one valley"),
+    ("elegy in free verse", "a closed coal mine and the men who worked it"),
+    ("narrative poem", "a ferry crossing in a storm"),
+]
+
+
 def poem_topics(rnd):
     pairs = [(f, t) for t in POEM_SUBJECTS for f in rnd.sample(POEM_FORMS, 4)]
     rnd.shuffle(pairs)
@@ -766,27 +814,27 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         topics = [f"{g}|{t}" for g, t in poem_topics(rnd)]
         seen_k = {}
         styles = POEM_STYLE
-    elif out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "sh_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
-        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS, "nf_": NONFIC_TOPICS, "sh_": SELFHELP_TOPICS}[out_f.name[:3]]
+    elif out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "sh_", "lt_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
+        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS, "nf_": NONFIC_TOPICS, "sh_": SELFHELP_TOPICS, "lt_": LITERARY_TOPICS}[out_f.name[:3]]
         pairs = [(g, t) for g, t in tbl for _ in range(4)]
         rnd.shuffle(pairs)
         topics = [f"{g}|{t}" for g, t in pairs]
         seen_k: dict = {}
-        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE, "nf_": NONFIC_STYLE, "sh_": SELFHELP_STYLE}[out_f.name[:3]]
+        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE, "nf_": NONFIC_STYLE, "sh_": SELFHELP_STYLE, "lt_": LITERARY_STYLE}[out_f.name[:3]]
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
             break
         url, model = eps[i % len(eps)]
         key_ = f"{t}|{model}"
-        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_", "lt_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
             seen_k[key_] = seen_k.get(key_, 0) + 1
             key_ += f"#{seen_k[key_]}"
         if key_ in done:
             continue
         done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_")):
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_", "lt_")):
             g_, t_ = t.split("|", 1)
             tpl = styles[(i + i // len(styles)) % len(styles)]
             prompt = tpl.format(g=g_, t=t_)
@@ -846,7 +894,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "literary"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -855,7 +903,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "literary") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -874,9 +922,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl", "selfhelp": f"sh_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl", "selfhelp": f"sh_{name}.jsonl", "literary": f"lt_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp"):
+        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "literary"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
