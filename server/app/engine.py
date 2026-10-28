@@ -55,6 +55,19 @@ def _wmedian(vals):
     return vals[-1][0]
 
 
+def _repeated_blocks(text: str, min_chars: int = 120, min_times: int = 3, min_share: float = 0.4):
+    """整段逐字重复：长段落（≥min_chars）重复出现 ≥min_times 次、且多出来的重复文字占全文 ≥min_share 时，
+    返回 (这样的段落数, 最大重复次数, 重复占比)；否则 None。
+    依据（2026-10-28）：用户上传的 Gemini 长文 26/39 篇重复占比 64%–95%（几段文字循环凑字数）；
+    580 本真人英文书最高 24%（CNC 编程教程），其余 < 15%；ChatGPT/千问/DeepSeek/豆包均为 0。"""
+    import collections, re as _re
+    paras = [_re.sub(r"\s+", " ", p).strip() for p in _re.split(r"\n+", text or "")]
+    c = collections.Counter(p for p in paras if len(p) >= min_chars)
+    reps = {p: n for p, n in c.items() if n >= min_times}
+    share = sum(len(p) * (n - 1) for p, n in reps.items()) / max(1, len(text or ""))
+    return (len(reps), max(reps.values()), share) if reps and share >= min_share else None
+
+
 def is_short(seg, text: str) -> bool:
     if seg.register == "zh_poetry":
         return False
@@ -1088,6 +1101,11 @@ class Engine:
                                                      for k, v in chars_by_register.items()) + "），各自用对应的模型和阈值判断。")
         for reg in sorted(uncalibrated_regs):
             notes.append(f"{REGISTER_NAMES.get(reg, reg)}部分尚无专门校准，结果只宜作相对参考。")
+        rep = _repeated_blocks(text)
+        if rep:
+            notes.append(f"文中有 {rep[0]} 段较长文字逐字重复出现（最多一段重复 {rep[1]} 次，重复部分约占全文 {rep[2]:.0%}）。整段原样反复出现在真人写作中很少见，"
+                         "常见于大模型为凑字数而循环输出（例如 Gemini 长文把同一组段落重复多遍）；也可能是复制粘贴失误或模板。"
+                         "此项只作提示，不改变 AI 率。")
         if counted_chars and 0 < flagged_chars / counted_chars < 0.2:
             notes.append("整体 AI 率低于 20%：这一区间误判的可能性较高（Turnitin 对 1%–19% 只显示星号“*%”，不给具体数值），"
                          "数字后加 * 表示仅作提示，请逐段复核被标出的部分，不宜据此下结论。")
