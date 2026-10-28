@@ -1,0 +1,14 @@
+name: DeepSeek 句式规则误报检验（GitHub CPU）
+on:
+  push:
+    branches: [feat-dsfp]
+jobs:
+  fp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -q datasets
+      - run: python server/tools/style/fp_ds.py 2000 1500
