@@ -936,3 +936,56 @@ def is_english_paper(text: str) -> bool:
         if m:
             found.add(m.group(3).lower().split()[0])
     return len(found) >= 3
+
+
+_LATIN_CH = re.compile(r"[A-Za-z]")
+_END_PUNCT = re.compile(r"[.!?:;\"”’)\]]$")
+
+
+def unwrap_hard_wraps(text: str):
+    """把按固定宽度断行的英文散文（每行约 60–90 个字符就换一次行，常见于从 PDF、邮件、聊天窗口或某些 AI 平台复制出来的文字，
+    往往还每行之间夹一个空行）重新合并成段落。返回 (合并后的文本, 是否改动)。
+    依据（2026-10-28）：用户上传的文心英文作品 20 篇按原样检测平均 AI 率 34.5%（12 篇 < 50%），只把断行合并、别的不动，
+    平均 82.6%（0 篇 < 50%）——断行让每一行都被当成独立的短段落或分行诗，分类器和整篇判断都失效。
+    只在明显是固定宽度断行时才动：英文为主、≥ 20 行、≥ 70% 的行长 40–100 字符、几乎没有超过 110 字符的长行、
+    ≥ 1/3 的行不以句末标点结尾、≥ 80% 的行接近满宽。诗（行短或长短不一）、中文、正常按段落换行的文字都不会命中。"""
+    raw = (text or "").replace("\r\n", "\n").split("\n")
+    lines = [l.rstrip() for l in raw]
+    idx = [i for i, l in enumerate(lines) if l.strip()]
+    if len(idx) < 20:
+        return text, False
+    body = "".join(lines[i] for i in idx)
+    if len(_LATIN_CH.findall(body)) < 0.6 * max(1, len(body)) or _CJK.search(body) and len(_CJK.findall(body)) > 0.05 * len(body):
+        return text, False
+    lens = [len(lines[i].strip()) for i in idx]
+    mid = sum(40 <= n <= 100 for n in lens) / len(lens)
+    longl = sum(n > 110 for n in lens) / len(lens)
+    open_end = sum(not _END_PUNCT.search(lines[i].strip()) for i in idx) / len(idx)
+    if mid < 0.7 or longl > 0.03 or open_end < 0.33:
+        return text, False
+    # 行宽整齐：固定宽度断行时几乎每行都接近满宽（放不下下一个词才换行）；诗行长短不一。
+    # 文心散文 26 篇 0.84–0.96，长行诗（《Railroad Spikes》等）≤ 0.74，580 本真人书最高 0.67
+    w90 = sorted(lens)[int(0.9 * (len(lens) - 1))]
+    if sum(n >= 0.8 * w90 for n in lens) / len(lens) < 0.8:
+        return text, False
+    # 行间距：空行数的众数当作"行内"间距，比它多的才是段落分隔
+    gaps = [idx[k + 1] - idx[k] - 1 for k in range(len(idx) - 1)]
+    import collections as _c
+    base = _c.Counter(gaps).most_common(1)[0][0]
+    width = sorted(lens)[int(0.75 * (len(lens) - 1))]
+    paras, cur = [], []
+    for k, i in enumerate(idx):
+        l = lines[i].strip()
+        cur.append(l)
+        gap_break = k < len(gaps) and gaps[k] > base
+        short_end = (len(l) < 0.7 * width and bool(_END_PUNCT.search(l))) or len(l) < 0.55 * width
+        if gap_break or short_end or k == len(idx) - 1:
+            paras.append(cur)
+            cur = []
+    out = []
+    for p in paras:
+        s = p[0]
+        for l in p[1:]:
+            s = s[:-1] + l if s.endswith("-") and l[:1].islower() else s + " " + l
+        out.append(s)
+    return "\n\n".join(out) + "\n", True
