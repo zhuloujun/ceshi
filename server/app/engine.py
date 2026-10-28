@@ -110,7 +110,34 @@ def _qwen_style(text: str):
         strong = ks - _QW_WEAK
         if len(strong) >= 2 or (strong and len(ks) >= 3):
             return sorted(ks)
+        lex = _qwen_lex_hits(s)
+        if len(lex) >= config.QW_LEX_MIN:
+            return ["lex:" + g for g in lex]
     return None
+
+
+_QW_LEX = None
+
+
+def _qwen_lex_hits(s: str):
+    """从用户上传的千问英文文学作品里统计出来的 3–5 词短语（app/qwen_lex.json，42 条；要求千问 100 篇里 ≥ 8 篇出现、
+    其他平台 378 篇 AI 文 ≤ 1 篇、580 本真人书 14702 个 4000 词窗口 ≤ 15 个）。返回这段文字里出现的短语
+    （互相包含的只算最长的一条）。依据（2026-10-28）：没参与统计的千问第 6、7 批 40 篇，任意 4000 词窗口命中 ≥ 4 条的
+    21 篇、≥ 3 条的 33 篇；真人书最高 2 条，其他平台最高 2 条；独立的 BookCorpusOpen 23509 个窗口、WritingPrompts 1500 个
+    窗口（不去重计数）最高 3 条。"""
+    global _QW_LEX
+    if _QW_LEX is None:
+        import json as _json
+        from pathlib import Path as _P
+        try:
+            _QW_LEX = _json.loads((_P(__file__).parent / "qwen_lex.json").read_text("utf-8"))
+        except Exception:  # noqa: BLE001
+            _QW_LEX = []
+    if not _QW_LEX:
+        return []
+    t = " " + " ".join(re.findall(r"[a-z']+", s.lower())) + " "
+    h = [g for g in _QW_LEX if (" " + g + " ") in t]
+    return [g for g in h if not any(g != m and (" " + g + " ") in (" " + m + " ") for m in h)]
 
 
 def is_short(seg, text: str) -> bool:
@@ -1181,7 +1208,7 @@ class Engine:
                    "which_is_the": "“…, which is the whole/only…”", "that_is_the_whole": "“That is the whole job/story”",
                    "not_a_metaphor": "“…is not a metaphor”", "cjk_glued": "英文词后直接粘着汉字",
                    "I_want_you_to": "“I want you to understand”", "and_I_have_never": "“and I have never”"}
-            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] for k in qw_kinds) + "）。"
+            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] if k in _qn else "“" + k[4:] + "”" for k in qw_kinds[:6]) + "）。"
                          "580 本真人英文书没有一本出现这种组合"
                          + (f"；据此另有 {len(qw_style_ai)} 段按“中度疑似（整篇判断）”计入。" if qw_style_ai else "。"))
         if counted_chars and 0 < flagged_chars / counted_chars < 0.2:
