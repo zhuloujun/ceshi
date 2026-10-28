@@ -81,6 +81,38 @@ def _verbal_tic(text: str):
     return (n, r) if n >= 8 and r >= 5 else None
 
 
+_QW_PATS = {
+    "on_the_record": r"\b(?:want|put|keep)s? (?:it|that|this)? ?(?:on|in) the record",
+    "want_to_be_careful": r"\bI want to be (?:careful|clear|honest|precise)",
+    "which_is_the": r",? which is the (?:whole|only|part|thing|exact|point|reason)\b",
+    "that_is_the_whole": r"\b(?:that|this) is the whole (?:job|story|argument|thing|point|trade|estate|religion|sermon)\b",
+    "not_a_metaphor": r"\b(?:is|was) not a metaphor\b",
+    "cjk_glued": r"[A-Za-z][一-鿿]{1,4}(?![一-鿿])",
+    # 下面两种真人小说对话里也会出现，只作辅助
+    "I_want_you_to": r"\bI want (?:you|the reader|that) to (?:know|understand|notice|hear)\b",
+    "and_I_have_never": r"\band I have never\b",
+}
+_QW_WEAK = {"I_want_you_to", "and_I_have_never"}
+
+
+def _qwen_style(text: str):
+    """千问英文文学作品（回忆录、散文、小说）的典型套语："I want it on the record"、"I want to be careful"、
+    "…, which is the whole/only…"、"That is the whole job/story"、"this is not a metaphor"，以及英文词后直接粘着汉字
+    （"the shape of the利益"）。任意 4000 词窗口里出现 ≥ 2 种强套语，或 1 种强套语 + 共 ≥ 3 种时返回命中的种类，否则 None。
+    依据（2026-10-28）：580 本真人英文书全文 0 本命中（只用两种弱套语时有 2 本小说对话命中，所以弱套语只作辅助）；
+    ChatGPT 76、豆包 50、Gemini 159 篇 0 篇，DeepSeek 93 篇 1 篇；没参与选词的四批千问 80 篇 18 篇命中，其中 15 篇
+    是 v14 漏判的（AI 率 < 50%，漏判共 40 篇）——正是分类器认不出的“自白体”千问文风。"""
+    import re as _re
+    w = (text or "").split()
+    for i in range(0, max(1, len(w) - 1999), 2000):
+        s = " ".join(w[i:i + 4000])
+        ks = {k for k, p in _QW_PATS.items() if _re.search(p, s, 0 if k == "cjk_glued" else _re.I)}
+        strong = ks - _QW_WEAK
+        if len(strong) >= 2 or (strong and len(ks) >= 3):
+            return sorted(ks)
+    return None
+
+
 def is_short(seg, text: str) -> bool:
     if seg.register == "zh_poetry":
         return False
@@ -915,6 +947,27 @@ class Engine:
                                         and (results[i].get("classifier_en3") or 0) >= config.EN3_OWN_CARRY))}
                     zh2_ai |= en3_hit
                     en3_ai.update(en3_hit)
+        # 6.7) 千问英文文学作品的典型套语（见 _qwen_style）：v14 分类器对千问“自白体”回忆录/散文和真人回忆录的段落打分
+        #      同样高（中位都在 0.9 左右），最终 AI 率被校准压低。整篇（≥ 800 词）命中套语时，本篇未过阈值、但分类器自身
+        #      得分 ≥ QW_STYLE_OWN 的段落计为"中度疑似（整篇判断）"。诗行不计。
+        qw_style_ai, qw_kinds, qw_blocks = set(), None, set()
+        for (blk, reg), idxs in groups.items():
+            if reg != "en" or blk in paper_blocks:
+                continue
+            body = "\n".join(segs_by_idx[i].text for i in idxs)
+            if len(body.split()) < 800:
+                continue
+            kinds = _qwen_style(body)
+            if not kinds:
+                continue
+            qw_kinds = kinds
+            qw_blocks.add(blk)
+            qw_style_ai |= {i for i in idxs if smoothed.get(i) is not None
+                            and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and i not in en_verse
+                            and (results[i].get("classifier_en4") or results[i].get("classifier_en2") or 0)
+                            >= config.QW_STYLE_OWN}
+        qw_style_ai -= zh2_ai
+        zh2_ai |= qw_style_ai
         work_ai -= zh2_ai
         zh_doc_ai -= zh2_ai
         zh_human_work -= {i for g in zh2_groups for i in groups[g]}
@@ -958,7 +1011,7 @@ class Engine:
         #      （与 Turnitin 对 20% 以下结果不给确定数字的做法一致），仍以"接近阈值"标出。
         en_isolated = set()
         for (blk, reg), idxs in groups.items():
-            if reg != "en" or len(idxs) < config.EN_ISOLATED_MIN_SEGS:
+            if reg != "en" or blk in qw_blocks or len(idxs) < config.EN_ISOLATED_MIN_SEGS:
                 continue
             e2 = [(results[i]["classifier_en2"], len(segs_by_idx[i].text)) for i in idxs
                   if results[i].get("classifier_en2") is not None]
@@ -1123,6 +1176,14 @@ class Engine:
         if tic:
             notes.append(f"文中“the whole of”出现 {tic[0]} 次（每千词约 {tic[1]:.0f} 次）。这是 DeepSeek 英文文学作品的典型口头禅"
                          "（“…is the whole of the record”），真人英文书每千词一般不超过 2–3 次。此项只作提示，不改变 AI 率。")
+        if qw_kinds:
+            _qn = {"on_the_record": "“I want it on the record”", "want_to_be_careful": "“I want to be careful/clear”",
+                   "which_is_the": "“…, which is the whole/only…”", "that_is_the_whole": "“That is the whole job/story”",
+                   "not_a_metaphor": "“…is not a metaphor”", "cjk_glued": "英文词后直接粘着汉字",
+                   "I_want_you_to": "“I want you to understand”", "and_I_have_never": "“and I have never”"}
+            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] for k in qw_kinds) + "）。"
+                         "580 本真人英文书没有一本出现这种组合"
+                         + (f"；据此另有 {len(qw_style_ai)} 段按“中度疑似（整篇判断）”计入。" if qw_style_ai else "。"))
         if counted_chars and 0 < flagged_chars / counted_chars < 0.2:
             notes.append("整体 AI 率低于 20%：这一区间误判的可能性较高（Turnitin 对 1%–19% 只显示星号“*%”，不给具体数值），"
                          "数字后加 * 表示仅作提示，请逐段复核被标出的部分，不宜据此下结论。")
