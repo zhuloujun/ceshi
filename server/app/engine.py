@@ -18,7 +18,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (REGISTER_NAMES, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (REGISTER_NAMES, unwrap_hard_wraps, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -110,7 +110,79 @@ def _qwen_style(text: str):
         strong = ks - _QW_WEAK
         if len(strong) >= 2 or (strong and len(ks) >= 3):
             return sorted(ks)
+        lex = _qwen_lex_hits(s)
+        if len(lex) >= config.QW_LEX_MIN:
+            return ["lex:" + g for g in lex]
     return None
+
+
+_STYLE_LEX: dict = {}
+
+
+def _style_lex_hits(s: str, fname: str):
+    """在一段文字里找 app/<fname> 短语表里的短语（互相包含的只算最长的一条）。"""
+    lex = _STYLE_LEX.get(fname)
+    if lex is None:
+        import json as _json
+        from pathlib import Path as _P
+        try:
+            lex = _json.loads((_P(__file__).parent / fname).read_text("utf-8"))
+        except Exception:  # noqa: BLE001
+            lex = []
+        _STYLE_LEX[fname] = lex
+    if not lex:
+        return []
+    t = " " + " ".join(re.findall(r"[a-z']+", s.lower())) + " "
+    h = [g for g in lex if (" " + g + " ") in t]
+    return [g for g in h if not any(g != m and (" " + g + " ") in (" " + m + " ") for m in h)]
+
+
+def _deepseek_style(text: str):
+    """DeepSeek 网页版英文论文体/文学作品的固定句式，比如 "The broader implication is that…"、
+    "…calibrated to the evidence rather than to the enthusiasm that the topic attracts"、"Note on method: This paper is…"、
+    "the X is the thing that the Y should address"。短语表 app/deepseek_lex.json（240 条，4–6 词）：用户上传的 DeepSeek 70 篇里
+    ≥ 6 篇出现、其他平台 632 篇 AI 文 ≤ 1 篇、580 本真人书 14702 个 4000 词窗口 ≤ 15 个，并且 4425 篇真人论文/摘要/散文/新闻
+    （PMC 全文 569、arXiv 503、PubMed 1546、各类真人文体 1765）里最多 2 篇出现。任意 4000 词窗口命中 ≥ DS_LEX_MIN 条时返回命中的短语。
+    依据（2026-10-28）：没参与选词的 DeepSeek 两批 40 篇论文 37 篇命中；上述 4425 篇真人文本和 580 本真人书最高 2 条，0 篇命中；
+    其他平台 653 篇里命中的 4 篇都是 AI 文（3 篇其实也是 DeepSeek，1 篇千问）。
+    注意：通过 API 生成的 DeepSeek 论文（436 篇）基本不命中——这是网页版的文风，不代表 DeepSeek 的全部输出。"""
+    w = (text or "").split()
+    for i in range(0, max(1, len(w) - 1999), 2000):
+        h = _style_lex_hits(" ".join(w[i:i + 4000]), "deepseek_lex.json")
+        if len(h) >= config.DS_LEX_MIN:
+            return h
+    n = _thing_that_density(text)
+    if n >= config.DS_THING_MIN:
+        return [f"…is the thing that…（1000 词内 {n} 次）"]
+    return None
+
+
+_THING_RE = re.compile(r"\b(?:is|are|was|were)\s+the\s+things?\s+that\b", re.I)
+
+
+def _thing_that_density(text: str) -> int:
+    """任意 1000 词窗口（步长 500）里 "is/are the thing(s) that" 的最多次数。DeepSeek 网页版 2026-10 的英文论文和回忆录
+    反复用 "the X is the thing that the Y is made of" 造句，每篇 20–50 次。
+    依据（2026-10-28）：用户上传的 DeepSeek 第 4 批 20 篇 19 篇 ≥ 8 次（含句式表漏掉的回忆录和产品评测）；
+    4383 篇真人论文/摘要/散文/新闻 0 次；580 本真人英文书最高 4 次；独立真人小说 BookCorpusOpen 23509 个 4000 词窗口最高 5 次、
+    WritingPrompts 1500 个最高 1 次；其他平台 724 篇 AI 文 1 篇 9 次。阈值 DS_THING_MIN=8，DeepSeek 第 4、5 批 40 篇 37 篇达到。"""
+    w = (text or "").split()
+    b = 0
+    for i in range(0, max(1, len(w) - 999), 500):
+        b = max(b, len(_THING_RE.findall(" ".join(w[i:i + 1000]))))
+    return b
+
+
+_QW_LEX = None
+
+
+def _qwen_lex_hits(s: str):
+    """从用户上传的千问英文文学作品里统计出来的 3–5 词短语（app/qwen_lex.json，65 条；第 2 版：千问 140 篇里 ≥ 11 篇出现、
+    其他平台 378 篇 AI 文 ≤ 1 篇、580 本真人书 14702 个 4000 词窗口 ≤ 15 个，再去掉独立真人语料 BookCorpusOpen 里
+    23509 个窗口中出现 ≥ 20 个的 15 条，如 "i am going to tell"、"to be a person"）。返回这段文字里出现的短语
+    （互相包含的只算最长的一条）。依据（2026-10-28）：没参与选词的千问第 8 批 20 篇，命中 ≥ 4 条的 18 篇；
+    580 本真人书最高 2 条；BookCorpusOpen 23509 个窗口和 WritingPrompts 1500 个窗口在第 2 版去掉常见短语之前就没有一个 ≥ 4 条。"""
+    return _style_lex_hits(s, "qwen_lex.json")
 
 
 def is_short(seg, text: str) -> bool:
@@ -583,6 +655,8 @@ class Engine:
         t_start = time.time()
         self.wait_loaded()
         self.maybe_refresh_calibration()
+        # 按固定宽度断行的英文散文先合并成段落（见 segmenter.unwrap_hard_wraps）：否则每行被当成独立短段落，文心作品 AI 率从 83% 掉到 35%
+        text, unwrapped = unwrap_hard_wraps(text)
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 全文都被判为引文/参考文献时，退回为全部计入，否则报告里没有任何数值
         fallback_all = bool(segs) and not any(s.counted for s in segs)
@@ -968,6 +1042,26 @@ class Engine:
                             >= config.QW_STYLE_OWN}
         qw_style_ai -= zh2_ai
         zh2_ai |= qw_style_ai
+        # 6.8) DeepSeek 网页版英文作品的固定句式（见 _deepseek_style），论文也算：v14 对这类论文体综述段落常打到 0.5–0.9，
+        #      最终被校准压低。整篇（≥ 800 词）命中时，本篇未过阈值、但分类器自身得分 ≥ QW_STYLE_OWN 的段落计为"中度疑似（整篇判断）"。
+        ds_style_ai, ds_hits, ds_blocks = set(), None, set()
+        for (blk, reg), idxs in groups.items():
+            if reg != "en" or blk in qw_blocks:
+                continue
+            body = "\n".join(segs_by_idx[i].text for i in idxs)
+            if len(body.split()) < 800:
+                continue
+            h = _deepseek_style(body)
+            if not h:
+                continue
+            ds_hits = h
+            ds_blocks.add(blk)
+            ds_style_ai |= {i for i in idxs if smoothed.get(i) is not None
+                            and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and i not in en_verse
+                            and (results[i].get("classifier_en4") or results[i].get("classifier_en2") or 0)
+                            >= config.QW_STYLE_OWN}
+        ds_style_ai -= zh2_ai
+        zh2_ai |= ds_style_ai
         work_ai -= zh2_ai
         zh_doc_ai -= zh2_ai
         zh_human_work -= {i for g in zh2_groups for i in groups[g]}
@@ -1011,7 +1105,7 @@ class Engine:
         #      （与 Turnitin 对 20% 以下结果不给确定数字的做法一致），仍以"接近阈值"标出。
         en_isolated = set()
         for (blk, reg), idxs in groups.items():
-            if reg != "en" or blk in qw_blocks or len(idxs) < config.EN_ISOLATED_MIN_SEGS:
+            if reg != "en" or blk in qw_blocks or blk in ds_blocks or len(idxs) < config.EN_ISOLATED_MIN_SEGS:
                 continue
             e2 = [(results[i]["classifier_en2"], len(segs_by_idx[i].text)) for i in idxs
                   if results[i].get("classifier_en2") is not None]
@@ -1159,6 +1253,9 @@ class Engine:
 
         # 可信度提示（参考 Turnitin、GPTZero 等平台对短文本、未校准、非常规文体的处理）
         notes = []
+        if unwrapped:
+            notes.append("原文按固定宽度断行（每行几十个字符就换行，常见于从 PDF、邮件或部分 AI 平台复制的文字），"
+                         "已先把断开的行合并成段落再检测；否则每一行会被当成独立的短段落，检测结果会明显偏低。")
         en_chars = chars_by_register.get("en", 0)
         if counted_chars < 300 or (main_reg == "en" and en_chars < 1500):
             notes.append("参与计算的正文较短（中文不足 300 字 / 英文不足约 300 词），结果波动较大，仅供参考。")
@@ -1181,9 +1278,17 @@ class Engine:
                    "which_is_the": "“…, which is the whole/only…”", "that_is_the_whole": "“That is the whole job/story”",
                    "not_a_metaphor": "“…is not a metaphor”", "cjk_glued": "英文词后直接粘着汉字",
                    "I_want_you_to": "“I want you to understand”", "and_I_have_never": "“and I have never”"}
-            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] for k in qw_kinds) + "）。"
+            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] if k in _qn else "“" + k[4:] + "”" for k in qw_kinds[:6]) + "）。"
                          "580 本真人英文书没有一本出现这种组合"
                          + (f"；据此另有 {len(qw_style_ai)} 段按“中度疑似（整篇判断）”计入。" if qw_style_ai else "。"))
+        if ds_hits and ds_hits[0].startswith("…is the thing"):
+            notes.append("文中反复用“…is the thing that…”造句（" + ds_hits[0][ds_hits[0].index("（") + 1:-1] + "），这是 DeepSeek 网页版英文作品的典型句式。"
+                         "4383 篇真人论文、摘要、散文的任意 1000 词里都没有出现过，580 本真人书和 2 万多段真人小说最多 5 次"
+                         + (f"；据此另有 {len(ds_style_ai)} 段按“中度疑似（整篇判断）”计入。" if ds_style_ai else "。"))
+        elif ds_hits:
+            notes.append("文中集中出现 DeepSeek 网页版英文作品的固定句式（" + "、".join("“" + g + "”" for g in ds_hits[:5]) + " 等 "
+                         + f"{len(ds_hits)} 条）。4425 篇真人论文、摘要、散文和 580 本真人书都没有达到这个数量"
+                         + (f"；据此另有 {len(ds_style_ai)} 段按“中度疑似（整篇判断）”计入。" if ds_style_ai else "。"))
         if counted_chars and 0 < flagged_chars / counted_chars < 0.2:
             notes.append("整体 AI 率低于 20%：这一区间误判的可能性较高（Turnitin 对 1%–19% 只显示星号“*%”，不给具体数值），"
                          "数字后加 * 表示仅作提示，请逐段复核被标出的部分，不宜据此下结论。")
