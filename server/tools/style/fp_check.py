@@ -9,7 +9,8 @@ exec(src[src.index("_QW_PATS = {"):src.index("def is_short")], ns)
 lex = json.loads((Path(__file__).parent / "qwen_lex.json").read_text())
 tok = lambda t: " " + " ".join(re.findall(r"[a-z']+", t.lower())) + " "
 def lexscore(s):
-    s = tok(s); return sum((" " + g + " ") in s for g in lex)
+    s = tok(s); h = [g for g in lex if (" " + g + " ") in s]
+    return len([g for g in h if not any(g != m and (" " + g + " ") in (" " + m + " ") for m in h)])
 from datasets import load_dataset
 def windows(texts, n=4000):
     for t in texts:
@@ -36,7 +37,7 @@ for name, gen in [("bookcorpusopen", windows(books(int(sys.argv[1])))), ("writin
         if k:
             rule += 1; ex.append(("rule", k, s[:120]))
         sc = lexscore(s); hist[min(sc, 10)] += 1
-        if sc >= 4: ex.append(("lex", sc, s[:120]))
+        if sc >= 3: ex.append(("lex", sc, s[:120]))
     print(f"::warning title={name}::windows {n} | qwen_style rule hits {rule} | lexicon score hist {sorted(hist.items())}", flush=True)
     for e in ex[:15]:
         print(f"::notice title={name} hit::{json.dumps(e)[:900]}", flush=True)
