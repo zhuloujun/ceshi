@@ -76,6 +76,8 @@ DOC_CARRY_FLOOR = float(os.getenv("DOC_CARRY_FLOOR", "0.5") or 0.5)
 # 对公式多、术语密的段落（Gemini《后量子密码》《火山碎屑流》等）只有 0.1–0.3，原来只看它就被挡在整篇判断之外；
 # 这些段落 v7 都 ≥ 0.9。用户 59 篇纯 AI 文档中有 15 段属于这种情况，16 本真人自我提升书中 0 段。
 EN3_OWN_CARRY = float(os.getenv("EN3_OWN_CARRY", "0.9") or 0.9)
+# 千问套语整篇判断（engine._qwen_style）：本篇未过阈值的段落，英文分类器自身得分至少达到这个值才计入
+QW_STYLE_OWN = float(os.getenv("QW_STYLE_OWN", "0.5") or 0.5)
 # 国产大模型中文分类器整篇中位数低于这个值（明确像人写）时，不用 MPU 中文分类器的整篇判断
 ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
 # v3（2026-10-04）：加入 287 篇"去 AI 味"改写的中文（五家国产模型先写再按"降 AI 率"指令改写，或一步要求"写得不像 AI"）。
