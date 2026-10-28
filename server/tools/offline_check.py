@@ -43,6 +43,9 @@ def main():
         works = " ； ".join(f"{w['title'][:24]} {'—' if w.get('ai_rate') is None else round(w['ai_rate'] * 100)}%"
                            for w in res.get("works", []))
         print(f"::warning title={d['name']} 分篇::AI 率 {s.get('ai_rate')} · {works}"[:4000], flush=True)
+        for n in (s.get("reliability_notes") or []):
+            if "逐字重复" in n or "the whole of" in n:
+                print(f"::notice title={d['name']} 提示::{n[:300]}", flush=True)
         segs = []
         for g in res.get("segments", []):
             r = g.get("raw") or {}
