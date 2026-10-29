@@ -1295,7 +1295,11 @@ class Engine:
                     continue
                 # 例外（仍计入）：第一分类器几乎满分且 v7 也高（DeepSeek 等摘要的典型情况，真人摘要 74 段 0 段），
                 # 或 AI 摘要写法得分 ≥ EN_ABS_NB（见 abstract_style_score）
-                if (r_i.get("classifier") or 0) >= config.EN_ABS_CLS_KEEP and (r_i.get("classifier_en3") or 0) >= config.EN_ABS_CLS_EN3:
+                # 第一分类器几乎满分时，v7 也高、或综合分数 ≥ EN_ABS_P_KEEP 也算例外（2026-10-29 续：公开基准 RAID 里 Cohere、
+                # Mistral、Llama 等老一代对话模型的摘要 desklib ≈ 1.00、综合 ≥ 0.99 但 v7 只有 0.2–0.89；
+                # 被本规则降级的真人摘要段落 77 段里没有一段同时满足 desklib ≥ 0.995 且综合 ≥ 0.99）
+                if (r_i.get("classifier") or 0) >= config.EN_ABS_CLS_KEEP and (
+                        (r_i.get("classifier_en3") or 0) >= config.EN_ABS_CLS_EN3 or pr >= config.EN_ABS_P_KEEP):
                     continue
                 style = blk_style if blk_style is not None else abstract_style_score(segs_by_idx[i].text)
                 if style >= config.EN_ABS_NB:
