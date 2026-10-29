@@ -343,7 +343,7 @@ async function resumeJob(jobId, text){
 }
 
 /* ---------------- 渲染 ---------------- */
-const SIG_NAME = { fastdetect:'Fast-DetectGPT', binoculars:'Binoculars', classifier:'MPU 分类器', classifier_en:'英文分类器（desklib）' };
+const SIG_NAME = { fastdetect:'F', binoculars:'B', classifier:'MPU 分类器', classifier_en:'英文分类器（desklib）' };
 const REG_NAME = { zh:'现代汉语', zh_classical:'文言', zh_poetry:'诗词', en:'英文' };
 // 分类器信号的名称随段落文体变化（英文段落用的是英文分类器）
 const sigName = (k, seg)=> k === 'classifier'
@@ -354,9 +354,9 @@ function workLevel(w){
   if(!w.counted) return 'none';
   return w.ai_rate >= 0.5 ? 'high' : w.ai_rate > 0 ? 'light' : 'low';
 }
-const WORKS_NOTE = 'AI 率 = 判为疑似 AI 的字数占本篇计入字数的比例（含“整篇判断”计入的段落）；' +
-  '平均 AI 概率 = 各段单独打分的平均值。两者口径不同：AI 文章常有个别段落单看分数不高，按整篇判断仍计入 AI 率，' +
-  '所以会出现“AI 率 100%、平均概率只有 40% 多”的情况。段落颜色按是否计入 AI 率显示，数字是该段单独的分数。';
+const WORKS_NOTE = 'AI 率 ；' +
+  '平均 AI 概率，' +
+  '段落颜色按是否计入 AI 率显示，数字是该段单独的分数。';
 
 function renderWorks(works){
   const box = $('worksBox');
@@ -404,7 +404,7 @@ function renderResult(res){
   $('sumExcluded').title = Object.entries(s.excluded_by_kind || {}).map(([k,v])=>`${exNames[k]||k} ${v} 字`).join('；');
   const methods = Object.entries(s.methods).filter(([,v])=>v).map(([k])=>SIG_NAME[k]).join('、') || '无';
   $('calibLine').innerHTML =
-    `使用方法：${escapeHtml(methods)} · 判定阈值 ${pct(s.threshold)} · ` +
+    `共：${escapeHtml(methods)} · 判定阈值 ${pct(s.threshold)} · ` +
     (s.calibrated ? `<b>已校准</b>：${escapeHtml(s.calibration_note||'')}` : '<b>未校准</b>：阈值为经验值，结果只宜作相对参考') +
     ` · 高度 ${pct(s.high_rate)} / 中度 ${pct(s.mid_rate)} / 轻度 ${pct(s.light_rate)}` +
     (s.chars_by_register && Object.keys(s.chars_by_register).length > 1
@@ -446,8 +446,8 @@ function renderResult(res){
       raw.fastdetect!=null ? `Fast-DetectGPT 曲率 ${raw.fastdetect.toFixed(2)}` : '',
       raw.binoculars!=null ? `Binoculars 分数 ${raw.binoculars.toFixed(3)}` : '',
       raw.classifier!=null ? `分类器 ${pct(raw.classifier)}` : '',
-      raw.classifier_zh2!=null ? `国产大模型中文分类器 ${pct(raw.classifier_zh2)}` : '',
-      raw.classifier_en2!=null ? `国产大模型英文分类器 ${pct(raw.classifier_en2)}` : '',
+      raw.classifier_zh2!=null ? `本模中文分类器 ${pct(raw.classifier_zh2)}` : '',
+      raw.classifier_en2!=null ? `本模英文分类器 ${pct(raw.classifier_en2)}` : '',
       raw.classifier_en3!=null ? `英文整篇分类器 ${pct(raw.classifier_en3)}` : '',
       raw.classifier_en4!=null ? `英文整篇分类器 2 ${pct(raw.classifier_en4)}` : '',
       raw.ppl!=null ? `困惑度 ${Math.exp(raw.ppl).toFixed(1)}` : '',
@@ -575,8 +575,8 @@ function segIndicators(seg){
   const r = seg.raw || {};
   return [
     r.classifier!=null ? `${sigName('classifier', seg)} ${pct(r.classifier)}` : '',
-    r.classifier_zh2!=null ? `国产大模型中文分类器 ${pct(r.classifier_zh2)}` : '',
-    r.classifier_en2!=null ? `国产大模型英文分类器 ${pct(r.classifier_en2)}` : '',
+    r.classifier_zh2!=null ? `本模中文分类器 ${pct(r.classifier_zh2)}` : '',
+    r.classifier_en2!=null ? `本模英文分类器 ${pct(r.classifier_en2)}` : '',
     r.classifier_en3!=null ? `英文整篇分类器 ${pct(r.classifier_en3)}` : '',
     r.classifier_en4!=null ? `英文整篇分类器 2 ${pct(r.classifier_en4)}` : '',
     r.fastdetect!=null ? `Fast-DetectGPT 曲率 ${r.fastdetect.toFixed(3)}` : '',
