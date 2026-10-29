@@ -1227,3 +1227,16 @@ def test_unwrap_short_hard_wrapped_abstract():
     assert unwrap_hard_wraps(sonnet) == (sonnet, False)
     prose = "A normal paragraph that is written on one line and ends here.\n\nAnother one, also on one line.\n"
     assert unwrap_hard_wraps(prose) == (prose, False)
+
+
+def test_abstract_style_score():
+    """AI 摘要写法得分：近两年 AI 摘要常见的写法得正分，老式真人摘要的套话得负分，空文本 0。"""
+    from app.engine import abstract_style_score
+    ai = ("We tested whether structured feedback, paired with brief practice, changed task engagement. Drawing on logs "
+          "from four sites, the effect was modest and persisted over months, yet the gain fell when visits were missed. "
+          "Limitations include self reported outcomes; the design can support a later randomized trial.")
+    hu = ("The aim of the present study was to investigate the effect of the treatment. In addition, we found that the "
+          "levels were higher than that of the control group. Moreover, in order to improve the yield, all the samples "
+          "were analysed. Thus the results could be important for agriculture in China.")
+    assert abstract_style_score("") == 0.0
+    assert abstract_style_score(ai) > 0.88 > 0 > abstract_style_score(hu)

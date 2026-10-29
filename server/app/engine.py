@@ -229,6 +229,31 @@ def academic_density(text: str) -> tuple[float, int]:
     return sum(x in _ACAD_WORDS for x in w) / max(1, len(w)), len(w)
 
 
+_ABS_NB = None
+
+
+def abstract_style_score(text: str) -> float:
+    """AI 摘要的写法得分（app/abs_style_nb.json：词和相邻两词的对数比，正数偏 AI 摘要、负数偏真人摘要；按 √词数 归一）。
+    依据（2026-10-29）：用 DeepSeek、Kimi、文心、豆包、ChatGPT、Claude、千问 7 个平台的英文摘要（各平台等权）
+    对比 PubMed / arXiv 真人摘要的一半（1030 篇）选出 874 个特征；另一半真人摘要（975 篇）只有 1% 超过 0.88，
+    PMC 真人论文引言 569 篇 0 篇超过。轮流留出一个平台不参与选词时，留出平台超过 0.88 的比例：千问 0.93–1.00、
+    豆包 0.84、ChatGPT 0.63、文心 0.43–0.56（偏低）。只用来把已被判过线、又因"学术摘要"规则降级的段落恢复计入，
+    不单独把任何文字判为 AI。"""
+    global _ABS_NB
+    if _ABS_NB is None:
+        import json as _json
+        from pathlib import Path as _P
+        try:
+            _ABS_NB = _json.loads((_P(__file__).parent / "abs_style_nb.json").read_text("utf-8"))
+        except Exception:  # noqa: BLE001
+            _ABS_NB = {}
+    w = re.findall(r"[a-z]+", (text or "").lower())
+    if not w or not _ABS_NB:
+        return 0.0
+    f = set(w) | {w[i] + " " + w[i + 1] for i in range(len(w) - 1)}
+    return sum(_ABS_NB[g] for g in f if g in _ABS_NB) / math.sqrt(len(w) + 1)
+
+
 def imperative_ratio(text: str) -> tuple[float, int]:
     """(以祈使动词开头的句子比例, 句子数)；只数 ≥ 3 词的句子。"""
     sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if len(s.split()) >= 3]
@@ -1254,6 +1279,7 @@ class Engine:
             btext = "\n".join(segs_by_idx[i].text for i in idxs)
             bd, bn = academic_density(btext)
             blk_abs = config.EN_ABS_MIN_WORDS <= bn <= config.EN_ABS_MAX_WORDS and bd >= config.EN_ABS_DENSITY
+            blk_style = abstract_style_score(btext) if blk_abs else None
             for i in idxs:
                 pr = smoothed.get(i)
                 if pr is None or i in en_instr or i in zh_human_work:
@@ -1264,8 +1290,17 @@ class Engine:
                 sd, sn = academic_density(segs_by_idx[i].text)
                 if not (blk_abs or (sn >= config.EN_ABS_MIN_WORDS and sd >= config.EN_ABS_DENSITY)):
                     continue
-                if (results[i].get("classifier_en2") or 0) < config.EN_ABS_EN2:
-                    en_abs.add(i)
+                r_i = results[i]
+                if (r_i.get("classifier_en2") or 0) >= config.EN_ABS_EN2:
+                    continue
+                # 例外（仍计入）：第一分类器几乎满分且 v7 也高（DeepSeek 等摘要的典型情况，真人摘要 74 段 0 段），
+                # 或 AI 摘要写法得分 ≥ EN_ABS_NB（见 abstract_style_score）
+                if (r_i.get("classifier") or 0) >= config.EN_ABS_CLS_KEEP and (r_i.get("classifier_en3") or 0) >= config.EN_ABS_CLS_EN3:
+                    continue
+                style = blk_style if blk_style is not None else abstract_style_score(segs_by_idx[i].text)
+                if style >= config.EN_ABS_NB:
+                    continue
+                en_abs.add(i)
         zh2_ai -= en_instr | en_abs
         paper_ai -= en_instr | en_abs
         zh_human_work |= en_instr | en_abs
