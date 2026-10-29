@@ -202,6 +202,33 @@ transfer trim try turn unmold use wait warm wash watch whip whisk wipe wrap writ
 _IMP_FIRST = re.compile(r"[“\"'(]?(?:\d+[.)]\s*|[-•*]\s*)?([A-Za-z']+)")
 
 
+# 学术摘要 / 学术文字（engine 7.7）：单独粘贴的论文摘要没有 Introduction / Methods 等章节标题，不会被认作论文，
+# 只能套用为一般英文散文校准的阈值（MAGE），真人摘要大量误判（2026-10-29：PubMed 150 篇平均 29%、≥ 50% 44 篇；
+# arXiv 150 篇平均 23%、≥ 50% 32 篇）。AI 写的摘要第二分类器几乎都顶到 0.96，所以学术文字只在 v14 ≥ EN_ABS_EN2 时计入。
+# 识别：学术用语密度（本表里的词占全部词的比例）≥ EN_ABS_DENSITY。真人摘要 84% 命中；真人书 400 词块 18/891、
+# 各类真人文体 13/1765、AI 文学 4/1002、说明文 0/211 命中（命中只会让门槛更严，不会增加误判）。
+_ACAD_WORDS = frozenset("""analysis analyses analyzed analysed analyse analyze approach approaches assess assessed assessment
+associated association associations baseline cohort compared comparison conclude concluded conclusion conclusions conditions
+consistent controlled correlation criteria data dataset datasets demonstrate demonstrated design determine determined effect
+effects efficacy empirical estimate estimated estimates evaluate evaluated evaluation evidence examined experiment experimental
+experiments factor factors findings framework groups hypothesis identified impact implications increase increased indicate
+indicates indicated intervention interventions investigate investigated limitations measure measured measurement measures method
+methods methodology model models observed outcome outcomes parameters participants patients performance population potential
+predict predicted prediction primary proposed rate rates ratio reduced reduction regression relative reported research
+respectively response results revealed risk sample samples scale secondary significant significantly simulation statistical
+studies study suggest suggests survey symptoms test tested tests theory treatment trial trials validation variable variables
+variance versus mean median quantified characterized characterised protocol protocols cross-sectional longitudinal randomized
+randomised prospective retrospective meta-analysis systematic adjusted multivariate multivariable logistic linear coefficient
+coefficients confidence interval intervals odds hazard prevalence incidence mortality specimens assay assays spectroscopy
+synthesis synthesized fabricated characterization simulations algorithm algorithms benchmark benchmarks accuracy""".split())
+
+
+def academic_density(text: str) -> tuple[float, int]:
+    """(学术用语占全部英文词的比例, 词数)。"""
+    w = re.findall(r"[a-z][a-z-]*", (text or "").lower())
+    return sum(x in _ACAD_WORDS for x in w) / max(1, len(w)), len(w)
+
+
 def imperative_ratio(text: str) -> tuple[float, int]:
     """(以祈使动词开头的句子比例, 句子数)；只数 ≥ 3 词的句子。"""
     sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if len(s.split()) >= 3]
@@ -1217,9 +1244,31 @@ class Engine:
                         and (r.get("classifier_en3") or 0) >= config.EN_INSTR_EN3)
                 if not sure:
                     en_instr.add(i)
-        zh2_ai -= en_instr
-        paper_ai -= en_instr
-        zh_human_work |= en_instr
+        # 7.7) 学术摘要 / 学术文字（见 academic_density）：本段（或本段所在、不足 EN_ABS_MAX_WORDS 词的作品）学术用语密度
+        #      ≥ EN_ABS_DENSITY 时，过线段落只有第二分类器（v14）≥ EN_ABS_EN2 才计入，其余标"接近阈值"。论文作品不受影响
+        #      （论文段落另用按真人论文校准的阈值）。
+        en_abs = set()
+        for (blk, reg), idxs in groups.items():
+            if reg != "en" or blk in paper_blocks:
+                continue
+            btext = "\n".join(segs_by_idx[i].text for i in idxs)
+            bd, bn = academic_density(btext)
+            blk_abs = config.EN_ABS_MIN_WORDS <= bn <= config.EN_ABS_MAX_WORDS and bd >= config.EN_ABS_DENSITY
+            for i in idxs:
+                pr = smoothed.get(i)
+                if pr is None or i in en_instr or i in zh_human_work:
+                    continue
+                flagged = (pr >= float(prof[i][0].get("threshold", 0.5)) or i in zh2_ai or i in work_ai or i in paper_ai)
+                if not flagged:
+                    continue
+                sd, sn = academic_density(segs_by_idx[i].text)
+                if not (blk_abs or (sn >= config.EN_ABS_MIN_WORDS and sd >= config.EN_ABS_DENSITY)):
+                    continue
+                if (results[i].get("classifier_en2") or 0) < config.EN_ABS_EN2:
+                    en_abs.add(i)
+        zh2_ai -= en_instr | en_abs
+        paper_ai -= en_instr | en_abs
+        zh_human_work |= en_instr | en_abs
         work_ai -= zh_human_work
 
         def human_ref_of(i, pr):
@@ -1252,6 +1301,7 @@ class Engine:
             if s.index in zh_human_work:
                 level, near = "low", True
                 label = ("接近阈值（说明/操作类文字，按更严门槛未计入）" if s.index in en_instr else
+                         "接近阈值（学术摘要/学术文字，按更严门槛未计入）" if s.index in en_abs else
                          "接近阈值（整篇像人写的孤立段落，未计入）" if s.index in en_isolated else
                          "接近阈值（疑似名篇，未计入）" if s.index in famous_like else
                          "接近阈值（孤立段落，未计入）" if s.index in isolated else "接近阈值（整篇像人写，未计入）")

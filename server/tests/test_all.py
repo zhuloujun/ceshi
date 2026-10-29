@@ -966,6 +966,18 @@ def test_english_whole_document_classifier(client, monkeypatch):
     assert not any(s["label"] == "中度疑似（整篇判断）" for s in res["segments"])
 
 
+def test_academic_density_abstract():
+    """学术摘要识别：摘要里学术用语密度高，小说散文几乎为 0。"""
+    from app.engine import academic_density
+    abstract = ("This randomized trial examined whether a structured intervention reduced readmission. We enrolled 412 "
+                "patients and measured outcomes at baseline and 12 months; results were analyzed with logistic regression "
+                "adjusted for age. The intervention significantly reduced risk (odds ratio 0.71, 95% confidence interval "
+                "0.54 to 0.93). Limitations include a single site and self-reported data.")
+    story = ("The tag was blue. That is the first thing, and I have started here four times because there is no honest "
+             "way into the rest. I opened the box on the tie-down in November with a cold wind coming up the ramp.")
+    assert academic_density(abstract)[0] >= 0.1 and academic_density(story)[0] < 0.02
+
+
 def test_imperative_ratio_instructional():
     """说明 / 操作类文字识别：菜谱步骤算祈使句，"Let me speak…"这类修辞不算。"""
     from app.engine import imperative_ratio
