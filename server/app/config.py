@@ -79,6 +79,9 @@ EN3_OWN_CARRY = float(os.getenv("EN3_OWN_CARRY", "0.9") or 0.9)
 # 千问套语整篇判断（engine._qwen_style）：本篇未过阈值的段落，英文分类器自身得分至少达到这个值才计入
 QW_STYLE_OWN = float(os.getenv("QW_STYLE_OWN", "0.5") or 0.5)
 # 千问短语表（engine._qwen_lex_hits）：任意 4000 词窗口命中至少这么多条（互相包含只算一条）时按千问套语处理
+# 千问第三版短语表（engine._qwen_lex3）：4000 词窗口命中条数下限；命中时分类器自身得分 ≥ QW_LEX3_OWN 的段落计入
+QW_LEX3_MIN = int(os.getenv("QW_LEX3_MIN", "6") or 6)
+QW_LEX3_OWN = float(os.getenv("QW_LEX3_OWN", "0.0") or 0.0)
 QW_LEX_MIN = int(os.getenv("QW_LEX_MIN", "4") or 4)
 # DeepSeek 网页版固定句式：任意 4000 词窗口命中 deepseek_lex.json 里 ≥ 4 条（真人文本最高 2 条）
 DS_LEX_MIN = int(os.getenv("DS_LEX_MIN", "4") or 4)
