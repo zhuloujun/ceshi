@@ -966,6 +966,18 @@ def test_english_whole_document_classifier(client, monkeypatch):
     assert not any(s["label"] == "中度疑似（整篇判断）" for s in res["segments"])
 
 
+def test_academic_density_abstract():
+    """学术摘要识别：摘要里学术用语密度高，小说散文几乎为 0。"""
+    from app.engine import academic_density
+    abstract = ("This randomized trial examined whether a structured intervention reduced readmission. We enrolled 412 "
+                "patients and measured outcomes at baseline and 12 months; results were analyzed with logistic regression "
+                "adjusted for age. The intervention significantly reduced risk (odds ratio 0.71, 95% confidence interval "
+                "0.54 to 0.93). Limitations include a single site and self-reported data.")
+    story = ("The tag was blue. That is the first thing, and I have started here four times because there is no honest "
+             "way into the rest. I opened the box on the tie-down in November with a cold wind coming up the ramp.")
+    assert academic_density(abstract)[0] >= 0.1 and academic_density(story)[0] < 0.02
+
+
 def test_imperative_ratio_instructional():
     """说明 / 操作类文字识别：菜谱步骤算祈使句，"Let me speak…"这类修辞不算。"""
     from app.engine import imperative_ratio
@@ -1184,3 +1196,47 @@ def test_docx_no_break_hyphen_and_reference_head_with_note():
     segs = segment_text("Some Paper Title\n\nAbstract\n\n" + para + "\n\nReferences (Representative Academic Sources)\n"
                         "Ippolito, D., et al. (2019). Research on distinguishing human and machine text.\n")
     assert segs[-1].kind == "reference"
+
+
+def test_unwrap_short_hard_wrapped_abstract():
+    """短文本断行合并：每行约 75 字符断开的单篇摘要（文心常见）合并成段落；十四行诗、正常段落不动。"""
+    from app.segmenter import unwrap_hard_wraps
+    wrapped = (
+        "Delamination Growth in Carbon-Epoxy Laminates under Combined Thermal Cycling and Compression Fatigue Loading\n\n"
+        "Carbon-epoxy skins accumulate damage from repeated thermal cycles on the\n"
+        "ground and compressive loads in flight, yet the two are seldom tested\n"
+        "together. We prepared quasi-isotropic laminates carrying a 12-millimeter\n"
+        "implanted delamination and ran them through 500 thermal cycles between minus\n"
+        "55 and 120 degrees Celsius, with and without simultaneous in-plane compression\n"
+        "held at 60 percent of the critical buckling load.\n\n"
+        "Delamination growth from thermal cycling alone was slight, extending the crack\n"
+        "an average of 1.9 millimeters. When thermal and mechanical loads were applied\n"
+        "at once, growth ran roughly four times larger, and the crack front advanced\n"
+        "unevenly, moving fastest along the compression axis. Post-test ultrasonic\n"
+        "scans showed matrix cracking near the delamination tip that never appeared.\n")
+    out, changed = unwrap_hard_wraps(wrapped)
+    assert changed
+    paras = [p for p in out.split("\n\n") if p.strip()]
+    assert len(paras) == 3 and paras[0].startswith("Delamination Growth") and "on the ground" in paras[1]
+    sonnet = ("Sonnet of the Ridge\n"
+              "The solstice sun dips low behind the height,\nCasting a four-hour twilight on the sky;\n"
+              "Where golden rays meet pale blue polar light,\nAnd white clouds over the horizon lie.\n"
+              "The celestial wheel turns smooth in silent grace,\nMarking the longest day upon our sphere;\n"
+              "Guiding all life across the fields of space,\nThrough every changing month of every year.\n"
+              "Here human order meets the cosmic law,\nIn perfect harmony of shade and sun;\n")
+    assert unwrap_hard_wraps(sonnet) == (sonnet, False)
+    prose = "A normal paragraph that is written on one line and ends here.\n\nAnother one, also on one line.\n"
+    assert unwrap_hard_wraps(prose) == (prose, False)
+
+
+def test_abstract_style_score():
+    """AI 摘要写法得分：近两年 AI 摘要常见的写法得正分，老式真人摘要的套话得负分，空文本 0。"""
+    from app.engine import abstract_style_score
+    ai = ("We tested whether structured feedback, paired with brief practice, changed task engagement. Drawing on logs "
+          "from four sites, the effect was modest and persisted over months, yet the gain fell when visits were missed. "
+          "Limitations include self reported outcomes; the design can support a later randomized trial.")
+    hu = ("The aim of the present study was to investigate the effect of the treatment. In addition, we found that the "
+          "levels were higher than that of the control group. Moreover, in order to improve the yield, all the samples "
+          "were analysed. Thus the results could be important for agriculture in China.")
+    assert abstract_style_score("") == 0.0
+    assert abstract_style_score(ai) > 0.88 > 0 > abstract_style_score(hu)
