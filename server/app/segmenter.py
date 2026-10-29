@@ -942,7 +942,7 @@ _LATIN_CH = re.compile(r"[A-Za-z]")
 _END_PUNCT = re.compile(r"[.!?:;\"”’)\]]$")
 
 
-def unwrap_hard_wraps(text: str):
+def _unwrap_wide(text: str):
     """把按固定宽度断行的英文散文（每行约 60–90 个字符就换一次行，常见于从 PDF、邮件、聊天窗口或某些 AI 平台复制出来的文字，
     往往还每行之间夹一个空行）重新合并成段落。返回 (合并后的文本, 是否改动)。
     依据（2026-10-28）：用户上传的文心英文作品 20 篇按原样检测平均 AI 率 34.5%（12 篇 < 50%），只把断行合并、别的不动，
@@ -989,3 +989,81 @@ def unwrap_hard_wraps(text: str):
             s = s[:-1] + l if s.endswith("-") and l[:1].islower() else s + " " + l
         out.append(s)
     return "\n\n".join(out) + "\n", True
+
+
+_HEADLIKE = re.compile(r"^(abstract|summary|keywords?|key words|index terms|background|objectives?|methods?|results?|conclusions?)\b", re.I)
+_KW_LINE = re.compile(r"(?i)^(keywords?|key words|index terms)\s*[:：]")
+
+
+def _unwrap_short(text: str):
+    """短文本（9–60 行，如单篇论文摘要）的固定宽度断行。
+    依据（2026-10-29）：用户上传的文心英文摘要 40 篇每行约 78 字符断开、只有 15–22 行，原来的规则要求 ≥ 20 行且
+    标题行不能超过 110 字符，大多没合并；照原样检测平均 51.5%（15 篇 < 20%），只把断行合并后 79.2%（4 篇 < 20%）。
+    统计时跳过标题行（首行、无句末标点）、小标题（Abstract / Methods 等）和关键词行；门槛比长文本更严：
+    ≥ 8 行正文、≥ 80% 的行长 40–100 字符、没有超过 110 字符的行、≥ 40% 的行不以句末标点结尾。
+    诗的守卫：续行有 60% 以上以大写字母开头就不动（诗行习惯大写开头，断行散文的续行多是小写词）。
+    在本地 3256 篇已测文本上，除了文心 / 千问断行摘要，只额外命中一篇按 Gutenberg 版式断行的散文译本（荷马 Butler 译本），没有命中任何诗。"""
+    raw = (text or "").replace("\r\n", "\n").split("\n")
+    lines = [l.rstrip() for l in raw]
+    idx = [i for i, l in enumerate(lines) if l.strip()]
+    if len(idx) < 9 or len(idx) > 60:
+        return text, False
+    body = "".join(lines[i] for i in idx)
+    if len(_LATIN_CH.findall(body)) < 0.6 * max(1, len(body)) or _CJK.search(body) and len(_CJK.findall(body)) > 0.05 * len(body):
+        return text, False
+    skip = set()
+    first = lines[idx[0]].strip()
+    if not _END_PUNCT.search(first) and len(first) <= 250:
+        skip.add(idx[0])
+    for i in idx:
+        l = lines[i].strip()
+        if (_HEADLIKE.match(l) and len(l) <= 60 and not _END_PUNCT.search(l.rstrip(":"))) or _KW_LINE.match(l):
+            skip.add(i)
+    bidx = [i for i in idx if i not in skip]
+    if len(bidx) < 8:
+        return text, False
+    lens = [len(lines[i].strip()) for i in bidx]
+    mid = sum(40 <= n <= 100 for n in lens) / len(lens)
+    open_end = sum(not _END_PUNCT.search(lines[i].strip()) for i in bidx) / len(bidx)
+    if mid < 0.8 or max(lens) > 110 or open_end < 0.4:
+        return text, False
+    cont = [i for i in bidx[1:] if lines[i].strip()[:1].isalpha()]
+    if cont and sum(lines[i].strip()[:1].isupper() for i in cont) / len(cont) > 0.6:
+        return text, False
+    w90 = sorted(lens)[int(0.9 * (len(lens) - 1))]
+    if sum(n >= 0.8 * w90 for n in lens) / len(lens) < 0.75:
+        return text, False
+    gaps = [idx[k + 1] - idx[k] - 1 for k in range(len(idx) - 1)]
+    import collections as _c
+    base = _c.Counter(gaps).most_common(1)[0][0]
+    width = sorted(lens)[int(0.75 * (len(lens) - 1))]
+    paras, cur = [], []
+    for k, i in enumerate(idx):
+        l = lines[i].strip()
+        if i in skip:
+            if cur:
+                paras.append(cur)
+                cur = []
+            paras.append([l])
+            continue
+        cur.append(l)
+        gap_break = k < len(gaps) and gaps[k] > base
+        short_end = (len(l) < 0.7 * width and bool(_END_PUNCT.search(l))) or len(l) < 0.55 * width
+        if gap_break or short_end or k == len(idx) - 1:
+            paras.append(cur)
+            cur = []
+    if cur:
+        paras.append(cur)
+    out = []
+    for p in paras:
+        s = p[0]
+        for l in p[1:]:
+            s = s[:-1] + l if s.endswith("-") and l[:1].islower() else s + " " + l
+        out.append(s)
+    return "\n\n".join(out) + "\n", True
+
+
+def unwrap_hard_wraps(text: str):
+    """固定宽度断行的英文散文合并成段落：先用长文本规则（≥ 20 行），不命中再用更严的短文本规则。返回 (文本, 是否改动)。"""
+    t, changed = _unwrap_wide(text)
+    return (t, True) if changed else _unwrap_short(text)

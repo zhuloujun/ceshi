@@ -1196,3 +1196,34 @@ def test_docx_no_break_hyphen_and_reference_head_with_note():
     segs = segment_text("Some Paper Title\n\nAbstract\n\n" + para + "\n\nReferences (Representative Academic Sources)\n"
                         "Ippolito, D., et al. (2019). Research on distinguishing human and machine text.\n")
     assert segs[-1].kind == "reference"
+
+
+def test_unwrap_short_hard_wrapped_abstract():
+    """短文本断行合并：每行约 75 字符断开的单篇摘要（文心常见）合并成段落；十四行诗、正常段落不动。"""
+    from app.segmenter import unwrap_hard_wraps
+    wrapped = (
+        "Delamination Growth in Carbon-Epoxy Laminates under Combined Thermal Cycling and Compression Fatigue Loading\n\n"
+        "Carbon-epoxy skins accumulate damage from repeated thermal cycles on the\n"
+        "ground and compressive loads in flight, yet the two are seldom tested\n"
+        "together. We prepared quasi-isotropic laminates carrying a 12-millimeter\n"
+        "implanted delamination and ran them through 500 thermal cycles between minus\n"
+        "55 and 120 degrees Celsius, with and without simultaneous in-plane compression\n"
+        "held at 60 percent of the critical buckling load.\n\n"
+        "Delamination growth from thermal cycling alone was slight, extending the crack\n"
+        "an average of 1.9 millimeters. When thermal and mechanical loads were applied\n"
+        "at once, growth ran roughly four times larger, and the crack front advanced\n"
+        "unevenly, moving fastest along the compression axis. Post-test ultrasonic\n"
+        "scans showed matrix cracking near the delamination tip that never appeared.\n")
+    out, changed = unwrap_hard_wraps(wrapped)
+    assert changed
+    paras = [p for p in out.split("\n\n") if p.strip()]
+    assert len(paras) == 3 and paras[0].startswith("Delamination Growth") and "on the ground" in paras[1]
+    sonnet = ("Sonnet of the Ridge\n"
+              "The solstice sun dips low behind the height,\nCasting a four-hour twilight on the sky;\n"
+              "Where golden rays meet pale blue polar light,\nAnd white clouds over the horizon lie.\n"
+              "The celestial wheel turns smooth in silent grace,\nMarking the longest day upon our sphere;\n"
+              "Guiding all life across the fields of space,\nThrough every changing month of every year.\n"
+              "Here human order meets the cosmic law,\nIn perfect harmony of shade and sun;\n")
+    assert unwrap_hard_wraps(sonnet) == (sonnet, False)
+    prose = "A normal paragraph that is written on one line and ends here.\n\nAnother one, also on one line.\n"
+    assert unwrap_hard_wraps(prose) == (prose, False)
