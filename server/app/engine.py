@@ -1091,13 +1091,13 @@ class Engine:
             if len(body.split()) < 800 and blk not in lex3_blk:
                 continue
             kinds = _qwen_style(body) if len(body.split()) >= 800 else None
-            lex3 = None if kinds else lex3_blk.get(blk)
+            lex3 = lex3_blk.get(blk)
             if not kinds and not lex3:
                 continue
             qw_kinds = kinds or ["lex3:" + g for g in lex3[:8]]
             qw_blocks.add(blk)
             # 第三版短语表命中（≥ 6 条，真人文本最高 2 条）证据很强，分类器自己打分很低的段落也计入（千问新文风三个分类器都认不出）
-            own_min = config.QW_STYLE_OWN if kinds else config.QW_LEX3_OWN
+            own_min = config.QW_LEX3_OWN if lex3 else config.QW_STYLE_OWN
             qw_style_ai |= {i for i in idxs if smoothed.get(i) is not None
                             and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and (lex3 or i not in en_verse)
                             and (results[i].get("classifier_en4") or results[i].get("classifier_en2") or 0)
