@@ -57,11 +57,11 @@ async function refreshHealth(){
     const parts = [];
     const lm = health.lm, cl = health.classifier;
     const st = (d, name)=> !d.enabled ? `${name}：未启用` : d.ready ? `${name}：就绪` : d.error ? `${name}：加载失败` : `${name}：加载中`;
-    parts.push(st(lm, '语言模型（F / B）'));
+    parts.push(st(lm, '语言（F / B）'));
     parts.push(st(cl, '中文分类器'));
     if(health.classifier_en) parts.push(st(health.classifier_en, '英文分类器'));
-    if(health.classifier_en2 && health.classifier_en2.enabled) parts.push(st(health.classifier_en2, '英文第二分类器（国产大模型）'));
-    if(health.classifier_zh2 && health.classifier_zh2.enabled) parts.push(st(health.classifier_zh2, '中文第二分类器（国产大模型）'));
+    if(health.classifier_en2 && health.classifier_en2.enabled) parts.push(st(health.classifier_en2, '英文第二分类器（国模）'));
+    if(health.classifier_zh2 && health.classifier_zh2.enabled) parts.push(st(health.classifier_zh2, '中文第二分类器（国模）'));
     if(health.classifier_poetry && health.classifier_poetry.enabled) parts.push(st(health.classifier_poetry, '诗词分类器'));
     if(health.classifier_classical && health.classifier_classical.enabled) parts.push(st(health.classifier_classical, '文言分类器'));
     const pr = health.calibration.profiles;
