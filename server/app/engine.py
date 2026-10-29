@@ -1049,7 +1049,10 @@ class Engine:
                          if results[i].get("classifier_en4") is not None]
                 med4 = (min(v for v, _ in vals4) if len(vals4) == 2 else _wmedian(vals4)) if len(vals4) >= 2 else None
                 joint = med4 is not None and ((med >= config.EN3_JOINT_THRESHOLD and med4 >= config.EN4_JOINT_THRESHOLD)
-                                              or (med >= config.EN3_JOINT2_THRESHOLD and med4 >= config.EN4_JOINT2_THRESHOLD))
+                                              or (med >= config.EN3_JOINT2_THRESHOLD and med4 >= config.EN4_JOINT2_THRESHOLD)
+                                              # v14 单独：整篇中位数 ≥ EN4_SOLO_THRESHOLD 且至少 EN4_SOLO_MIN_SEGS 段。397 篇真人英文长文
+                                              # v14 中位数最高 0.903；新一代千问 / Claude 文学作品 v7 常只有 0.1–0.6，联合规则不触发（2026-10-29）
+                                              or (med4 >= config.EN4_SOLO_THRESHOLD and len(vals4) >= config.EN4_SOLO_MIN_SEGS))
                 if med >= config.EN3_DOC_THRESHOLD or joint:
                     en3_hit = {i for i in idxs if smoothed.get(i) is not None
                                and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
