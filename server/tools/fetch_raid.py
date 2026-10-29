@@ -27,15 +27,17 @@ def fetch(domain, model, n, seed=29):
     while len(rows) < max(n * 3, 60) and offset < 2000:
         q = urllib.parse.urlencode({"dataset": "liamdugan/raid", "config": "raid", "split": "train",
                                     "where": where, "offset": offset, "length": 100})
-        for k in range(4):
+        for k in range(8):
             try:
-                with urllib.request.urlopen(f"{API}?{q}", timeout=120) as r:
+                time.sleep(2)                                    # datasets-server 有频率限制
+                with urllib.request.urlopen(f"{API}?{q}", timeout=180) as r:
                     page = json.loads(r.read())
                 break
             except Exception as e:  # noqa: BLE001
                 print(f"retry {domain}/{model} {offset}: {e}", flush=True)
-                time.sleep(5 * (k + 1))
+                time.sleep(15 * (k + 1))
         else:
+            print(f"::warning title=RAID 取样失败::{domain}/{model} offset {offset}", flush=True)
             break
         got = [x["row"] for x in page.get("rows", [])]
         if not got:
@@ -55,7 +57,7 @@ def main():
         domain, models, k = part.split(":")
         for model in models.split(","):
             rows = fetch(domain, model, int(k))
-            print(f"{domain}/{model}: {len(rows)} 条", flush=True)
+            print(f"::notice title=RAID 取样::{domain}/{model}: {len(rows)} 条", flush=True)
             for j, r in enumerate(rows):
                 title = (r.get("title") or "").strip()
                 text = r["generation"].strip()
