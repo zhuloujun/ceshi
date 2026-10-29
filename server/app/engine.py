@@ -119,6 +119,20 @@ def _qwen_style(text: str):
 _STYLE_LEX: dict = {}
 
 
+def _qwen_lex3(text: str):
+    """千问网页版英文文学作品的第三版短语表（app/qwen_lex3.json，553 条 4–6 词）：前几批千问 203 篇里 ≥ 6 篇出现、
+    其他平台 1724 篇 AI 文 ≤ 1 篇、真人 1060 篇 ≤ 2 篇、620 本真人书 4000 词窗口 ≤ 15 个。任意 4000 词窗口命中
+    ≥ QW_LEX3_MIN 条时返回命中的短语。
+    依据（2026-10-29，没参与选词的数据）：新上传千问 15 篇 13 篇命中（其中 3 篇线上 AI 率 0–4%）；40 本经典真人书最高 2 条、
+    1765 篇各类真人文体最高 1 条、PMC/PubMed/arXiv 2618 篇最高 1 条；各平台 API 生成的 4000 多篇 AI 文最高 3 条。"""
+    w = (text or "").split()
+    for i in range(0, max(1, len(w) - 1999), 2000):
+        h = _style_lex_hits(" ".join(w[i:i + 4000]), "qwen_lex3.json")
+        if len(h) >= config.QW_LEX3_MIN:
+            return h
+    return None
+
+
 def _style_lex_hits(s: str, fname: str):
     """在一段文字里找 app/<fname> 短语表里的短语（互相包含的只算最长的一条）。"""
     lex = _STYLE_LEX.get(fname)
@@ -1056,14 +1070,17 @@ class Engine:
             if len(body.split()) < 800:
                 continue
             kinds = _qwen_style(body)
-            if not kinds:
+            lex3 = None if kinds else _qwen_lex3(body)
+            if not kinds and not lex3:
                 continue
-            qw_kinds = kinds
+            qw_kinds = kinds or ["lex3:" + g for g in lex3[:8]]
             qw_blocks.add(blk)
+            # 第三版短语表命中（≥ 6 条，真人文本最高 2 条）证据很强，分类器自己打分很低的段落也计入（千问新文风三个分类器都认不出）
+            own_min = config.QW_STYLE_OWN if kinds else config.QW_LEX3_OWN
             qw_style_ai |= {i for i in idxs if smoothed.get(i) is not None
-                            and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and i not in en_verse
+                            and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and (lex3 or i not in en_verse)
                             and (results[i].get("classifier_en4") or results[i].get("classifier_en2") or 0)
-                            >= config.QW_STYLE_OWN}
+                            >= own_min}
         qw_style_ai -= zh2_ai
         zh2_ai |= qw_style_ai
         # 6.8) DeepSeek 网页版英文作品的固定句式（见 _deepseek_style），论文也算：v14 对这类论文体综述段落常打到 0.5–0.9，
@@ -1335,7 +1352,7 @@ class Engine:
                    "which_is_the": "“…, which is the whole/only…”", "that_is_the_whole": "“That is the whole job/story”",
                    "not_a_metaphor": "“…is not a metaphor”", "cjk_glued": "英文词后直接粘着汉字",
                    "I_want_you_to": "“I want you to understand”", "and_I_have_never": "“and I have never”"}
-            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] if k in _qn else "“" + k[4:] + "”" for k in qw_kinds[:6]) + "）。"
+            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] if k in _qn else "“" + k.split(":", 1)[1] + "”" for k in qw_kinds[:6]) + "）。"
                          "580 本真人英文书没有一本出现这种组合"
                          + (f"；据此另有 {len(qw_style_ai)} 段按“中度疑似（整篇判断）”计入。" if qw_style_ai else "。"))
         if ds_hits and ds_hits[0].startswith("…is the thing"):
