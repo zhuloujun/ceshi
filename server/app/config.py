@@ -68,6 +68,8 @@ EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v14")
 #   v7 ≥ 0.85 且 v10 ≥ 0.95 → 真人 0 篇，用户 AI 19 篇；另一档 v7 ≥ 0.75 且 v10 ≥ 0.955 → 真人 0 篇，再多认出 The Seam in the Night
 EN3_JOINT_THRESHOLD = float(os.getenv("EN3_JOINT_THRESHOLD", "0.85") or 0.85)
 EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.93") or 0.93)
+EN4_SOLO_THRESHOLD = float(os.getenv("EN4_SOLO_THRESHOLD", "0.93") or 0.93)
+EN4_SOLO_MIN_SEGS = int(os.getenv("EN4_SOLO_MIN_SEGS", "6") or 6)
 EN3_JOINT2_THRESHOLD = float(os.getenv("EN3_JOINT2_THRESHOLD", "0.75") or 0.75)
 EN4_JOINT2_THRESHOLD = float(os.getenv("EN4_JOINT2_THRESHOLD", "0.94") or 0.94)
 # 整篇判断只带上自己的整篇分类器得分 ≥ 这个值的段落（插在 AI 文章中间的真人段落不跟着计入）
