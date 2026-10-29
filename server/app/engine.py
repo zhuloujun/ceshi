@@ -207,7 +207,12 @@ def imperative_ratio(text: str) -> tuple[float, int]:
     sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if len(s.split()) >= 3]
     if not sents:
         return 0.0, 0
-    n = sum(((_IMP_FIRST.match(s) or [None, ""])[1] or "").lower() in _IMP_VERBS for s in sents)
+    def imp(s):
+        w = ((_IMP_FIRST.match(s) or [None, ""])[1] or "").lower()
+        if w == "let" and re.match(r"[“\"'(]?let(?:'s| me| us)\b", s, re.I):   # "Let me speak…" / "Let us go…" 是修辞，不是操作步骤
+            return False
+        return w in _IMP_VERBS
+    n = sum(imp(s) for s in sents)
     return n / len(sents), len(sents)
 
 

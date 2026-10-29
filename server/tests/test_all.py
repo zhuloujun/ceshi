@@ -961,8 +961,21 @@ def test_english_whole_document_classifier(client, monkeypatch):
     assert all("classifier_en4" in s["raw"] for s in en)
     assert all(s["label"] == "中度疑似（整篇判断）" for s in en), [s["label"] for s in en]
     monkeypatch.setattr(config, "EN4_JOINT_THRESHOLD", 1.01)
+    monkeypatch.setattr(config, "EN4_SOLO_THRESHOLD", 1.01)
     res = client.post("/v1/detect", json={"text": doc + "...", "wait": True}, headers=h).json()["result"]
     assert not any(s["label"] == "中度疑似（整篇判断）" for s in res["segments"])
+
+
+def test_imperative_ratio_instructional():
+    """说明 / 操作类文字识别：菜谱步骤算祈使句，"Let me speak…"这类修辞不算。"""
+    from app.engine import imperative_ratio
+    recipe = ("Preheat the oven to 350 degrees. Whisk the eggs and sugar until pale. Fold in the flour gently. "
+              "Pour the batter into the pan. Bake for 25 minutes until golden. Let cool on a rack before slicing.")
+    r, n = imperative_ratio(recipe)
+    assert n == 6 and r == 1.0
+    prose = ("Let me speak of the country, for I have lived in it. Let us walk down to the river together. "
+             "The city talks and the country sings. I remember the larks going up into the morning sky.")
+    assert imperative_ratio(prose)[0] == 0.0
 
 
 
