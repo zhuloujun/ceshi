@@ -563,7 +563,7 @@ function applyFilter(){
 $('onlyFlagged').addEventListener('change', applyFilter);
 
 /* ---------------- 导出 ---------------- */
-const METHOD_LINE = () => `方法：Fast-DetectGPT、Binoculars（Qwen2.5 打分）、MPU 中文分类器 + 国产大模型中文分类器、desklib 英文分类器 + 国产大模型英文分类器（按段落文体选用）；模式：${lastResult.summary.mode === 'fast' ? '快速（抽样）' : '完整'}`;
+const METHOD_LINE = () => `共：F、B、M中文分类器 + 本模中文分类器、d英文分类器 + 本模英文分类器（按段落文体选用）；模式：${lastResult.summary.mode === 'fast' ? '快速（抽样）' : '完整'}`;
 // 保形预测式的"人写对照"：同文体人写样本里，得分不低于本段的比例（越小越不像人写；例如 1% = 100 段人写里约 1 段这么高）
 function humanRefText(seg){
   const h = seg.human_ref;
