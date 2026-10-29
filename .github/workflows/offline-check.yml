@@ -7,8 +7,20 @@ on:
   workflow_dispatch:
     inputs:
       payload:
-        description: "base64(xz(JSON 列表 [{name, text}]))"
+        description: "base64(xz(JSON 列表 [{name, text}]))；用 RAID 取样时填 -"
         required: true
+      raid:
+        description: "（可选）从公开基准 RAID 取样，如 abstracts:human,gpt4:40;recipes:human:30（见 tools/fetch_raid.py）"
+        required: false
+        default: ""
+      shard:
+        description: "（可选）RAID 取样的分片 i/n"
+        required: false
+        default: "0/1"
+      envs:
+        description: "（可选）临时覆盖 config 参数做对照，空格分隔，如 EN_ABS_EN2=0"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -109,10 +121,20 @@ jobs:
           else
             echo "::warning title=第二个英文整篇分类器::没有找到 Release $TAG，本次不部署它"
           fi
+      - name: 从 RAID 取样（可选）
+        if: github.event.inputs.raid != ''
+        working-directory: server
+        run: python -u tools/fetch_raid.py "${{ github.event.inputs.raid }}" "${{ github.event.inputs.shard }}" /tmp/payload.txt
       - name: 检测
         working-directory: server
         env:
           PAYLOAD: ${{ github.event.inputs.payload }}
+          PAYLOAD_FILE: ${{ github.event.inputs.raid != '' && '/tmp/payload.txt' || '' }}
           TORCH_THREADS: "4"
           TOKENIZERS_PARALLELISM: "false"
-        run: python -u tools/offline_check.py
+          ENVS: ${{ github.event.inputs.envs }}
+        run: |
+          for kv in $ENVS; do
+            case "$kv" in [A-Z][A-Z0-9_]*=*) export "$kv"; echo "::notice title=参数覆盖::$kv" ;; esac
+          done
+          python -u tools/offline_check.py

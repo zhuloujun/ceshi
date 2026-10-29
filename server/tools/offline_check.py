@@ -32,7 +32,8 @@ from app.engine import Engine  # noqa: E402
 
 
 def main():
-    docs = json.loads(lzma.decompress(base64.b64decode(os.environ["PAYLOAD"])).decode("utf-8"))
+    raw = Path(os.environ["PAYLOAD_FILE"]).read_text() if os.environ.get("PAYLOAD_FILE") else os.environ["PAYLOAD"]
+    docs = json.loads(lzma.decompress(base64.b64decode(raw)).decode("utf-8"))
     eng = Engine()
     eng.load_all()
     print("模型：", json.dumps(eng.status(), ensure_ascii=False)[:1500], flush=True)
