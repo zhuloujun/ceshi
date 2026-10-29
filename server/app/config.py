@@ -68,6 +68,8 @@ EN4_CLASSIFIER_ID = os.getenv("EN4_CLASSIFIER_ID", "english-classifier-v14")
 #   v7 ≥ 0.85 且 v10 ≥ 0.95 → 真人 0 篇，用户 AI 19 篇；另一档 v7 ≥ 0.75 且 v10 ≥ 0.955 → 真人 0 篇，再多认出 The Seam in the Night
 EN3_JOINT_THRESHOLD = float(os.getenv("EN3_JOINT_THRESHOLD", "0.85") or 0.85)
 EN4_JOINT_THRESHOLD = float(os.getenv("EN4_JOINT_THRESHOLD", "0.93") or 0.93)
+EN4_SOLO_THRESHOLD = float(os.getenv("EN4_SOLO_THRESHOLD", "0.93") or 0.93)
+EN4_SOLO_MIN_SEGS = int(os.getenv("EN4_SOLO_MIN_SEGS", "6") or 6)
 EN3_JOINT2_THRESHOLD = float(os.getenv("EN3_JOINT2_THRESHOLD", "0.75") or 0.75)
 EN4_JOINT2_THRESHOLD = float(os.getenv("EN4_JOINT2_THRESHOLD", "0.94") or 0.94)
 # 整篇判断只带上自己的整篇分类器得分 ≥ 这个值的段落（插在 AI 文章中间的真人段落不跟着计入）
@@ -79,6 +81,9 @@ EN3_OWN_CARRY = float(os.getenv("EN3_OWN_CARRY", "0.9") or 0.9)
 # 千问套语整篇判断（engine._qwen_style）：本篇未过阈值的段落，英文分类器自身得分至少达到这个值才计入
 QW_STYLE_OWN = float(os.getenv("QW_STYLE_OWN", "0.5") or 0.5)
 # 千问短语表（engine._qwen_lex_hits）：任意 4000 词窗口命中至少这么多条（互相包含只算一条）时按千问套语处理
+# 千问第三版短语表（engine._qwen_lex3）：4000 词窗口命中条数下限；命中时分类器自身得分 ≥ QW_LEX3_OWN 的段落计入
+QW_LEX3_MIN = int(os.getenv("QW_LEX3_MIN", "6") or 6)
+QW_LEX3_OWN = float(os.getenv("QW_LEX3_OWN", "0.0") or 0.0)
 QW_LEX_MIN = int(os.getenv("QW_LEX_MIN", "4") or 4)
 # DeepSeek 网页版固定句式：任意 4000 词窗口命中 deepseek_lex.json 里 ≥ 4 条（真人文本最高 2 条）
 DS_LEX_MIN = int(os.getenv("DS_LEX_MIN", "4") or 4)
@@ -150,6 +155,11 @@ EN_ISOLATED_MIN_SEGS = _int("EN_ISOLATED_MIN_SEGS", 6)
 EN_ISOLATED_WORK_EN2 = float(os.getenv("EN_ISOLATED_WORK_EN2", "0.3") or 0.3)
 EN_ISOLATED_MAX_SHARE = float(os.getenv("EN_ISOLATED_MAX_SHARE", "0.2") or 0.2)
 EN_ISOLATED_SEG_CAP = float(os.getenv("EN_ISOLATED_SEG_CAP", "0.95") or 0.95)
+# 说明 / 操作类英文文字（engine 7.6）：祈使句比例 ≥ EN_INSTR_IMP 时，用更严门槛
+EN_INSTR_IMP = float(os.getenv("EN_INSTR_IMP", "0.25") or 0.25)
+EN_INSTR_PROB = float(os.getenv("EN_INSTR_PROB", "0.90") or 0.90)
+EN_INSTR_EN2 = float(os.getenv("EN_INSTR_EN2", "0.85") or 0.85)
+EN_INSTR_EN3 = float(os.getenv("EN_INSTR_EN3", "0.90") or 0.90)
 MEMORIZED_PPL = float(os.getenv("MEMORIZED_PPL", "3.5") or 3.5)
 # 管理页校准时，用户样本与内置公开数据合并，用户样本合计所占的权重比例
 USER_SAMPLE_SHARE = float(os.getenv("USER_SAMPLE_SHARE", "0.3") or 0.3)
