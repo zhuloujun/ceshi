@@ -150,6 +150,11 @@ EN_ISOLATED_MIN_SEGS = _int("EN_ISOLATED_MIN_SEGS", 6)
 EN_ISOLATED_WORK_EN2 = float(os.getenv("EN_ISOLATED_WORK_EN2", "0.3") or 0.3)
 EN_ISOLATED_MAX_SHARE = float(os.getenv("EN_ISOLATED_MAX_SHARE", "0.2") or 0.2)
 EN_ISOLATED_SEG_CAP = float(os.getenv("EN_ISOLATED_SEG_CAP", "0.95") or 0.95)
+# 说明 / 操作类英文文字（engine 7.6）：祈使句比例 ≥ EN_INSTR_IMP 时，用更严门槛
+EN_INSTR_IMP = float(os.getenv("EN_INSTR_IMP", "0.25") or 0.25)
+EN_INSTR_PROB = float(os.getenv("EN_INSTR_PROB", "0.90") or 0.90)
+EN_INSTR_EN2 = float(os.getenv("EN_INSTR_EN2", "0.85") or 0.85)
+EN_INSTR_EN3 = float(os.getenv("EN_INSTR_EN3", "0.90") or 0.90)
 MEMORIZED_PPL = float(os.getenv("MEMORIZED_PPL", "3.5") or 3.5)
 # 管理页校准时，用户样本与内置公开数据合并，用户样本合计所占的权重比例
 USER_SAMPLE_SHARE = float(os.getenv("USER_SAMPLE_SHARE", "0.3") or 0.3)

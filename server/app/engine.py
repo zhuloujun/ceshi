@@ -173,6 +173,30 @@ def _thing_that_density(text: str) -> int:
     return b
 
 
+# 说明 / 操作类文体（菜谱、操作指南、急救手册、手工教程）：句子大多以祈使动词开头。真人这类文字句式短而公式化，
+# 分类器常打高分（r99：真人说明文 91 段平均 26%、23 段 ≥ 50%）；但 AI 写的同类文字三个英文分类器几乎全都很肯定，
+# 因此这类文字只在"更严门槛"下计入（见 engine 7.6）。祈使句比例 ≥ 0.25：真人说明类书 56/184 个窗口，其他真人文字 1/4863。
+_IMP_VERBS = frozenset("""add adjust allow apply arrange avoid bake baste beat begin blanch blend boil bring brown brush buy
+carve check chill chop choose clean click close coat combine compare consider continue cook cool core cover crack create cream
+crumble crush cube cut decide deglaze dice dip discard dissolve divide do don't drain drizzle drop dry dust enjoy fill find finish
+flip fold follow form freeze fry garnish get give grate grease grill grind halve heat hold imagine insert keep knead layer leave
+let line look make marinate mash measure melt mince mix moisten move note open pack pat peel pick pierce place plan pour practice
+preheat prepare press process pull purée puree push put reduce refrigerate reheat remember remove repeat replace reserve return
+rinse roast roll rub run saute sauté scatter scoop scrape season select separate serve set shake shape shred simmer skim slice
+slide soak spoon spray spread sprinkle squeeze start stir store strain stuff sweat take taste test think tie tilt toast top toss
+transfer trim try turn unmold use wait warm wash watch whip whisk wipe wrap write""".split())
+_IMP_FIRST = re.compile(r"[“\"'(]?(?:\d+[.)]\s*|[-•*]\s*)?([A-Za-z']+)")
+
+
+def imperative_ratio(text: str) -> tuple[float, int]:
+    """(以祈使动词开头的句子比例, 句子数)；只数 ≥ 3 词的句子。"""
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if len(s.split()) >= 3]
+    if not sents:
+        return 0.0, 0
+    n = sum(((_IMP_FIRST.match(s) or [None, ""])[1] or "").lower() in _IMP_VERBS for s in sents)
+    return n / len(sents), len(sents)
+
+
 _QW_LEX = None
 
 
@@ -1121,6 +1145,38 @@ class Engine:
                     and (results[i].get("classifier_en2") or 0) < config.EN_ISOLATED_SEG_CAP}
             zh_human_work |= soft
             en_isolated |= soft
+        # 7.6) 说明 / 操作类英文文字（菜谱、指南、急救、手工）：本段连同前后各一段（不足 300 词再往外扩）祈使句比例
+        #      ≥ EN_INSTR_IMP 时，只有三个英文分类器都很肯定（综合分数 ≥ EN_INSTR_PROB、第二 / 第三分类器 ≥ EN_INSTR_EN2 /
+        #      EN_INSTR_EN3）的段落才计入，其余过线段落标"接近阈值"。r99：真人说明文 ≥ 50% 的片段 23/91 → 1/91，
+        #      AI 说明文 16/16 仍 ≥ 50%。整篇套语规则（千问 / DeepSeek）命中的作品不受影响。
+        en_instr = set()
+        for (blk, reg), idxs in groups.items():
+            if reg != "en" or blk in qw_blocks or blk in ds_blocks:
+                continue
+            order = sorted(idxs)
+            for k, i in enumerate(order):
+                pr = smoothed.get(i)
+                if pr is None or i in en_verse:
+                    continue
+                flagged = (pr >= float(prof[i][0].get("threshold", 0.5)) or i in zh2_ai or i in work_ai
+                           or i in paper_ai)
+                if not flagged or i in zh_human_work:
+                    continue
+                a, b = max(0, k - 1), min(len(order), k + 2)
+                ctx = lambda: "\n".join(segs_by_idx[j].text for j in order[a:b])
+                while len(ctx().split()) < 300 and (a > 0 or b < len(order)):
+                    a, b = max(0, a - 1), min(len(order), b + 1)
+                ratio, ns = imperative_ratio(ctx())
+                if ns < 6 or ratio < config.EN_INSTR_IMP:
+                    continue
+                r = results[i]
+                sure = (pr >= config.EN_INSTR_PROB and (r.get("classifier_en2") or 0) >= config.EN_INSTR_EN2
+                        and (r.get("classifier_en3") or 0) >= config.EN_INSTR_EN3)
+                if not sure:
+                    en_instr.add(i)
+        zh2_ai -= en_instr
+        paper_ai -= en_instr
+        zh_human_work |= en_instr
         work_ai -= zh_human_work
 
         def human_ref_of(i, pr):
@@ -1152,7 +1208,8 @@ class Engine:
             by_work = s.index in work_ai or s.index in paper_ai or s.index in zh2_ai
             if s.index in zh_human_work:
                 level, near = "low", True
-                label = ("接近阈值（整篇像人写的孤立段落，未计入）" if s.index in en_isolated else
+                label = ("接近阈值（说明/操作类文字，按更严门槛未计入）" if s.index in en_instr else
+                         "接近阈值（整篇像人写的孤立段落，未计入）" if s.index in en_isolated else
                          "接近阈值（疑似名篇，未计入）" if s.index in famous_like else
                          "接近阈值（孤立段落，未计入）" if s.index in isolated else "接近阈值（整篇像人写，未计入）")
             elif s.index in zh2_seg:
