@@ -1066,14 +1066,32 @@ class Engine:
         #      同样高（中位都在 0.9 左右），最终 AI 率被校准压低。整篇（≥ 800 词）命中套语时，本篇未过阈值、但分类器自身
         #      得分 ≥ QW_STYLE_OWN 的段落计为"中度疑似（整篇判断）"。诗行不计。
         qw_style_ai, qw_kinds, qw_blocks = set(), None, set()
+        # 第三版短语表按全文（所有英文非论文作品连起来）滑动 4000 词窗口判断：千问作品常按小标题被切成多篇短"作品"，
+        # 单篇不足 800 词或命中不足。窗口命中 ≥ QW_LEX3_MIN 条时，窗口内自身至少命中 1 条的作品计入。
+        lex3_blk: dict = {}
+        _en_blks = sorted({blk for (blk, reg) in groups if reg == "en" and blk not in paper_blocks})
+        if _en_blks:
+            _bw, _words = [], []
+            for blk in _en_blks:
+                w_ = " ".join(segs_by_idx[i].text for i in sorted(groups[(blk, "en")])).split()
+                _bw.append((blk, len(_words), len(_words) + len(w_)))
+                _words += w_
+            for a0 in range(0, max(1, len(_words) - 1999), 2000):
+                h = _style_lex_hits(" ".join(_words[a0:a0 + 4000]), "qwen_lex3.json")
+                if len(h) < config.QW_LEX3_MIN:
+                    continue
+                for blk, b0, b1 in _bw:
+                    if b1 > a0 and b0 < a0 + 4000 and blk not in lex3_blk \
+                            and _style_lex_hits(" ".join(_words[b0:b1]), "qwen_lex3.json"):
+                        lex3_blk[blk] = h
         for (blk, reg), idxs in groups.items():
             if reg != "en" or blk in paper_blocks:
                 continue
             body = "\n".join(segs_by_idx[i].text for i in idxs)
-            if len(body.split()) < 800:
+            if len(body.split()) < 800 and blk not in lex3_blk:
                 continue
-            kinds = _qwen_style(body)
-            lex3 = None if kinds else _qwen_lex3(body)
+            kinds = _qwen_style(body) if len(body.split()) >= 800 else None
+            lex3 = None if kinds else lex3_blk.get(blk)
             if not kinds and not lex3:
                 continue
             qw_kinds = kinds or ["lex3:" + g for g in lex3[:8]]
