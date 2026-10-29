@@ -1,0 +1,44 @@
+# 把公开基准 RAID（liamdugan/raid）的一批样本存到数据分支 data-1020 的 raid/ 目录（压缩后 base64），供本地选特征、训练用。
+# 只能手动运行；不调用 Modal。
+name: RAID 样本存档（数据分支）
+
+on:
+  workflow_dispatch:
+    inputs:
+      raid:
+        description: "取样规格，如 abstracts:human,chatgpt,gpt4:200（见 server/tools/fetch_raid.py）"
+        required: true
+      name:
+        description: "存档文件名（不含扩展名）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 从 RAID 取样
+        working-directory: server
+        run: python -u tools/fetch_raid.py "${{ github.event.inputs.raid }}" 0/1 /tmp/payload.txt
+      - name: 存到 data-1020
+        env:
+          NAME: ${{ github.event.inputs.name }}
+        run: |
+          case "$NAME" in *[!A-Za-z0-9_-]*|"") echo "bad name"; exit 1 ;; esac
+          git fetch --depth 1 origin data-1020
+          git worktree add /tmp/dw FETCH_HEAD
+          cd /tmp/dw
+          mkdir -p raid
+          cp /tmp/payload.txt "raid/$NAME.b64"
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add raid
+          git commit -m "raid/$NAME.b64: ${{ github.event.inputs.raid }}"
+          git push origin HEAD:data-1020
