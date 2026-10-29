@@ -119,6 +119,20 @@ def _qwen_style(text: str):
 _STYLE_LEX: dict = {}
 
 
+def _qwen_lex3(text: str):
+    """千问网页版英文文学作品的第三版短语表（app/qwen_lex3.json，553 条 4–6 词）：前几批千问 203 篇里 ≥ 6 篇出现、
+    其他平台 1724 篇 AI 文 ≤ 1 篇、真人 1060 篇 ≤ 2 篇、620 本真人书 4000 词窗口 ≤ 15 个。任意 4000 词窗口命中
+    ≥ QW_LEX3_MIN 条时返回命中的短语。
+    依据（2026-10-29，没参与选词的数据）：新上传千问 15 篇 13 篇命中（其中 3 篇线上 AI 率 0–4%）；40 本经典真人书最高 2 条、
+    1765 篇各类真人文体最高 1 条、PMC/PubMed/arXiv 2618 篇最高 1 条；各平台 API 生成的 4000 多篇 AI 文最高 3 条。"""
+    w = (text or "").split()
+    for i in range(0, max(1, len(w) - 1999), 2000):
+        h = _style_lex_hits(" ".join(w[i:i + 4000]), "qwen_lex3.json")
+        if len(h) >= config.QW_LEX3_MIN:
+            return h
+    return None
+
+
 def _style_lex_hits(s: str, fname: str):
     """在一段文字里找 app/<fname> 短语表里的短语（互相包含的只算最长的一条）。"""
     lex = _STYLE_LEX.get(fname)
@@ -171,6 +185,30 @@ def _thing_that_density(text: str) -> int:
     for i in range(0, max(1, len(w) - 999), 500):
         b = max(b, len(_THING_RE.findall(" ".join(w[i:i + 1000]))))
     return b
+
+
+# 说明 / 操作类文体（菜谱、操作指南、急救手册、手工教程）：句子大多以祈使动词开头。真人这类文字句式短而公式化，
+# 分类器常打高分（r99：真人说明文 91 段平均 26%、23 段 ≥ 50%）；但 AI 写的同类文字三个英文分类器几乎全都很肯定，
+# 因此这类文字只在"更严门槛"下计入（见 engine 7.6）。祈使句比例 ≥ 0.25：真人说明类书 56/184 个窗口，其他真人文字 1/4863。
+_IMP_VERBS = frozenset("""add adjust allow apply arrange avoid bake baste beat begin blanch blend boil bring brown brush buy
+carve check chill chop choose clean click close coat combine compare consider continue cook cool core cover crack create cream
+crumble crush cube cut decide deglaze dice dip discard dissolve divide do don't drain drizzle drop dry dust enjoy fill find finish
+flip fold follow form freeze fry garnish get give grate grease grill grind halve heat hold imagine insert keep knead layer leave
+let line look make marinate mash measure melt mince mix moisten move note open pack pat peel pick pierce place plan pour practice
+preheat prepare press process pull purée puree push put reduce refrigerate reheat remember remove repeat replace reserve return
+rinse roast roll rub run saute sauté scatter scoop scrape season select separate serve set shake shape shred simmer skim slice
+slide soak spoon spray spread sprinkle squeeze start stir store strain stuff sweat take taste test think tie tilt toast top toss
+transfer trim try turn unmold use wait warm wash watch whip whisk wipe wrap write""".split())
+_IMP_FIRST = re.compile(r"[“\"'(]?(?:\d+[.)]\s*|[-•*]\s*)?([A-Za-z']+)")
+
+
+def imperative_ratio(text: str) -> tuple[float, int]:
+    """(以祈使动词开头的句子比例, 句子数)；只数 ≥ 3 词的句子。"""
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if len(s.split()) >= 3]
+    if not sents:
+        return 0.0, 0
+    n = sum(((_IMP_FIRST.match(s) or [None, ""])[1] or "").lower() in _IMP_VERBS for s in sents)
+    return n / len(sents), len(sents)
 
 
 _QW_LEX = None
@@ -1011,7 +1049,10 @@ class Engine:
                          if results[i].get("classifier_en4") is not None]
                 med4 = (min(v for v, _ in vals4) if len(vals4) == 2 else _wmedian(vals4)) if len(vals4) >= 2 else None
                 joint = med4 is not None and ((med >= config.EN3_JOINT_THRESHOLD and med4 >= config.EN4_JOINT_THRESHOLD)
-                                              or (med >= config.EN3_JOINT2_THRESHOLD and med4 >= config.EN4_JOINT2_THRESHOLD))
+                                              or (med >= config.EN3_JOINT2_THRESHOLD and med4 >= config.EN4_JOINT2_THRESHOLD)
+                                              # v14 单独：整篇中位数 ≥ EN4_SOLO_THRESHOLD 且至少 EN4_SOLO_MIN_SEGS 段。397 篇真人英文长文
+                                              # v14 中位数最高 0.903；新一代千问 / Claude 文学作品 v7 常只有 0.1–0.6，联合规则不触发（2026-10-29）
+                                              or (med4 >= config.EN4_SOLO_THRESHOLD and len(vals4) >= config.EN4_SOLO_MIN_SEGS))
                 if med >= config.EN3_DOC_THRESHOLD or joint:
                     en3_hit = {i for i in idxs if smoothed.get(i) is not None
                                and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
@@ -1025,21 +1066,42 @@ class Engine:
         #      同样高（中位都在 0.9 左右），最终 AI 率被校准压低。整篇（≥ 800 词）命中套语时，本篇未过阈值、但分类器自身
         #      得分 ≥ QW_STYLE_OWN 的段落计为"中度疑似（整篇判断）"。诗行不计。
         qw_style_ai, qw_kinds, qw_blocks = set(), None, set()
+        # 第三版短语表按全文（所有英文非论文作品连起来）滑动 4000 词窗口判断：千问作品常按小标题被切成多篇短"作品"，
+        # 单篇不足 800 词或命中不足。窗口命中 ≥ QW_LEX3_MIN 条时，窗口内自身至少命中 1 条的作品计入。
+        lex3_blk: dict = {}
+        _en_blks = sorted({blk for (blk, reg) in groups if reg == "en" and blk not in paper_blocks})
+        if _en_blks:
+            _bw, _words = [], []
+            for blk in _en_blks:
+                w_ = " ".join(segs_by_idx[i].text for i in sorted(groups[(blk, "en")])).split()
+                _bw.append((blk, len(_words), len(_words) + len(w_)))
+                _words += w_
+            for a0 in range(0, max(1, len(_words) - 1999), 2000):
+                h = _style_lex_hits(" ".join(_words[a0:a0 + 4000]), "qwen_lex3.json")
+                if len(h) < config.QW_LEX3_MIN:
+                    continue
+                for blk, b0, b1 in _bw:
+                    if b1 > a0 and b0 < a0 + 4000 and blk not in lex3_blk \
+                            and _style_lex_hits(" ".join(_words[b0:b1]), "qwen_lex3.json"):
+                        lex3_blk[blk] = h
         for (blk, reg), idxs in groups.items():
             if reg != "en" or blk in paper_blocks:
                 continue
             body = "\n".join(segs_by_idx[i].text for i in idxs)
-            if len(body.split()) < 800:
+            if len(body.split()) < 800 and blk not in lex3_blk:
                 continue
-            kinds = _qwen_style(body)
-            if not kinds:
+            kinds = _qwen_style(body) if len(body.split()) >= 800 else None
+            lex3 = lex3_blk.get(blk)
+            if not kinds and not lex3:
                 continue
-            qw_kinds = kinds
+            qw_kinds = kinds or ["lex3:" + g for g in lex3[:8]]
             qw_blocks.add(blk)
+            # 第三版短语表命中（≥ 6 条，真人文本最高 2 条）证据很强，分类器自己打分很低的段落也计入（千问新文风三个分类器都认不出）
+            own_min = config.QW_LEX3_OWN if lex3 else config.QW_STYLE_OWN
             qw_style_ai |= {i for i in idxs if smoothed.get(i) is not None
-                            and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and i not in en_verse
+                            and smoothed[i] < float(prof[i][0].get("threshold", 0.5)) and (lex3 or i not in en_verse)
                             and (results[i].get("classifier_en4") or results[i].get("classifier_en2") or 0)
-                            >= config.QW_STYLE_OWN}
+                            >= own_min}
         qw_style_ai -= zh2_ai
         zh2_ai |= qw_style_ai
         # 6.8) DeepSeek 网页版英文作品的固定句式（见 _deepseek_style），论文也算：v14 对这类论文体综述段落常打到 0.5–0.9，
@@ -1121,6 +1183,38 @@ class Engine:
                     and (results[i].get("classifier_en2") or 0) < config.EN_ISOLATED_SEG_CAP}
             zh_human_work |= soft
             en_isolated |= soft
+        # 7.6) 说明 / 操作类英文文字（菜谱、指南、急救、手工）：本段连同前后各一段（不足 300 词再往外扩）祈使句比例
+        #      ≥ EN_INSTR_IMP 时，只有三个英文分类器都很肯定（综合分数 ≥ EN_INSTR_PROB、第二 / 第三分类器 ≥ EN_INSTR_EN2 /
+        #      EN_INSTR_EN3）的段落才计入，其余过线段落标"接近阈值"。r99：真人说明文 ≥ 50% 的片段 23/91 → 1/91，
+        #      AI 说明文 16/16 仍 ≥ 50%。整篇套语规则（千问 / DeepSeek）命中的作品不受影响。
+        en_instr = set()
+        for (blk, reg), idxs in groups.items():
+            if reg != "en" or blk in qw_blocks or blk in ds_blocks:
+                continue
+            order = sorted(idxs)
+            for k, i in enumerate(order):
+                pr = smoothed.get(i)
+                if pr is None or i in en_verse:
+                    continue
+                flagged = (pr >= float(prof[i][0].get("threshold", 0.5)) or i in zh2_ai or i in work_ai
+                           or i in paper_ai)
+                if not flagged or i in zh_human_work:
+                    continue
+                a, b = max(0, k - 1), min(len(order), k + 2)
+                ctx = lambda: "\n".join(segs_by_idx[j].text for j in order[a:b])
+                while len(ctx().split()) < 300 and (a > 0 or b < len(order)):
+                    a, b = max(0, a - 1), min(len(order), b + 1)
+                ratio, ns = imperative_ratio(ctx())
+                if ns < 6 or ratio < config.EN_INSTR_IMP:
+                    continue
+                r = results[i]
+                sure = (pr >= config.EN_INSTR_PROB and (r.get("classifier_en2") or 0) >= config.EN_INSTR_EN2
+                        and (r.get("classifier_en3") or 0) >= config.EN_INSTR_EN3)
+                if not sure:
+                    en_instr.add(i)
+        zh2_ai -= en_instr
+        paper_ai -= en_instr
+        zh_human_work |= en_instr
         work_ai -= zh_human_work
 
         def human_ref_of(i, pr):
@@ -1152,7 +1246,8 @@ class Engine:
             by_work = s.index in work_ai or s.index in paper_ai or s.index in zh2_ai
             if s.index in zh_human_work:
                 level, near = "low", True
-                label = ("接近阈值（整篇像人写的孤立段落，未计入）" if s.index in en_isolated else
+                label = ("接近阈值（说明/操作类文字，按更严门槛未计入）" if s.index in en_instr else
+                         "接近阈值（整篇像人写的孤立段落，未计入）" if s.index in en_isolated else
                          "接近阈值（疑似名篇，未计入）" if s.index in famous_like else
                          "接近阈值（孤立段落，未计入）" if s.index in isolated else "接近阈值（整篇像人写，未计入）")
             elif s.index in zh2_seg:
@@ -1278,7 +1373,7 @@ class Engine:
                    "which_is_the": "“…, which is the whole/only…”", "that_is_the_whole": "“That is the whole job/story”",
                    "not_a_metaphor": "“…is not a metaphor”", "cjk_glued": "英文词后直接粘着汉字",
                    "I_want_you_to": "“I want you to understand”", "and_I_have_never": "“and I have never”"}
-            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] if k in _qn else "“" + k[4:] + "”" for k in qw_kinds[:6]) + "）。"
+            notes.append("文中集中出现千问英文文学作品的典型套语（" + "、".join(_qn[k] if k in _qn else "“" + k.split(":", 1)[1] + "”" for k in qw_kinds[:6]) + "）。"
                          "580 本真人英文书没有一本出现这种组合"
                          + (f"；据此另有 {len(qw_style_ai)} 段按“中度疑似（整篇判断）”计入。" if qw_style_ai else "。"))
         if ds_hits and ds_hits[0].startswith("…is the thing"):
