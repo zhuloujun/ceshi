@@ -347,7 +347,7 @@ const SIG_NAME = { fastdetect:'F', binoculars:'B', classifier:'MPU 分类器', c
 const REG_NAME = { zh:'现代汉语', zh_classical:'文言', zh_poetry:'诗词', en:'英文' };
 // 分类器信号的名称随段落文体变化（英文段落用的是英文分类器）
 const sigName = (k, seg)=> k === 'classifier'
-  ? (seg && seg.register === 'en' ? '英文分类器' : seg && seg.register === 'zh_poetry' && health && health.classifier_poetry && health.classifier_poetry.ready ? '诗词分类器' : seg && seg.register === 'zh_classical' && health && health.classifier_classical && health.classifier_classical.ready ? '文言分类器' : 'MPU 中文分类器')
+  ? (seg && seg.register === 'en' ? '英文分类器' : seg && seg.register === 'zh_poetry' && health && health.classifier_poetry && health.classifier_poetry.ready ? '诗词分类器' : seg && seg.register === 'zh_classical' && health && health.classifier_classical && health.classifier_classical.ready ? '文言分类器' : 'M中文分类器')
   : (SIG_NAME[k] || k);
 
 function workLevel(w){
