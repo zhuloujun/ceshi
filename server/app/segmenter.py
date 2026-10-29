@@ -968,6 +968,14 @@ def unwrap_hard_wraps(text: str):
     w90 = sorted(lens)[int(0.9 * (len(lens) - 1))]
     if sum(n >= 0.8 * w90 for n in lens) / len(lens) < 0.8:
         return text, False
+    # 格律诗（无韵诗、英雄双行体）行宽也整齐、也常跨行，但几乎每行都以大写字母开头；断行散文的行首是句子中间的词，多为小写。
+    # 依据（2026-10-29）：文心断行散文 25 篇行首大写 ≤ 31%；济慈、弥尔顿、拜伦、雪莱、弗罗斯特、歌德译诗被误合并的片段全部 100%，
+    # 荷马 / 维吉尔散文译本（真断行）中位 11%–20%。罗马字俳句列表（"kiku no hana / saku ya…"）每行有斜杠，也不是散文。
+    starts = [m.group(0) for m in (re.search(r"[A-Za-z]", lines[i]) for i in idx) if m]
+    if sum(c.isupper() for c in starts) / max(1, len(starts)) >= 0.5:
+        return text, False
+    if sum(" / " in lines[i] for i in idx) / len(idx) >= 0.3:
+        return text, False
     # 行间距：空行数的众数当作"行内"间距，比它多的才是段落分隔
     gaps = [idx[k + 1] - idx[k] - 1 for k in range(len(idx) - 1)]
     import collections as _c
