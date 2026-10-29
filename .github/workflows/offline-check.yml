@@ -17,6 +17,10 @@ on:
         description: "（可选）RAID 取样的分片 i/n"
         required: false
         default: "0/1"
+      envs:
+        description: "（可选）临时覆盖 config 参数做对照，空格分隔，如 EN_ABS_EN2=0"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -128,4 +132,9 @@ jobs:
           PAYLOAD_FILE: ${{ github.event.inputs.raid != '' && '/tmp/payload.txt' || '' }}
           TORCH_THREADS: "4"
           TOKENIZERS_PARALLELISM: "false"
-        run: python -u tools/offline_check.py
+          ENVS: ${{ github.event.inputs.envs }}
+        run: |
+          for kv in $ENVS; do
+            case "$kv" in [A-Z][A-Z0-9_]*=*) export "$kv"; echo "::notice title=参数覆盖::$kv" ;; esac
+          done
+          python -u tools/offline_check.py
