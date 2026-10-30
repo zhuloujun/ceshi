@@ -682,7 +682,17 @@ POEM_STYLE = [
 ]
 POEM_FORMS = ["Shakespearean sonnet", "Petrarchan sonnet", "free verse poem", "villanelle", "sequence of haiku",
               "ballad in quatrains", "elegy", "prose poem", "ode", "pantoum", "ghazal", "poem in tercets",
-              "short lyric poem", "dramatic monologue", "spoken-word poem", "blank verse meditation"]
+              "short lyric poem", "dramatic monologue", "spoken-word poem", "blank verse meditation",
+              # 2026-10-30：对照用户上传的真人诗文集（Atticus、Lang Leav、Halsey、Najwa Zebian 式的短诗；Baudelaire / Rimbaud
+              # 译本式的散文诗；Whitman 式的长句排比自由诗；Rilke 式的沉思抒情诗；Mary Oliver / Elizabeth Bishop 式的自然散文）
+              "short untitled lowercase poem in the style of modern Instagram poetry books",
+              "brief healing poem-and-prose reflection addressed to 'you'",
+              "prose poem that reads like an English translation of a French Symbolist poem",
+              "long free-verse catalogue poem with sweeping lists and anaphora",
+              "meditative lyric that reads like a translation of a German poem",
+              "short nature essay in lyrical prose (about 300 words)",
+              "fragmentary experimental short prose piece with repetition and minimal punctuation",
+              "children's picture-book folktale told in simple rhythmic prose"]
 POEM_SUBJECTS = [
     "a lighthouse keeper's last night on duty", "the smell of a grandmother's kitchen", "a city bus at 2 a.m.",
     "migrating geese over a frozen lake", "a father teaching his daughter to drive", "grief after a dog dies",

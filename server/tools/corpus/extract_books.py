@@ -20,7 +20,7 @@ from pathlib import Path
 def from_zip(p: str) -> str:
     z = zipfile.ZipFile(p)
     key = lambda n: [int(x) if x.isdigit() else x for x in re.split(r"(\d+)", n)]
-    keep = [n for n in z.namelist() if n.lower().endswith((".html", ".xhtml", ".htm"))]
+    keep = [n for n in z.namelist() if n.lower().endswith((".html", ".xhtml", ".htm", ".xml")) and not n.startswith("META-INF/")]
     return "\n".join(z.read(n).decode("utf-8", "ignore") for n in sorted(keep, key=key))
 
 
