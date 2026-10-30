@@ -1,0 +1,6 @@
+# Gradio comes from README sdk_version (4.44.1).
+# FastAPI 0.143 pulls Starlette 0.46+, whose TemplateResponse signature
+# crashes Gradio 4.44 at startup. Keep the pair Gradio 4.44 was built with.
+fastapi==0.115.12
+starlette==0.41.3
+huggingface_hub>=0.25,<1.0
