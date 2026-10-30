@@ -1280,7 +1280,8 @@ class Engine:
                     continue
                 r = results[i]
                 sure = (pr >= config.EN_INSTR_PROB and (r.get("classifier_en2") or 0) >= config.EN_INSTR_EN2
-                        and (r.get("classifier_en3") or 0) >= config.EN_INSTR_EN3)
+                        and (r.get("classifier_en3") or 0) >= config.EN_INSTR_EN3
+                        and (r.get("classifier") or 0) >= config.EN_INSTR_CLS)
                 if not sure:
                     en_instr.add(i)
         # 7.7) 学术摘要 / 学术文字（见 academic_density）：本段（或本段所在、不足 EN_ABS_MAX_WORDS 词的作品）学术用语密度
