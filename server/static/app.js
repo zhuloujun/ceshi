@@ -483,7 +483,7 @@ function renderResult(res){
           <span class="para-tag">第 ${seg.index+1} 段 · ${REG_NAME[seg.register] || '现代汉语'} · ${seg.chars} 字</span>
         </div>
         ${rawBits ? `<details class="para-raw tech-only"><summary>原始分数</summary><p>${escapeHtml(rawBits)}</p></details>` : ''}
-        ${seg.kind !== 'reference' ? `<div class="para-label" data-key="${labelKey(seg.text)}">标注：
+        ${seg.kind !== 'reference' ? `<div class="para-label admin-only" data-key="${labelKey(seg.text)}">标注：
           <button type="button" data-lab="ai">这段是 AI</button><button type="button" data-lab="human">这段是人写</button></div>` : ''}
       </div>`;
     const lb = div.querySelector('.para-label');
@@ -561,11 +561,13 @@ function applyFilter(){
   });
 }
 $('onlyFlagged').addEventListener('change', applyFilter);
+// 管理员专用的控件（标注、技术细节）：普通用户的页面上隐藏；网站在管理员登录时注入样式把它们显示出来
+function isAdminView(){ const b = $('showTech'); return !!b && getComputedStyle(b.closest('.admin-only') || b).display !== 'none'; }
 // 技术细节开关：默认关闭（与其他检测平台的报告一致，只给结论、分级和标出的段落），选择记在本浏览器
 (function(){
   const box = $('showTech');
   let on = false;
-  try{ on = localStorage.getItem('showTech') === '1'; }catch(e){}
+  try{ on = isAdminView() && localStorage.getItem('showTech') === '1'; }catch(e){}
   box.checked = on;
   document.body.classList.toggle('show-tech', on);
   box.addEventListener('change', ()=>{
@@ -575,7 +577,7 @@ $('onlyFlagged').addEventListener('change', applyFilter);
 })();
 
 /* ---------------- 导出 ---------------- */
-const techOn = () => !!($('showTech') && $('showTech').checked);
+const techOn = () => isAdminView() && !!($('showTech') && $('showTech').checked);
 const METHOD_LINE = () => `共：F、B、M中文分类器 + 本模中文分类器、d英文分类器 + 本模英文分类器（按段落文体选用）；模式：${lastResult.summary.mode === 'fast' ? '快速（抽样）' : '完整'}`;
 // 保形预测式的"人写对照"：同文体人写样本里，得分不低于本段的比例（越小越不像人写；例如 1% = 100 段人写里约 1 段这么高）
 function humanRefText(seg){

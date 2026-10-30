@@ -692,3 +692,5 @@ body{
 
 /* 技术细节（各模型分数、阈值、已知误差）默认隐藏，勾选“显示技术细节”后显示 */
 body:not(.show-tech) .tech-only{display:none !important}
+/* 管理员专用控件（标注、技术细节）：默认隐藏，管理员登录时由网站注入样式显示 */
+body:not(:has(#atc-admin-flag)) .admin-only{display:none !important}
