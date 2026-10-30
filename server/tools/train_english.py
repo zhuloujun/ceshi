@@ -256,7 +256,7 @@ def build_rows(args, rnd):
         if f.stem in HUMAN_FILES or any(f.stem.startswith(x) for x in args.skip_prefix):
             continue
         gen_models.append(f.stem)
-        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc|ap|nf)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体", "ap": "-学科论文", "nf": "-非虚构"}.get(f.stem[:2], "")
+        model = re.sub(r"^(pm|tr|us|ge|hu|nv|dc|ap|nf|mn|sh|po)_", "", f.stem) + {"tr": "-译", "us": "-用户式", "ge": "-体裁", "hu": "-去AI味", "nv": "-小说", "dc": "-行业文体", "ap": "-学科论文", "nf": "-非虚构", "mn": "-手册菜谱", "sh": "-自助", "po": "-诗"}.get(f.stem[:2], "")
         for g in load_jsonl(f):
             raw.append((clean_ai(g["text"]), 1, f"gen-{model}", split_of(g["title"]), 6))
     if not gen_models:

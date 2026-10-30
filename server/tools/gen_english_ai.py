@@ -671,6 +671,46 @@ SELFHELP_TOPICS = [
     ("writing-craft memoir", "the daily routine of a working novelist"),
 ]
 
+# 2026-10-30：对照用户上传的真人操作手册、菜谱书（Owner's Manual 系列、Brewery Operations Manual、LLC Operating Manual、
+# Windows 11 入门、灌溉系统管理指南、Spaceship Earth、America's Test Kitchen 菜单书、Passover 菜单、点心、汤谱、蒸锅菜谱等）
+MANUAL_STYLE = [
+    "Write about 600 words from a {g} covering {t}. Plain text, no Markdown symbols.",
+    "Write a section (about 600 words) of a {g} on {t}. Use numbered steps where natural and practical tips. No Markdown.",
+    "用英文写一段{g}的内容（约600词），主题：{t}。要像真正出版的书，不要Markdown符号。",
+    "Write a 600-word excerpt from a {g} on {t}. Make it read like a real published human author, not AI: specific "
+    "quantities and brand-agnostic details, occasional asides, uneven rhythm, no closing summary. Plain text.",
+    "Write one chapter section (about 700 words) of a {g} about {t}, including a short personal anecdote and "
+    "concrete step-by-step instructions. Plain text only.",
+]
+MANUAL_TOPICS = [
+    ("humorous 'owner's manual' parody guide for new parents", "burping, swaddling and troubleshooting a crying baby"),
+    ("humorous 'owner's manual' style guide for dog owners", "house-training a puppy and fixing chewing problems"),
+    ("humorous 'owner's manual' style guide for parents of teenagers", "curfews, phones and communication breakdowns"),
+    ("homeowner's maintenance manual", "diagnosing a water heater that gives no hot water"),
+    ("homeowner's maintenance manual", "seasonal HVAC filter changes and gutter cleaning"),
+    ("brewery operations manual", "cellar cleaning procedures and CIP chemical safety"),
+    ("brewery operations manual", "yeast pitching, fermentation logging and quality control"),
+    ("legal self-help guide to forming a limited liability company", "drafting an operating agreement and member voting rules"),
+    ("legal self-help guide for small business owners", "holding and documenting LLC member meetings"),
+    ("beginner's user guide for seniors", "setting up Windows 11, the Start menu and connecting to Wi-Fi"),
+    ("beginner's computer guide", "taking screenshots, managing files and using File Explorer"),
+    ("FAO-style technical guidance document", "planning operation and maintenance of irrigation and drainage systems"),
+    ("activist organizing handbook", "how people can collectively dispute medical and student debt"),
+    ("philosophical essay book on systems thinking", "humanity as the crew of a spaceship with finite resources"),
+    ("cookbook of steamer-cooker recipes", "a steamed fish recipe with ginger and scallions, with ingredients and steps"),
+    ("dim sum cookbook", "making har gow and siu mai at home, with ingredients and steps"),
+    ("copycat restaurant recipe book", "recreating a diner's hashbrown casserole and biscuits"),
+    ("diet program cookbook with a 28-day meal plan", "low-point breakfasts and a weekly menu"),
+    ("heart-healthy diet and action plan", "a week of cholesterol-lowering menus and shopping list"),
+    ("holiday entertaining menu cookbook", "a make-ahead Passover seder menu with brisket and matzo ball soup"),
+    ("test-kitchen menu cookbook for dinner parties", "a fall dinner party menu with game plan and timeline"),
+    ("soup cookbook", "a hearty minestrone and a creamy roasted tomato soup"),
+    ("fan-themed holiday cookbook", "a festive Christmas pudding and treacle tart menu"),
+    ("novel set in a small restaurant", "a chef cooking a remembered dish for a grieving customer"),
+    ("baking cookbook", "a foolproof sourdough loaf with timings"),
+    ("appliance user manual", "operating, cleaning and troubleshooting a pressure cooker"),
+]
+
 POEM_STYLE = [
     "Write a {g} about {t}. Output only the poem, with a title.",
     "Write a {g} about {t} in the voice of a contemporary American poet. Avoid cliches; use concrete, surprising images. Only the poem.",
@@ -776,27 +816,27 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
         topics = [f"{g}|{t}" for g, t in poem_topics(rnd)]
         seen_k = {}
         styles = POEM_STYLE
-    elif out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "sh_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
-        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS, "nf_": NONFIC_TOPICS, "sh_": SELFHELP_TOPICS}[out_f.name[:3]]
+    elif out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "sh_", "mn_")):   # 当代小说体 / 各行业文体 / 各学科论文：每个题目轮换不同写法
+        tbl = {"nv_": NOVEL_TOPICS, "dc_": DOC_TOPICS, "ap_": PAPER_TOPICS, "nf_": NONFIC_TOPICS, "sh_": SELFHELP_TOPICS, "mn_": MANUAL_TOPICS}[out_f.name[:3]]
         pairs = [(g, t) for g, t in tbl for _ in range(4)]
         rnd.shuffle(pairs)
         topics = [f"{g}|{t}" for g, t in pairs]
         seen_k: dict = {}
-        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE, "nf_": NONFIC_STYLE, "sh_": SELFHELP_STYLE}[out_f.name[:3]]
+        styles = {"nv_": NOVEL_STYLE, "dc_": DOC_STYLE, "ap_": PAPER_STYLE, "nf_": NONFIC_STYLE, "sh_": SELFHELP_STYLE, "mn_": MANUAL_STYLE}[out_f.name[:3]]
     for i, t in enumerate(topics[:n_titles]):
         if (time.time() - t_start) / 60 > budget_min:
             print(f"::warning title={name}::已到时长上限，先保存已生成的 {n_new} 篇", flush=True)
             break
         url, model = eps[i % len(eps)]
         key_ = f"{t}|{model}"
-        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_", "mn_")):    # 同一情节用不同写法写 4 次：去重键带上序号（训练时仍按情节划分）
             seen_k[key_] = seen_k.get(key_, 0) + 1
             key_ += f"#{seen_k[key_]}"
         if key_ in done:
             continue
         done.add(key_)
         tpl = styles[(i + i // len(styles)) % len(styles)]
-        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_")):
+        if out_f.name.startswith(("nv_", "dc_", "ap_", "nf_", "po_", "sh_", "mn_")):
             g_, t_ = t.split("|", 1)
             tpl = styles[(i + i // len(styles)) % len(styles)]
             prompt = tpl.format(g=g_, t=t_)
@@ -856,7 +896,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "manual"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -865,7 +905,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "manual") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -884,9 +924,9 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl", "selfhelp": f"sh_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl", "selfhelp": f"sh_{name}.jsonl", "manual": f"mn_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
-        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp"):
+        if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "manual"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
