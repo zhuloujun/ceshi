@@ -1,0 +1,40 @@
+# 参考资料快照：把公开的 Git 仓库（如 Hugging Face Space）的小文件（< 1 MB，不含模型权重）存到数据分支 data-1020 的 ref/ 目录，供本地阅读对照。
+# 只能手动运行。
+name: 参考仓库快照（数据分支）
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "公开 Git 仓库地址，如 https://huggingface.co/spaces/xxx/yyy"
+        required: true
+      name:
+        description: "存档目录名（字母数字和 - _）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data-1020
+          fetch-depth: 1
+      - name: 克隆并存档
+        env:
+          URL: ${{ github.event.inputs.url }}
+          NAME: ${{ github.event.inputs.name }}
+        run: |
+          case "$NAME" in *[!A-Za-z0-9_-]*|"") echo "bad name"; exit 1 ;; esac
+          case "$URL" in https://*) ;; *) echo "bad url"; exit 1 ;; esac
+          GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 "$URL" /tmp/src
+          rm -rf "ref/$NAME"; mkdir -p "ref/$NAME"
+          cd /tmp/src && find . -path ./.git -prune -o -type f -size -1M -print | while read f; do mkdir -p "$GITHUB_WORKSPACE/ref/$NAME/$(dirname "$f")"; cp "$f" "$GITHUB_WORKSPACE/ref/$NAME/$f"; done
+          cd "$GITHUB_WORKSPACE"
+          find "ref/$NAME" -type f | head -50 | sed 's/^/::notice title=file::/'
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          git add ref && git commit -m "ref/$NAME: snapshot of $URL" && git push origin HEAD:data-1020
