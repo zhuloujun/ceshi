@@ -138,6 +138,8 @@ SHORT_SEGMENT_CHARS = _int("SHORT_SEGMENT_CHARS", 200)
 # 篇幅短的提示（Turnitin 要求英文至少 300 词才给结果；这里对单段放宽，只做标注）
 SHORT_CHARS_ZH = _int("SHORT_CHARS_ZH", 100)
 SHORT_WORDS_EN = _int("SHORT_WORDS_EN", 150)
+# 一篇英文作品（或整篇文本）正文不足这么多词时不判定，只给参考值
+EN_MIN_WORDS_WORK = _int("EN_MIN_WORDS_WORK", 50)
 # "疑似名篇"判定：语言模型困惑度低于此值且分类器判为人写
 # 中文段落困惑度（Qwen2.5-0.5B）低于此值：模型几乎逐字复现，视为公开名篇原文（《背影》实测 1.3–2.4），不计入 AI 率。
 # 依据：评估集中约 1300 段中文 AI 文本（GLM / GPT-4o / Qwen / DeepSeek / 文心 / Kimi）困惑度最低 3.57。

@@ -434,7 +434,7 @@ def works_summary(seg_out: list) -> list:
         elif w["refchars"]:
             out.append({**{k: w[k] for k in ("block", "title", "chars", "registers", "segments")},
                         "ai_rate": None, "mean_prob": round(w["refsum"] / w["refchars"], 4),
-                        "counted": False, "verdict": "仅供参考（诗词不计入）"})
+                        "counted": False, "verdict": "仅供参考（篇幅过短或诗词，不计入）"})
         else:
             segs_w = [x for x in seg_out if x["block"] == w["block"]]
             famous = segs_w and all(any("名篇" in n for n in (x.get("notes") or [])) for x in segs_w if x["kind"] != "reference")
@@ -767,6 +767,20 @@ class Engine:
             if s.kind == "body" and s.register in ref_only_regs:
                 s.kind = "reference_only"
                 s.notes = list(s.notes) + [f"{REGISTER_NAMES.get(s.register, s.register)}检测不够稳定，结果仅供参考、不计入 AI 率"]
+        # 篇幅过短的英文作品（按标题分开的一篇，正文不足 EN_MIN_WORDS_WORK 词）不判定、只给参考值：
+        # 业内做法——Turnitin 不足 300 词不出结果、GPTZero / Lynote 等也拒绝过短文本；本工具的实测（2026-10-30，用户 cs1021）
+        # 里 31 词的真人小说片段被判 83.7%。整篇只有这么短时同样只给参考值。
+        en_words: dict = {}
+        for s in segs:
+            if s.kind == "body":
+                d = en_words.setdefault(s.block, [0, True])
+                d[0] += len(score_text(s).split()) if s.register == "en" else 0
+                d[1] = d[1] and s.register == "en"
+        for s in segs:
+            d = en_words.get(s.block)
+            if s.kind == "body" and d and d[1] and d[0] < config.EN_MIN_WORDS_WORK:
+                s.kind = "reference_only"
+                s.notes = list(s.notes) + [f"篇幅过短（不足 {config.EN_MIN_WORDS_WORK} 词），检测结果不可靠，仅供参考、不计入 AI 率"]
         counted = [s for s in segs if s.counted]
         # 不计入的引文段落也打分，作为"参考值"显示（不影响 AI 率）；参考文献条目没有检测意义，不打分
         ref_scored = [s for s in segs if s.kind in ("quotation", "reference_only")]
