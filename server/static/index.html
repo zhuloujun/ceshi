@@ -112,9 +112,9 @@
       <div class="summary-card"><span class="summary-num" id="sumExcluded">—</span><span class="summary-label">未计入字数</span></div>
       <button id="exportBtn" class="export-btn"><span class="export-ico" aria-hidden="true">⤓</span>导出报告 (PDF)</button>
     </div>
-    <p class="calib-line" id="calibLine"></p>
+    <p class="calib-line tech-only" id="calibLine"></p>
     <ul class="notes-list" id="notesList"></ul>
-    <details class="err-box" id="errBox" hidden><summary>本工具的已知误差与如何解读</summary><div id="errBody"></div></details>
+    <details class="err-box tech-only" id="errBox" hidden><summary>本工具的已知误差与如何解读</summary><div id="errBody"></div></details>
     <div class="works-box" id="worksBox" hidden></div>
 
     <div class="legend">
@@ -124,6 +124,7 @@
       <span class="legend-item"><i class="dot dot-low"></i>未达阈值</span>
       <span class="legend-item"><i class="dot dot-none"></i>未计入</span>
       <label class="legend-item filter"><input type="checkbox" id="onlyFlagged"> 只看疑似段落</label>
+      <label class="legend-item filter" title="各检测模型的分数、判定阈值、已知误差等（默认不显示，导出的 PDF 也随之包含或不包含）"><input type="checkbox" id="showTech"> 显示技术细节</label>
     </div>
     <p class="label-bar" id="labelBar">检测不准？在段落下方点“这段是 AI / 这段是人写”标注。标注只保存在本浏览器，
       管理员在本浏览器登录过<a href="/admin" target="_blank">管理页</a>（勾选“记住”）后，标注会<b>自动同步并自动重新校准</b>（标完即生效）；否则可在管理页点“一键：用我的全部标注校准并保存”。

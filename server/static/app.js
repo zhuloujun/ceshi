@@ -479,10 +479,10 @@ function renderResult(res){
           ${seg.by_work ? '<span class="para-tag" title="本段略低于阈值，但同一篇作品的大部分段落已判为疑似 AI，按整篇判断计入">整篇判断</span>' : ''}
           ${seg.memorized ? '<span class="para-tag" title="语言模型几乎能逐字复现、而分类器判为人写：多半是公开名篇，已不采信语言模型信号">疑似名篇原文</span>' : ''}
           ${seg.short ? '<span class="para-tag" title="篇幅短，结果波动较大">篇幅短</span>' : ''}
-          ${kindTag}${sig}
+          ${kindTag}<span class="tech-only">${sig}</span>
           <span class="para-tag">第 ${seg.index+1} 段 · ${REG_NAME[seg.register] || '现代汉语'} · ${seg.chars} 字</span>
         </div>
-        ${rawBits ? `<details class="para-raw"><summary>原始分数</summary><p>${escapeHtml(rawBits)}</p></details>` : ''}
+        ${rawBits ? `<details class="para-raw tech-only"><summary>原始分数</summary><p>${escapeHtml(rawBits)}</p></details>` : ''}
         ${seg.kind !== 'reference' ? `<div class="para-label" data-key="${labelKey(seg.text)}">标注：
           <button type="button" data-lab="ai">这段是 AI</button><button type="button" data-lab="human">这段是人写</button></div>` : ''}
       </div>`;
@@ -561,8 +561,21 @@ function applyFilter(){
   });
 }
 $('onlyFlagged').addEventListener('change', applyFilter);
+// 技术细节开关：默认关闭（与其他检测平台的报告一致，只给结论、分级和标出的段落），选择记在本浏览器
+(function(){
+  const box = $('showTech');
+  let on = false;
+  try{ on = localStorage.getItem('showTech') === '1'; }catch(e){}
+  box.checked = on;
+  document.body.classList.toggle('show-tech', on);
+  box.addEventListener('change', ()=>{
+    document.body.classList.toggle('show-tech', box.checked);
+    try{ localStorage.setItem('showTech', box.checked ? '1' : '0'); }catch(e){}
+  });
+})();
 
 /* ---------------- 导出 ---------------- */
+const techOn = () => !!($('showTech') && $('showTech').checked);
 const METHOD_LINE = () => `共：F、B、M中文分类器 + 本模中文分类器、d英文分类器 + 本模英文分类器（按段落文体选用）；模式：${lastResult.summary.mode === 'fast' ? '快速（抽样）' : '完整'}`;
 // 保形预测式的"人写对照"：同文体人写样本里，得分不低于本段的比例（越小越不像人写；例如 1% = 100 段人写里约 1 段这么高）
 function humanRefText(seg){
@@ -603,11 +616,12 @@ exportBtn.addEventListener('click', async ()=>{
   exportBtn.disabled = true; exportBtn.textContent = '正在生成 PDF…';
   try{
     const payload = {
-      source: currentSource, generated_at: new Date().toLocaleString('zh-CN'), method: METHOD_LINE(), works_note: WORKS_NOTE,
+      source: currentSource, generated_at: new Date().toLocaleString('zh-CN'), detail: techOn(),
+      method: techOn() ? METHOD_LINE() : '', works_note: WORKS_NOTE,
       result: { summary: lastResult.summary, works: lastResult.works || [],
                 segments: lastResult.segments.map(seg=>({ index: seg.index, kind: seg.kind, register: seg.register, chars: seg.chars,
                   prob: seg.prob, ref_prob: seg.ref_prob, level: seg.level, label: seg.label, near_threshold: seg.near_threshold,
-                  text: seg.text, indicators: segIndicators(seg) })) },
+                  text: seg.text, indicators: techOn() ? segIndicators(seg) : (seg.short ? '篇幅短，结果仅供参考' : '') })) },
       format_items: (lastFormatItems || []).map(r=>({ group: r.group, name: r.name, count: r.count, sev: r.sev, extra: r.extra || '',
         html: r.html ? r.html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim() : '',
         samples: (r.samples||[]).slice(0,2).map(s=>typeof s === 'string' ? s : `${s.before}【${s.hit}】${s.after}`) }))

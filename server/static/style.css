@@ -689,3 +689,6 @@ body{
 /* 逐句窗口：部分疑似 / 局部疑似 */
 .para-text mark.win-ai{ background: rgba(194, 59, 34, .16); color: inherit; border-bottom: 2px solid var(--vermillion); padding: 0 1px; }
 .para-text .win-human{ color: #8a8a8a; }
+
+/* 技术细节（各模型分数、阈值、已知误差）默认隐藏，勾选“显示技术细节”后显示 */
+body:not(.show-tech) .tech-only{display:none !important}

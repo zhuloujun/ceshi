@@ -135,6 +135,9 @@ def build(payload: dict) -> bytes:
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm,
                             bottomMargin=18 * mm, title="审读 · AI 文本检测报告", author="审读")
     W = doc.width
+    # 技术细节（各检测模型分数、阈值、已知误差表、检测记录）默认不放进报告：与知网、维普、Turnitin、GPTZero 等平台的报告一致，
+    # 只给结论、分级和标出的段落；页面上勾选“显示技术细节”时才附上（放在报告最后的“技术附录”里）。
+    detail = bool(payload.get("detail"))
     story = [Paragraph("审读 · AI 文本检测报告", S["title"]),
              Paragraph(esc(f"来源：{payload.get('source') or '粘贴文本'}　·　生成时间："
                            f"{payload.get('generated_at') or datetime.now().strftime('%Y-%m-%d %H:%M')}"), S["meta"]),
@@ -149,7 +152,7 @@ def build(payload: dict) -> bytes:
     stats = [
         ["总字数", f"{s.get('total_chars', '—')}", "计入字数", f"{s.get('counted_chars', '—')}"],
         ["未计入（参考文献 / 引文等）", f"{s.get('excluded_chars', '—')}", "平均 AI 概率", pct(s.get("mean_prob"))],
-        ["判定阈值", pct(s.get("threshold")), "校准", "已校准" if s.get("calibrated") else "未校准"],
+        *([["判定阈值", pct(s.get("threshold")), "校准", "已校准" if s.get("calibrated") else "未校准"]] if detail else []),
         ["检测模式", "快速（抽样）" if s.get("mode") == "fast" else "完整",
          "文体", "、".join(f"{REG.get(k, k)} {v} 字" for k, v in (s.get("chars_by_register") or {}).items()) or "—"],
     ]
@@ -174,42 +177,8 @@ def build(payload: dict) -> bytes:
         story.append(Paragraph("提示", S["h2"]))
         story += [Paragraph(esc(n), S["note"], bulletText="•") for n in notes]
     story.append(Spacer(1, 4))
-    story.append(Paragraph(esc(payload.get("method") or ""), S["small"]))
     story.append(Paragraph("说明：任何 AI 检测都有误判，本报告只供作者自查，不能作为学术不端判定依据。", S["small"]))
 
-    # ---- 已知误差 + 如何解读（Weber-Wulff 等 2023、Liang 等 2023 对检测报告的要求：说明测的是什么、
-    #      在相应文体上的检出率与误判率、还需要哪些旁证）----
-    er = s.get("error_rates") or []
-    if er:
-        story.append(Paragraph("已知误差（本工具在独立测试集上的实测）", S["h2"]))
-        rows = [[Paragraph(x, S["cellc"]) for x in ("文体", "测试集（未参与训练和校准）", "AI 检出率", "人写误判率（95% 上限）")]]
-        for g in er:
-            for k, e in enumerate(g["sets"]):
-                fp = pct(e.get("human_flagged"))
-                if e.get("human_flagged_upper95") is not None:
-                    fp += f"（≤{pct(e['human_flagged_upper95'])}）"
-                rows.append([Paragraph(esc(g["name"]) if k == 0 else "", S["cell"]),
-                             Paragraph(esc(f'{e["name"]}（AI {e["n_ai"]} / 人写 {e["n_human"]}）'), S["cell"]),
-                             Paragraph(pct(e.get("ai_caught")), S["cellc"]),
-                             Paragraph(fp, S["cellc"])])
-        t = Table(rows, colWidths=[W * x for x in (0.13, 0.52, 0.13, 0.22)], repeatRows=1)
-        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef1f3")),
-                               ("GRID", (0, 0), (-1, -1), 0.3, C_RULE), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
-        story.append(t)
-    ppv = [g for g in er if g.get("ppv")]
-    if ppv:
-        story.append(Spacer(1, 4))
-        for g in ppv:
-            v = g["ppv"]
-            story.append(Paragraph(esc(f"{g['name']}：按上表“{g['ppv_basis'][:30]}”的检出率与误判率估算，如果送检文章里真有一半是 AI 写的，"
-                                       f"被标出的文字确实是 AI 的概率约 {pct(v.get('50%'))}；只有 10% 是 AI 写的时约 {pct(v.get('10%'))}；"
-                                       f"只有 2% 时约 {pct(v.get('2%'))}。"), S["small"]))
-    rec = s.get("record") or {}
-    if rec:
-        story.append(Paragraph(esc("检测记录：语言模型 " + " / ".join(rec.get("lm") or []) + "；分类器 " +
-                                   "；".join(f"{REG.get(k, k)} {v}" for k, v in (rec.get("classifiers") or {}).items()) +
-                                   "；阈值 " + "；".join(f"{REG.get(k, k)} {pct(v)}" for k, v in (rec.get("thresholds") or {}).items())),
-                               S["small"]))
     story.append(Paragraph("如何解读与复核", S["h2"]))
     guide = [
         "AI 率是“被判为疑似 AI 的文字占计入字数的比例”，不是“这篇文章由 AI 写成的概率”，更不是学术不端的概率。",
@@ -222,8 +191,12 @@ def build(payload: dict) -> bytes:
         "人写、AI 改写混合的文字（如 AI 润色、翻译）没有明确的“标准答案”，分数落在中间（如 40%）可能对应多种写作方式，其中有的是允许的。",
         "检测模型只认得训练时见过的 AI 写法：对更新的模型、经过人工改写或翻译的文字，检出率会下降；诗词、文言这类短小、程式化的文体误差也更大（见上表）。",
     ]
+    if not detail:
+        guide = [g for g in guide if not g.startswith(("报告里列出的多个检测器", "分段明细里的“人写对照”"))]
+        guide = [g.replace("（见上表）", "") for g in guide]
     if (s.get("chars_by_register") or {}).get("en"):
-        guide.append("英文非母语作者的文字更容易被误判（Liang 等，2023）；本工具的真人英文测试集包含中国作者的论文，误判率已计入上表。")
+        guide.append("英文非母语作者的文字更容易被误判（Liang 等，2023）；本工具的真人英文测试集包含中国作者的论文" +
+                     ("，误判率已计入技术附录的表格。" if detail else "。"))
     story += [Paragraph(esc(g), S["note"], bulletText="•") for g in guide]
 
     # ---- 分篇结果 ----
@@ -272,6 +245,46 @@ def build(payload: dict) -> bytes:
             story.append(KeepTogether(block))
         else:
             story += block
+
+    # ---- 技术附录（只在勾选“显示技术细节”时）----
+    if detail:
+        story.append(Paragraph("技术附录", S["h2"]))
+        if payload.get("method"):
+            story.append(Paragraph(esc(payload["method"]), S["small"]))
+
+        # ---- 已知误差 + 如何解读（Weber-Wulff 等 2023、Liang 等 2023 对检测报告的要求：说明测的是什么、
+        #      在相应文体上的检出率与误判率、还需要哪些旁证）----
+        er = s.get("error_rates") or []
+        if er:
+            story.append(Paragraph("已知误差（本工具在独立测试集上的实测）", S["h2"]))
+            rows = [[Paragraph(x, S["cellc"]) for x in ("文体", "测试集（未参与训练和校准）", "AI 检出率", "人写误判率（95% 上限）")]]
+            for g in er:
+                for k, e in enumerate(g["sets"]):
+                    fp = pct(e.get("human_flagged"))
+                    if e.get("human_flagged_upper95") is not None:
+                        fp += f"（≤{pct(e['human_flagged_upper95'])}）"
+                    rows.append([Paragraph(esc(g["name"]) if k == 0 else "", S["cell"]),
+                                 Paragraph(esc(f'{e["name"]}（AI {e["n_ai"]} / 人写 {e["n_human"]}）'), S["cell"]),
+                                 Paragraph(pct(e.get("ai_caught")), S["cellc"]),
+                                 Paragraph(fp, S["cellc"])])
+            t = Table(rows, colWidths=[W * x for x in (0.13, 0.52, 0.13, 0.22)], repeatRows=1)
+            t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef1f3")),
+                                   ("GRID", (0, 0), (-1, -1), 0.3, C_RULE), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+            story.append(t)
+        ppv = [g for g in er if g.get("ppv")]
+        if ppv:
+            story.append(Spacer(1, 4))
+            for g in ppv:
+                v = g["ppv"]
+                story.append(Paragraph(esc(f"{g['name']}：按上表“{g['ppv_basis'][:30]}”的检出率与误判率估算，如果送检文章里真有一半是 AI 写的，"
+                                           f"被标出的文字确实是 AI 的概率约 {pct(v.get('50%'))}；只有 10% 是 AI 写的时约 {pct(v.get('10%'))}；"
+                                           f"只有 2% 时约 {pct(v.get('2%'))}。"), S["small"]))
+        rec = s.get("record") or {}
+        if rec:
+            story.append(Paragraph(esc("检测记录：语言模型 " + " / ".join(rec.get("lm") or []) + "；分类器 " +
+                                       "；".join(f"{REG.get(k, k)} {v}" for k, v in (rec.get("classifiers") or {}).items()) +
+                                       "；阈值 " + "；".join(f"{REG.get(k, k)} {pct(v)}" for k, v in (rec.get("thresholds") or {}).items())),
+                                   S["small"]))
 
     # ---- 格式检查 ----
     items = payload.get("format_items") or []

@@ -5,12 +5,15 @@ name: 部署到 Cloudflare
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "server/**"
-      - ".github/workflows/deploy-hf-space.yml"
-      - ".github/workflows/deploy-server.yml"
-      - ".github/scripts/**"
-      - "**.md"
+    # 检测页面（server/static）由本 Worker 打包直接提供，页面改动也要触发部署；其余 server/** 改动由 deploy-server.yml 部署
+    paths:
+      - "**"
+      - "!server/**"
+      - "server/static/**"
+      - "!.github/workflows/deploy-hf-space.yml"
+      - "!.github/workflows/deploy-server.yml"
+      - "!.github/scripts/**"
+      - "!**.md"
   pull_request:
     paths-ignore: ["server/**"]
   workflow_dispatch:
