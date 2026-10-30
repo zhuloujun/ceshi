@@ -358,7 +358,7 @@ export function notFoundPage() {
 export function userBarHtml(email, isAdmin) {
   return `<div id="atc-userbar" style="display:flex;justify-content:flex-end;gap:12px;align-items:center;flex-wrap:wrap;font:13px/1.6 'Noto Sans SC',sans-serif;padding:8px 16px;border-bottom:1px solid rgba(0,0,0,.08)">
 <span style="opacity:.7">${esc(email)}</span>${isAdmin ? '<a href="/admin/console">管理后台</a>' : '<a href="/account">我的账户</a>'}<a href="/home">首页</a>
-<a href="/logout">退出</a></div>
+<a href="/logout">退出</a></div>${isAdmin ? '<i id="atc-admin-flag" hidden></i>' : ''}
 <style>.key-zone{display:none!important}</style>`;
 }
 

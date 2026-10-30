@@ -146,8 +146,10 @@ async function gated(request, env, url) {
       return proxy(request, env, url);         // 用 API Key 直接调用接口的程序照常可用（Key 由后端校验）
     if (isGet && (p === '/' || p === '/index.html')) return html(landingPage(false));
     if (p === '/health') return sjson({ ok: true, login_required: true });
-    if (isGet && !p.startsWith('/v1/') && !p.startsWith('/static/') && !p.startsWith('/admin/api/'))
-      return Response.redirect(url.origin + (p.startsWith('/admin') ? '/home' : '/login'), 302);
+    // 没登录访问管理路径一律 404（不暴露管理页是否存在）；管理员只从自定义的 /login/<slug> 登录
+    if (isGet && (p === '/admin' || p.startsWith('/admin/'))) return html(notFoundPage(), 404);
+    if (isGet && !p.startsWith('/v1/') && !p.startsWith('/static/'))
+      return Response.redirect(url.origin + '/login', 302);
     return sjson({ error: 'login_required', message: '请先登录：' + url.origin + '/login' }, 401);
   }
 
