@@ -33,7 +33,7 @@ jobs:
           case "$URL" in https://*) ;; *) echo "bad url"; exit 1 ;; esac
           GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 "$URL" /tmp/src
           rm -rf "ref/$NAME"; mkdir -p "ref/$NAME"
-          cd /tmp/src && find . -path ./.git -prune -o -type f -size -1M -print | while read f; do mkdir -p "$GITHUB_WORKSPACE/ref/$NAME/$(dirname "$f")"; cp "$f" "$GITHUB_WORKSPACE/ref/$NAME/$f"; done
+          cd /tmp/src && find . -path ./.git -prune -o -type f -size -1000k -print | while read f; do mkdir -p "$GITHUB_WORKSPACE/ref/$NAME/$(dirname "$f")"; cp "$f" "$GITHUB_WORKSPACE/ref/$NAME/$f"; done
           cd "$GITHUB_WORKSPACE"
           find "ref/$NAME" -type f | head -50 | sed 's/^/::notice title=file::/'
           git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
