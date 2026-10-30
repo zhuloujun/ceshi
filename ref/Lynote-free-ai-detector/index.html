@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Free AI Detector — Check AI Text Generation from ChatGPT, Claude &amp; Gemini | Lynote</title>
+<meta name="description" content="Free AI detector: check if text was written by AI. Get AI-generated, human-written and mixed scores with sentence-level highlights for ChatGPT, Claude, Gemini and DeepSeek. No sign-up, 100% private." />
+<meta name="keywords" content="ai detector, free ai detector, ai text detector, ai checker, detect ai text, gpt detector, chatgpt detector, ai content detector, ai text generation checker, ai writing detector" />
+<meta property="og:title" content="Free AI Detector — AI Text Checker | Lynote" />
+<meta property="og:description" content="Free AI detector: AI-generated, human-written and mixed scores with sentence-level highlights. No sign-up required." />
+<style>
+  :root { --bg:#0f1420; --card:#171f31; --card2:#1b2540; --fg:#e8edf7; --muted:#9aa7c0; --accent:#3fb6ff; --accent2:#b57bff; --line:#23304a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; line-height:1.7; }
+  .wrap { max-width:960px; margin:0 auto; padding:48px 24px 72px; }
+  .logo { font-size:15px; letter-spacing:3px; color:var(--muted); text-transform:uppercase; }
+  .badge { display:inline-block; font-size:13px; padding:4px 14px; border-radius:999px; border:1px solid #2c3a55; color:#b9c6e2; background:rgba(63,182,255,.08); margin:20px 0; }
+  h1 { font-size:clamp(30px,5.5vw,48px); line-height:1.2; margin:0 0 16px; background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .sub { font-size:18px; color:var(--muted); max-width:760px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin:34px 0 8px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; text-align:center; }
+  .stat b { display:block; font-size:24px; background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .stat span { font-size:13px; color:var(--muted); }
+  h2 { font-size:26px; margin:56px 0 8px; }
+  .section-note { color:var(--muted); margin-bottom:22px; }
+  .grid { list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+  .grid li { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
+  .grid strong { display:block; color:#fff; margin-bottom:6px; font-size:16px; }
+  .grid span { color:var(--muted); font-size:14.5px; }
+  .steps { list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:8px; }
+  .steps li { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .steps em { display:block; font-style:normal; color:var(--accent2); font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+  .steps strong { display:block; font-size:16px; margin-bottom:6px; }
+  .steps span { color:var(--muted); font-size:14.5px; }
+  .signals { list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; }
+  .signals li { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; font-size:14.5px; color:var(--muted); }
+  .signals strong { display:block; color:#fff; margin-bottom:4px; }
+  .report { list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+  .report li { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
+  .report strong { display:block; color:#fff; margin-bottom:6px; font-size:16px; }
+  .report span { color:var(--muted); font-size:14.5px; }
+  .cases { list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+  .cases li { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
+  .cases strong { display:block; font-size:16px; margin-bottom:6px; }
+  .cases span { color:var(--muted); font-size:14.5px; }
+  details { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 18px; margin-bottom:10px; }
+  summary { cursor:pointer; font-weight:600; color:#fff; }
+  details p { color:var(--muted); font-size:14.5px; margin-top:8px; }
+  .cta { display:inline-block; background:linear-gradient(90deg,var(--accent),var(--accent2)); color:#fff; font-size:17px; font-weight:600; padding:14px 30px; border-radius:12px; text-decoration:none; margin:36px 0 8px; }
+  .cta:hover { opacity:.9; }
+  .links-label { font-size:12px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; margin-top:36px; }
+  .links { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:10px; }
+  .chip { font-size:14px; padding:8px 18px; border-radius:999px; border:1px solid var(--line); color:var(--fg); text-decoration:none; background:var(--card); }
+  .chip b { color:var(--accent2); }
+  .chip:hover { border-color:var(--accent); color:#fff; }
+  .note { font-size:13.5px; color:var(--muted); margin-top:24px; max-width:780px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="logo">Lynote</div>
+  <span class="badge">FREE FOREVER · NO SIGN-UP · 100% PRIVATE</span>
+  <h1>Free AI Detector</h1>
+  <p class="sub">
+    Paste any text and find out in seconds whether it was written by AI, edited by AI, or written
+    by a human. Get AI-generated, human-written and mixed scores with sentence-level highlights for
+    ChatGPT, GPT-5, Gemini, Claude, DeepSeek and more.
+  </p>
+
+  <a class="cta" href="https://lynote.ai/ai-detector?utm_source=huggingface&utm_medium=space&utm_campaign=hf_launch&utm_content=text_detector" target="_blank" rel="noopener">
+    Detect AI Text for Free →
+  </a>
+
+  <div class="links-label">Free Lynote tools · open source</div>
+  <div class="links">
+    <a class="chip" href="https://github.com/lynote-ai/ai-text-detector" target="_blank" rel="noopener"><b>GitHub</b> — lynote-ai/ai-text-detector</a>
+    <a class="chip" href="https://huggingface.co/spaces/Lynote/free-ai-humanizer" target="_blank" rel="noopener">Free AI Humanizer →</a>
+    <a class="chip" href="https://huggingface.co/spaces/Lynote/free-ai-image-detector" target="_blank" rel="noopener">Free AI Image Detector →</a>
+    <a class="chip" href="https://huggingface.co/spaces/Lynote/free-ai-notes" target="_blank" rel="noopener">Free AI Note Taker →</a>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>350K+</b><span>Scans Performed Monthly</span></div>
+    <div class="stat"><b>99%</b><span>Detection Accuracy</span></div>
+    <div class="stat"><b>50+</b><span>Languages Supported</span></div>
+    <div class="stat"><b>4.9★</b><span>Rating from 12,589 Users</span></div>
+  </div>
+
+  <h2>Why Lynote is the Best AI Detector?</h2>
+  <p class="section-note">Go beyond a single percentage — get a full, reviewable report with sentence-level explanations.</p>
+  <ul class="grid">
+    <li><strong>99% Detection Accuracy</strong><span>High-confidence detection of AI-generated, human-written and blended content.</span></li>
+    <li><strong>Detects Leading AI Models</strong><span>Catches writing from ChatGPT, GPT-5, Gemini, Claude, LLaMA, Mistral and more — in one tool.</span></li>
+    <li><strong>Paraphrase Detection</strong><span>Identifies text that was paraphrased, refined or humanized by AI — not just exact duplicates.</span></li>
+    <li><strong>50+ Languages</strong><span>English, Spanish, French, German, Portuguese, Chinese, Arabic and many more.</span></li>
+    <li><strong>Safe &amp; Confidential</strong><span>Drafts, essays and client texts stay confidential — never used for model training.</span></li>
+    <li><strong>AI, Mixed &amp; Human Scores</strong><span>Get AI, human and blended scores with sentence highlighting so you know exactly what to review.</span></li>
+  </ul>
+
+  <h2>How to Use the Free AI Detector</h2>
+  <p class="section-note">Three steps from text to a review-ready report.</p>
+  <ol class="steps">
+    <li><em>Step 1</em><strong>Paste Text or Upload</strong><span>Add your text directly or upload a PDF, DOCX or TXT file to prepare it for AI detection.</span></li>
+    <li><em>Step 2</em><strong>Click Detect AI</strong><span>Lynote checks sentence patterns, word choice, predictability and signals linked to AI writing tools.</span></li>
+    <li><em>Step 3</em><strong>Review the Results</strong><span>See AI-generated, human-written and mixed scores, then review the highlighted sentences.</span></li>
+  </ol>
+
+  <h2>What Lynote Detects</h2>
+  <p class="section-note">Core signals of machine-made writing — checked at the sentence level.</p>
+  <ul class="signals">
+    <li><strong>Pattern Repetition</strong><span>Repeated phrasing and sentence structures typical of AI output.</span></li>
+    <li><strong>Predictable Rhythm</strong><span>Uniform sentence rhythm and low burstiness.</span></li>
+    <li><strong>Low Lexical Variance</strong><span>Limited vocabulary range and safe, general word choice.</span></li>
+    <li><strong>Model-Specific Habits</strong><span>ChatGPT-style phrasing, Claude-style structure, Gemini-style synthesis.</span></li>
+  </ul>
+
+  <h2>How to Interpret Your Report</h2>
+  <ul class="report">
+    <li><strong>AI Score</strong><span>How closely the text resembles AI-written writing.</span></li>
+    <li><strong>Mixed Score</strong><span>Detects documents containing both human and AI-written parts.</span></li>
+    <li><strong>Human Score</strong><span>How closely the text resembles human-written writing.</span></li>
+    <li><strong>Highlighted Sentences</strong><span>Specific lines flagged for detailed review — instead of guessing from one number.</span></li>
+  </ul>
+
+  <h2>Flagged as AI? What to Do</h2>
+  <ul class="report">
+    <li><strong>Analyze the Report</strong><span>Identify which elements were detected — redundancy, predictability or generic language.</span></li>
+    <li><strong>Review Your Sources</strong><span>Notes, outlines, citations and edit history help prove a text's origin.</span></li>
+    <li><strong>Revise the Flagged Parts</strong><span>Add specifics, rewrite formulaic transitions and vary sentence rhythm.</span></li>
+    <li><strong>Re-Test After Editing</strong><span>Check the revised version again — and never rely on a single AI score alone.</span></li>
+  </ul>
+
+  <h2>Who Uses This AI Detector</h2>
+  <p class="section-note">A practical review step for anyone working with AI-assisted writing.</p>
+  <ul class="cases">
+    <li><strong>Students</strong><span>Final check before submitting essays or assignments after using AI for brainstorming.</span></li>
+    <li><strong>Educators</strong><span>Review student writing with sentence-level highlights, combined with classroom judgment.</span></li>
+    <li><strong>Content Creators</strong><span>Keep articles, newsletters and scripts sounding original.</span></li>
+    <li><strong>SEO Specialists &amp; Marketers</strong><span>Review blogs, landing pages and briefs before they go live.</span></li>
+    <li><strong>HR &amp; Recruiters</strong><span>Screen cover letters and written assessments with a human reviewer in the loop.</span></li>
+    <li><strong>Writers &amp; Freelancers</strong><span>Check work before delivery and polish anything that sounds too automated.</span></li>
+  </ul>
+
+  <h2>Frequently Asked Questions</h2>
+  <details>
+    <summary>Is this AI detector free?</summary>
+    <p>Yes. Lynote offers a free AI detector for checking text online — paste text or upload a document and run your first AI check without creating an account.</p>
+  </details>
+  <details>
+    <summary>Are AI detectors accurate?</summary>
+    <p>AI detectors are useful, but no detector is perfect. Lynote gives sentence-level highlights so you can review the result instead of relying on one score alone.</p>
+  </details>
+  <details>
+    <summary>How do AI detectors work?</summary>
+    <p>They analyze writing patterns such as word choice, sentence rhythm, predictability and structure. AI-generated text often has smoother, more repeated patterns than human writing.</p>
+  </details>
+  <details>
+    <summary>Can Lynote detect ChatGPT, GPT-5, Gemini and Claude?</summary>
+    <p>Yes. Lynote is designed to check writing from ChatGPT, GPT-5, Gemini, Claude, LLaMA, Mistral and other major AI tools — including text edited or paraphrased after generation.</p>
+  </details>
+  <details>
+    <summary>Does Lynote support languages other than English?</summary>
+    <p>Yes. Lynote supports AI detection in 50+ languages, including English, Spanish, French, German, Portuguese, Chinese, Arabic and more.</p>
+  </details>
+  <details>
+    <summary>Does Lynote save my text?</summary>
+    <p>Lynote processes text securely and does not use your submitted content to train detection models — important for essays, client drafts, applications and internal documents.</p>
+  </details>
+
+  <a class="cta" href="https://lynote.ai/ai-detector?utm_source=huggingface&utm_medium=space&utm_campaign=hf_launch&utm_content=text_detector" target="_blank" rel="noopener">
+    Detect AI Text for Free →
+  </a>
+
+  <p class="note">
+    This Space is a static landing page for Lynote's free AI detector. The interactive demo requires
+    Hugging Face PRO hosting; the full product — paste, upload, detect, and review sentence-level
+    highlights — is available at <a href="https://lynote.ai/ai-detector" style="color:var(--accent)">lynote.ai/ai-detector</a>.
+    No AI detector is perfect: scores are probabilistic signals, not proof of authorship, and false
+    positives are possible — especially with short, formal, or highly structured writing.
+  </p>
+</div>
+</body>
+</html>
