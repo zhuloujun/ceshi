@@ -5,7 +5,7 @@
 | 文件夹 | 是什么 | 部署到哪里 | 怎么自动部署 |
 |---|---|---|---|
 | 仓库根目录（`worker.js`、`pages-static/` 等） | **网站入口**：把你的域名转发到完整版；`/lite/` 下保留轻量版（浏览器本地统计检测 + 标点排版检查，可选 GPTZero） | Cloudflare Worker `ai-text-checker`（免费） | Cloudflare 自动构建：`main` 分支有新提交就重新部署 |
-| `server/` | **完整版检测服务**：按段落识别文体（现代汉语 / 文言 / 英文）后分别判断——Fast-DetectGPT + Binoculars + 分类器（中文 MPU、英文 desklib）+ 扩展特征，三种文体各自校准；自签发 API Key | Modal（按实际运行时间计费，有免费额度） | GitHub Actions：`server/` 有改动时先测试，通过后部署到 Modal |
+| `server/` | **完整版检测服务**：按段落识别文体（现代汉语 / 文言 / 英文）后分别判断——F + B + 分类器（中文 M、英文 de）+ 扩展特征，三种文体各自校准；自签发 API Key | Modal（按实际运行时间计费，有免费额度） | GitHub Actions：`server/` 有改动时先测试，通过后部署到 Modal |
 
 ```
 访客 ──→ 你的域名（Cloudflare Worker）──┬─ /lite/ ──→ 轻量版（Worker 自己提供）
