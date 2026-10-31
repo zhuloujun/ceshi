@@ -163,7 +163,12 @@ EXTRA_HUMAN = [  # (数据集, 配置, 正文字段, 名称)
     ("ArmelR/stack-exchange-instruction", None, "response", "stackexchange", 1),
     ("qwedsacf/ivypanda-essays", None, "TEXT", "student-essay", 1),
     ("vblagoje/cc_news", None, "text", "cc-news", 1),            # 2026-10-26：CC-News 英文新闻（2017–2019，ChatGPT 之前）
+    # 2026-10-31：真人菜谱（Allrecipes 等网站，2023 年前抓取）。用户上传的真人菜谱书、操作手册被判成 AI
+    # （r132：199 段 33 段 ≥ 50%）。菜谱句子短、格式化，单独放宽长度要求（见 SHORT_OK）。DialogSum 不加：MAGE 评估集的
+    # dialogsum 真人样本就出自它，加进训练会让评估失真。
+    ("corbt/all-recipes", None, "input", "recipe", 2),
 ]
+SHORT_OK = {"recipe"}       # 段落 ≥ 3 词、全文 ≥ 100 词即可（其他来源要求段落 ≥ 12 词、全文 ≥ 220 词）
 
 
 def _stream(load_dataset, name, cfg):
@@ -196,6 +201,8 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
                 if i % 7:
                     continue
                 v = row.get(field) or ""
+                if not v:                                  # 字段名对不上时，取最长的文字字段
+                    v = max((x for x in row.values() if isinstance(x, str)), key=len, default="")
                 if isinstance(v, list):                    # 正文按句 / 按段存成列表（Elsevier、lex_glue）
                     v = "\n".join(x.get("sentence") or x.get("text") or "" if isinstance(x, dict) else str(x) for x in v)
                 txt = str(v).replace("|||||", "\n")
@@ -207,8 +214,9 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
                     blocks = re.split(r"\n\s*\n", txt)
                     txt = "\n".join(" ".join(b.split()) for b in blocks[len(blocks) // 10: len(blocks) * 9 // 10])
                 paras = [" ".join(p.split()) for p in re.split(r"\n+", txt)]
-                paras = [p for p in paras if len(p.split()) >= 12]
-                if sum(len(p.split()) for p in paras) < 220:
+                short = tag in SHORT_OK
+                paras = [p for p in paras if len(p.split()) >= (3 if short else 12)]
+                if sum(len(p.split()) for p in paras) < (100 if short else 220):
                     continue
                 st = rnd.randint(0, max(0, len(paras) - 3))
                 buf, n, goal = [], 0, rnd.randint(200, 500)
@@ -217,7 +225,7 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
                     n += len(p.split())
                     if n >= goal:
                         break
-                if n >= 180:
+                if n >= (100 if short else 180):
                     out.append(("\n".join(buf), f"{tag}:{row.get('id', i)}", tag))
                     got += 1
         except Exception as e:  # noqa: BLE001
