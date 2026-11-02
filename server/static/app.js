@@ -443,8 +443,8 @@ function renderResult(res){
       .map(([k,v])=>`<span class="para-tag">${sigName(k, seg)} ${pct(v)}</span>`).join('');
     const raw = seg.raw || {};
     const rawBits = [
-      raw.fastdetect!=null ? `Fast-DetectGPT 曲率 ${raw.fastdetect.toFixed(2)}` : '',
-      raw.binoculars!=null ? `Binoculars 分数 ${raw.binoculars.toFixed(3)}` : '',
+      raw.fastdetect!=null ? `F 曲率 ${raw.fastdetect.toFixed(2)}` : '',
+      raw.binoculars!=null ? `B 分数 ${raw.binoculars.toFixed(3)}` : '',
       raw.classifier!=null ? `分类器 ${pct(raw.classifier)}` : '',
       raw.classifier_zh2!=null ? `本模中文分类器 ${pct(raw.classifier_zh2)}` : '',
       raw.classifier_en2!=null ? `本模英文分类器 ${pct(raw.classifier_en2)}` : '',
