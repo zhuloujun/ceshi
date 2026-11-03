@@ -895,6 +895,51 @@ def run_user_style(name, key, endpoints, out_f, n_titles, t_start, budget_min, l
     return n_new
 
 
+# AI 润色（2026-11-03）：真人原文（PubMed 2012–2021 摘要、真人非论文体裁长文，都早于大模型普及）交给模型按三种力度润色，
+# 用来实测"真人写、AI 改"的文字在本工具里得多少分（Saha 等 2025：轻度润色就常被判成 AI，检测器分不清润色程度）。
+# 每条记录同时保存原文，可以直接对比原文和润色稿的分数。
+POLISH_LEVELS = [
+    ("polish_light", "Proofread the following text. Fix only grammar, spelling and punctuation errors; change as few words as "
+                     "possible and keep everything else exactly as written. Output only the corrected text.\n\n{x}"),
+    ("polish_medium", "Polish the following text to improve clarity, flow and word choice. Keep the meaning, the facts, the "
+                      "structure and roughly the same length. Output only the polished text.\n\n{x}"),
+    ("polish_heavy", "Rewrite the following text to make it read more professionally and fluently. You may restructure and "
+                     "rephrase sentences freely, but keep all the information. Output only the rewritten text.\n\n{x}"),
+    ("polish_zh_cn", "请帮我润色下面这段英文，让表达更地道、更流畅，适合投稿或发表，意思和内容不要改。只输出润色后的英文。\n\n{x}"),
+]
+
+
+def run_polish(name, key, endpoints, out, out_f, n_titles, t_start, budget_min, lock):
+    ep = pick_endpoint(name, key, endpoints)
+    if not ep:
+        return 0
+    url, model = ep
+    pool = [dict(h, src="pubmed") for h in load_jsonl(out / "pubmed_human.jsonl")]
+    pool += [dict(h, src="genre") for h in load_jsonl(out / "genre_human.jsonl") if 600 <= len(h.get("text", "")) <= 6000]
+    rnd = random.Random(f"polish-{name}")
+    rnd.shuffle(pool)
+    done = {r["title"] + "|" + r["kind"] for r in load_jsonl(out_f)}
+    n_new = 0
+    for i, h in enumerate(pool[:n_titles]):
+        if (time.time() - t_start) / 60 > budget_min:
+            break
+        kind, tpl = POLISH_LEVELS[i % len(POLISH_LEVELS)]
+        title = h.get("title") or h["text"][:60]
+        if f"{title}|{kind}" in done:
+            continue
+        src = h["text"][:4000]
+        text = chat(url, key, model, tpl.format(x=src), 0.3 if kind == "polish_light" else 0.7, 2500)
+        if text and len(text) > 0.5 * len(src):
+            with lock, out_f.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"title": title, "kind": kind, "model": name, "src": h["src"], "human": src,
+                                     "text": clean(text)}, ensure_ascii=False) + "\n")
+            n_new += 1
+        if i % 20 == 0:
+            print(f"{name} 润色: {i + 1}/{n_titles}", flush=True)
+    print(f"::notice title={name}（{out_f.name}）::新润色 {n_new} 篇", flush=True)
+    return n_new
+
+
 def run_provider(name, key, endpoints, titles, out_f, kinds, n_titles, t_start, budget_min, lock):
     ep = pick_endpoint(name, key, endpoints)
     if not ep:
@@ -929,7 +974,7 @@ def main():
     import threading
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "data" / "gen_en"))
-    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "manual"], default="arxiv",
+    ap.add_argument("--source", choices=["arxiv", "pubmed", "pmc", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "manual", "polish"], default="arxiv",
                     help="题目来源：arxiv（摘要类）或 pubmed（农业、经济、医学等，含中国作者；生成整篇论文）")
     ap.add_argument("--n-titles", type=int, default=200, help="每家模型生成多少篇（每篇轮换一种类型）")
     ap.add_argument("--per-category", type=int, default=40)
@@ -938,7 +983,7 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    human = human_pool(out, "pubmed" if args.source in ("translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "manual") else args.source, args.per_category)
+    human = human_pool(out, "pubmed" if args.source in ("polish", "translate", "userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "manual") else args.source, args.per_category)
     if not human:
         raise SystemExit("没有抓到真人摘要")
     if args.source == "pmc":
@@ -957,11 +1002,14 @@ def main():
             continue
         out_f = out / {"pubmed": f"pm_{name}.jsonl", "translate": f"tr_{name}.jsonl",
                        "userstyle": f"us_{name}.jsonl", "genre": f"ge_{name}.jsonl",
-                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl", "selfhelp": f"sh_{name}.jsonl", "manual": f"mn_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
+                       "humanize": f"hu_{name}.jsonl", "novel": f"nv_{name}.jsonl", "docs": f"dc_{name}.jsonl", "papers": f"ap_{name}.jsonl", "nonfiction": f"nf_{name}.jsonl", "poem": f"po_{name}.jsonl", "selfhelp": f"sh_{name}.jsonl", "manual": f"mn_{name}.jsonl", "polish": f"pl_{name}.jsonl"}.get(args.source, f"{name}.jsonl")
         # 各家并行生成（Kimi 限速且会先"思考"，很慢，不能让它拖住其他家）
         if args.source in ("userstyle", "genre", "humanize", "novel", "docs", "papers", "nonfiction", "poem", "selfhelp", "manual"):
             th = threading.Thread(target=run_user_style, args=(name, key, endpoints, out_f, args.n_titles,
                                                                t_start, args.time_budget_min, lock), daemon=True)
+        elif args.source == "polish":
+            th = threading.Thread(target=run_polish, args=(name, key, endpoints, out, out_f, args.n_titles,
+                                                           t_start, args.time_budget_min, lock), daemon=True)
         elif args.source == "translate":
             th = threading.Thread(target=run_translate, args=(name, key, endpoints, titles, out_f, args.n_titles,
                                                               t_start, args.time_budget_min, lock), daemon=True)
