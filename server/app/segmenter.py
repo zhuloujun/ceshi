@@ -178,10 +178,15 @@ def is_list_item(line: str) -> bool:
     return len(_CJK.findall(rest)) >= 8 and bool(re.search(r"[，。！？；,]", rest))
 
 
+_LABELED_ITEM = re.compile(r"^\s*[A-Z]{1,2}\d{1,3}\s*[、．]\s*\S")
+
+
 def is_list_head(line: str) -> bool:
     """作品集条目编号后面是题目或外文正文（"8、《幸福的月光》""8、兄台如面：""52、This is what's true …"），
     不是"1.2 方法"这样的小节号。作品集模式下这也是一篇新作品的开头。"""
     s = line.strip()
+    if _LABELED_ITEM.match(s):
+        return True
     m = _LIST_MARK.match(s)
     if not m or re.match(r"^\s*\d+[.．]\d", s):
         return False
@@ -593,6 +598,12 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
     elif len(item_lines) >= 4 and not is_paper_doc:
         verse = sum(len(l) for l in item_lines if detect_register(l) in ("zh_poetry", "zh_classical"))
         list_mode = verse >= 0.5 * sum(len(l) for l in item_lines)
+    # 用户自己给作品编了带字母的号（"A1、""Z3、"，2026-10 cs1019 / cs1031：AI 篇、真人篇交替排列，中英文混排）：
+    # 这样的行有 4 条以上就是作品集，每条一篇，不论条目后面是英文标题、中文正文还是"Cook Time: 40 minutes"
+    labeled = [l for l in nonempty if _LABELED_ITEM.match(l)]
+    labeled_mode = len(labeled) >= 4
+    if labeled_mode:
+        list_mode = True
     blk_item = False                 # 当前作品是不是作品集里的一个条目
 
     work_heads: set = set()          # 文集里带编号的作品标题（"1. 天坛：圆丘上的沉默""4. Hawaii"）
@@ -707,6 +718,10 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         section = is_section_heading(stripped)
         title = stripped in paper_titles or (is_title(stripped) and not section)
         item = list_mode and (is_list_item(stripped) or is_list_head(stripped))
+        if labeled_mode:
+            # 用户编号的作品集：只有带字母编号的行开始新作品；作品内部的小标题、"1. Preheat …"步骤都是正文
+            item = bool(_LABELED_ITEM.match(stripped))
+            section, title = (False, True) if item else (False, False)
         if (list_mode and not item and pending_break and blk_item and buf.strip()
                 and len(_CJK.findall(buf)) >= 40 and len(_CJK.findall(stripped)) >= 40
                 and detect_register(buf) == "zh_poetry" and detect_register(stripped) == "zh_poetry"):
