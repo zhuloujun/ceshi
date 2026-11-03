@@ -500,7 +500,14 @@ def flush_chars(register: str) -> int:
 
 def _split_sentences(par: str, register: str):
     if register == "en":
-        return [s for s in _EN_SENT_END.split(par) if s.strip()]
+        # 保留句间的空格 / 换行：以前 split 把空白吞掉，切开的长段拼回来成了"entrance.Before""Night!It’s"，
+        # 词粘在一起，语言模型和分类器看到的是另一种文字（2026-11-03 cs1031 发现，所有超过约 1000 字符的英文段落都受影响）
+        out, last = [], 0
+        for m in _EN_SENT_END.finditer(par):
+            out.append(par[last:m.end()])
+            last = m.end()
+        out.append(par[last:])
+        return [x for x in out if x.strip()]
     return [s for s in _SENT_END.split(par) if s.strip()]
 
 
