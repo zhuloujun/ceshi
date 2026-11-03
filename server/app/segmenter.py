@@ -126,6 +126,44 @@ def is_table_row(line: str) -> bool:
     return line.count(" | ") >= 1 and len(line.split(" | ")) >= 2 or line.count("\t") >= 2
 
 
+_EN_BULLET = re.compile(r"^\s*(?:[-*•–·]|\[\s?\]|\d{1,2}[.)])\s+\S")
+
+
+def split_en_lists(buf: str) -> list:
+    """把英文段落里的短条目清单切出来：菜谱配料表（"- 2 tablespoons olive oil"）、核对清单（"[ ] Tires firm"）、装备清单。
+    这类条目真人和 AI 写出来几乎一样，检测器分数没有意义（Turnitin 也只给"长篇连贯正文"打分，不给列表、表格打分）。
+    连续 3 行以上、项目符号开头、不超过 15 个词的条目（连同紧挨在前面的"Ingredients"这类 1–3 词小标题）算清单；
+    编号步骤（"1. Heat the oven to 220 degrees C …"）是完整句子，一般更长，照常检测。返回 [(文字, 是否清单)]，拼起来等于原文。"""
+    lines = buf.splitlines(keepends=True)
+    isb = [bool(_EN_BULLET.match(l)) and len(l.split()) <= 15 for l in lines]
+    blank = [not l.strip() for l in lines]
+    mark = [False] * len(lines)
+    i = 0
+    while i < len(lines):
+        if isb[i]:
+            j, n = i, 0
+            while j < len(lines) and (isb[j] or blank[j] or (_EN_BULLET.match(lines[j]) and n >= 3)):
+                n += isb[j]; j += 1
+            if n >= 3:
+                k = i - 1
+                while k >= 0 and blank[k]:
+                    k -= 1
+                if k >= 0 and len(lines[k].split()) <= 3 and not _EN_BULLET.match(lines[k]):
+                    i = k
+                for t in range(i, j):
+                    mark[t] = True
+            i = j
+        else:
+            i += 1
+    parts = []
+    for l, m in zip(lines, mark):
+        if parts and parts[-1][1] == m:
+            parts[-1][0] += l
+        else:
+            parts.append([l, m])
+    return [(t, m) for t, m in parts]
+
+
 def strip_list_mark(line: str) -> str:
     return _LIST_MARK.sub("", line, count=1)
 
@@ -575,6 +613,24 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             buf = ""
             return
         reg = detect_register(buf)
+        if reg == "en" and config.EN_LIST_EXCLUDE and kind_override is None:
+            parts = split_en_lists(buf)
+            if any(isl for _, isl in parts):
+                whole, off0 = buf, buf_start
+                for txt, isl in parts:
+                    if isl:
+                        segments.append(Segment(len(segments), txt, off0, "table",
+                                                ["清单（配料表、核对清单等短条目，不是连贯正文），不计入"], "en", block, ""))
+                    elif txt.strip():
+                        _emit(txt, off0, None)
+                    off0 += len(txt)
+                buf = ""
+                return
+        _emit(buf, buf_start, kind_override, reg)
+        buf = ""
+
+    def _emit(buf, buf_start, kind_override, reg=None):
+        reg = reg or detect_register(buf)
         tgt = target_chars(reg)
         first = buf.strip().splitlines()[0].strip()
         title = first if (first in paper_titles or first in work_heads or first in iso_titles
@@ -588,7 +644,6 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             segments.append(Segment(len(segments), p, off, kind_override or "body", [],
                                     detect_register(p) if len(pieces) > 1 else reg, block, title if i == 0 else ""))
             off += len(p)
-        buf = ""
 
     line_no = -1
     in_table = False
