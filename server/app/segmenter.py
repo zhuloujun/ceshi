@@ -126,6 +126,44 @@ def is_table_row(line: str) -> bool:
     return line.count(" | ") >= 1 and len(line.split(" | ")) >= 2 or line.count("\t") >= 2
 
 
+_EN_BULLET = re.compile(r"^\s*(?:[-*•–·]|\[\s?\]|\d{1,2}[.)])\s+\S")
+
+
+def split_en_lists(buf: str) -> list:
+    """把英文段落里的短条目清单切出来：菜谱配料表（"- 2 tablespoons olive oil"）、核对清单（"[ ] Tires firm"）、装备清单。
+    这类条目真人和 AI 写出来几乎一样，检测器分数没有意义（Turnitin 也只给"长篇连贯正文"打分，不给列表、表格打分）。
+    连续 3 行以上、项目符号开头、不超过 15 个词的条目（连同紧挨在前面的"Ingredients"这类 1–3 词小标题）算清单；
+    编号步骤（"1. Heat the oven to 220 degrees C …"）是完整句子，一般更长，照常检测。返回 [(文字, 是否清单)]，拼起来等于原文。"""
+    lines = buf.splitlines(keepends=True)
+    isb = [bool(_EN_BULLET.match(l)) and len(l.split()) <= 15 for l in lines]
+    blank = [not l.strip() for l in lines]
+    mark = [False] * len(lines)
+    i = 0
+    while i < len(lines):
+        if isb[i]:
+            j, n = i, 0
+            while j < len(lines) and (isb[j] or blank[j] or (_EN_BULLET.match(lines[j]) and n >= 3)):
+                n += isb[j]; j += 1
+            if n >= 3:
+                k = i - 1
+                while k >= 0 and blank[k]:
+                    k -= 1
+                if k >= 0 and len(lines[k].split()) <= 3 and not _EN_BULLET.match(lines[k]):
+                    i = k
+                for t in range(i, j):
+                    mark[t] = True
+            i = j
+        else:
+            i += 1
+    parts = []
+    for l, m in zip(lines, mark):
+        if parts and parts[-1][1] == m:
+            parts[-1][0] += l
+        else:
+            parts.append([l, m])
+    return [(t, m) for t, m in parts]
+
+
 def strip_list_mark(line: str) -> str:
     return _LIST_MARK.sub("", line, count=1)
 
@@ -140,10 +178,15 @@ def is_list_item(line: str) -> bool:
     return len(_CJK.findall(rest)) >= 8 and bool(re.search(r"[，。！？；,]", rest))
 
 
+_LABELED_ITEM = re.compile(r"^\s*[A-Z]{1,2}\d{1,3}\s*[、．]\s*\S")
+
+
 def is_list_head(line: str) -> bool:
     """作品集条目编号后面是题目或外文正文（"8、《幸福的月光》""8、兄台如面：""52、This is what's true …"），
     不是"1.2 方法"这样的小节号。作品集模式下这也是一篇新作品的开头。"""
     s = line.strip()
+    if _LABELED_ITEM.match(s):
+        return True
     m = _LIST_MARK.match(s)
     if not m or re.match(r"^\s*\d+[.．]\d", s):
         return False
@@ -457,7 +500,14 @@ def flush_chars(register: str) -> int:
 
 def _split_sentences(par: str, register: str):
     if register == "en":
-        return [s for s in _EN_SENT_END.split(par) if s.strip()]
+        # 保留句间的空格 / 换行：以前 split 把空白吞掉，切开的长段拼回来成了"entrance.Before""Night!It’s"，
+        # 词粘在一起，语言模型和分类器看到的是另一种文字（2026-11-03 cs1031 发现，所有超过约 1000 字符的英文段落都受影响）
+        out, last = [], 0
+        for m in _EN_SENT_END.finditer(par):
+            out.append(par[last:m.end()])
+            last = m.end()
+        out.append(par[last:])
+        return [x for x in out if x.strip()]
     return [s for s in _SENT_END.split(par) if s.strip()]
 
 
@@ -555,6 +605,12 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
     elif len(item_lines) >= 4 and not is_paper_doc:
         verse = sum(len(l) for l in item_lines if detect_register(l) in ("zh_poetry", "zh_classical"))
         list_mode = verse >= 0.5 * sum(len(l) for l in item_lines)
+    # 用户自己给作品编了带字母的号（"A1、""Z3、"，2026-10 cs1019 / cs1031：AI 篇、真人篇交替排列，中英文混排）：
+    # 这样的行有 4 条以上就是作品集，每条一篇，不论条目后面是英文标题、中文正文还是"Cook Time: 40 minutes"
+    labeled = [l for l in nonempty if _LABELED_ITEM.match(l)]
+    labeled_mode = len(labeled) >= 4
+    if labeled_mode:
+        list_mode = True
     blk_item = False                 # 当前作品是不是作品集里的一个条目
 
     work_heads: set = set()          # 文集里带编号的作品标题（"1. 天坛：圆丘上的沉默""4. Hawaii"）
@@ -575,6 +631,24 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             buf = ""
             return
         reg = detect_register(buf)
+        if reg == "en" and config.EN_LIST_EXCLUDE and kind_override is None:
+            parts = split_en_lists(buf)
+            if any(isl for _, isl in parts):
+                whole, off0 = buf, buf_start
+                for txt, isl in parts:
+                    if isl:
+                        segments.append(Segment(len(segments), txt, off0, "table",
+                                                ["清单（配料表、核对清单等短条目，不是连贯正文），不计入"], "en", block, ""))
+                    elif txt.strip():
+                        _emit(txt, off0, None)
+                    off0 += len(txt)
+                buf = ""
+                return
+        _emit(buf, buf_start, kind_override, reg)
+        buf = ""
+
+    def _emit(buf, buf_start, kind_override, reg=None):
+        reg = reg or detect_register(buf)
         tgt = target_chars(reg)
         first = buf.strip().splitlines()[0].strip()
         title = first if (first in paper_titles or first in work_heads or first in iso_titles
@@ -588,7 +662,6 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             segments.append(Segment(len(segments), p, off, kind_override or "body", [],
                                     detect_register(p) if len(pieces) > 1 else reg, block, title if i == 0 else ""))
             off += len(p)
-        buf = ""
 
     line_no = -1
     in_table = False
@@ -652,6 +725,10 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
         section = is_section_heading(stripped)
         title = stripped in paper_titles or (is_title(stripped) and not section)
         item = list_mode and (is_list_item(stripped) or is_list_head(stripped))
+        if labeled_mode:
+            # 用户编号的作品集：只有带字母编号的行开始新作品；作品内部的小标题、"1. Preheat …"步骤都是正文
+            item = bool(_LABELED_ITEM.match(stripped))
+            section, title = (False, True) if item else (False, False)
         if (list_mode and not item and pending_break and blk_item and buf.strip()
                 and len(_CJK.findall(buf)) >= 40 and len(_CJK.findall(stripped)) >= 40
                 and detect_register(buf) == "zh_poetry" and detect_register(stripped) == "zh_poetry"):
