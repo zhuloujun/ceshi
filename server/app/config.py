@@ -361,3 +361,6 @@ def load_calibration_override():
         except (OSError, json.JSONDecodeError):
             pass
     return None, None
+
+# 英文短条目清单（配料表、核对清单）不计入 AI 率（2026-11-03 实验：Claude 菜谱 8/18 漏判主要因配料表段落拉低）
+EN_LIST_EXCLUDE = os.getenv("EN_LIST_EXCLUDE", "1") == "1"
