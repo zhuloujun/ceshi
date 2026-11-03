@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install "modal==1.5.5" "kaggle>=2.0"
+      - run: pip install "modal==1.5.5" "kaggle>=2.0" six
       - name: 在 GPU 上训练（Kaggle 免费 / Modal）
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
