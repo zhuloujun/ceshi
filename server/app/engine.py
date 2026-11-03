@@ -444,6 +444,23 @@ def works_summary(seg_out: list) -> list:
     return out
 
 
+def collection_test(works: list, fpr_of: dict, min_works: int = 5) -> dict | None:
+    """作品集整体判断（2026-11-03）：一首绝句 28 字、律诗 56 字，单首判断信息量太少；但同一份作品集里
+    如果很多篇都过了阈值，把各篇证据合起来就可靠得多。零假设"全部是人写"：每篇以实测误判率 f 被误标，
+    同一作者风格相近、误标不独立，所以 f 放宽一倍；用二项分布算 P(误标篇数 ≥ k)。只作提示，不改变 AI 率。"""
+    ws = [w for w in works if w.get("counted") and w.get("ai_rate") is not None
+          and set(w.get("registers") or []) <= {"zh_poetry", "zh_classical"}]
+    n = len(ws)
+    if n < min_works:
+        return None
+    k = sum(1 for w in ws if w["ai_rate"] >= 0.5)
+    regs = [r for w in ws for r in w["registers"]]
+    f = min(0.5, 2 * sum(fpr_of.get(r, 0.05) for r in regs) / max(1, len(regs)))
+    p = sum(math.exp(math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1)
+                     + i * math.log(f) + (n - i) * math.log(1 - f)) for i in range(k, n + 1)) if k else 1.0
+    return {"n": n, "k": k, "fpr": round(f, 4), "p_human": float(min(1.0, p))}
+
+
 _SENT_ZH = re.compile(r"[^。！？；!?;…\n]*(?:[。！？；!?;…]+[”’」』）)]*|\n|$)")
 _SENT_EN = re.compile(r"[^.!?\n]*(?:[.!?]+[\"'”’)]*\s*|\n|$)")
 
@@ -1616,6 +1633,13 @@ class Engine:
                 notes.append(f"本文共 {n_judged} 段参与判断。即使全部是人写，按各文体的实测误判率，平均也会有约 "
                              f"{expected_false:.1f} 段被误标；本次标出 {n_flagged} 段，与偶然误标的数量相当"
                              f"（纯属偶然的概率约 {p_chance:.0%}），不宜据此认定使用了 AI，请逐段复核。")
+        collection = collection_test(works_summary(seg_out), fpr_of)
+        if collection and collection["p_human"] < 0.001:
+            notes.append(f"作品集整体判断：{collection['n']} 篇诗词 / 文言作品中有 {collection['k']} 篇判为疑似 AI。"
+                         f"按实测的单篇误判率（约 {collection['fpr']:.0%}，已按同一作者风格相近放宽一倍）计算，"
+                         f"一本全是真人写的作品集出现这么多篇的概率约为 {collection['p_human']:.1e}，"
+                         "所以这份作品集中相当一部分很可能由 AI 生成。单首短诗词只有几十个字，逐首判断本来就不可靠，"
+                         "没被标出的篇目不代表一定是人写。")
         missing_cls = {REGISTER_NAMES.get(r, r) for r in chars_by_register if not self.classifier_for(r)}
         if missing_cls:
             notes.append("、".join(sorted(missing_cls)) + "分类器未就绪，这部分只用了语言模型特征。")
@@ -1681,6 +1705,7 @@ class Engine:
             },
             "segments": seg_out,
             "works": works_summary(seg_out),
+            "collection": collection,
         }
 
     def estimate_seconds(self, text: str, mode: str) -> float | None:
