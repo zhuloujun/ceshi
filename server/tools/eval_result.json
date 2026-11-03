@@ -183,11 +183,11 @@
  "en": {
   "calibration_report": {
    "n_human": 1076,
-   "n_ai": 1507,
+   "n_ai": 1535,
    "auroc": {
-    "fastdetect": 0.4926,
-    "binoculars": 0.496,
-    "classifier": 0.829
+    "fastdetect": 0.4909,
+    "binoculars": 0.4942,
+    "classifier": 0.8299
    },
    "features_used": [
     "fastdetect",
@@ -197,45 +197,45 @@
    ],
    "cross_validated": true,
    "or_rule": {
-    "t": 0.935,
-    "threshold": 0.9,
-    "ai_caught": 0.9741,
+    "t": 0.94,
+    "threshold": 0.915,
+    "ai_caught": 0.9752,
     "human_flagged": 0.0344
    },
-   "combined_auroc": 0.9879,
-   "threshold": 0.9,
+   "combined_auroc": 0.9878,
+   "threshold": 0.915,
    "human_flagged_rate": 0.0344,
-   "ai_caught_rate": 0.9741,
+   "ai_caught_rate": 0.9752,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
   },
   "evaluation": [
    {
     "name": "国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准",
     "n_human": 478,
-    "n_ai": 664,
-    "auroc": 0.9974,
-    "ai_caught": 0.9985,
-    "human_flagged": 0.0251,
+    "n_ai": 700,
+    "auroc": 0.9957,
+    "ai_caught": 0.9929,
+    "human_flagged": 0.0272,
     "per_signal_auroc": {
-     "fastdetect": 0.6319,
-     "binoculars": 0.3651,
-     "logit_classifier": 0.8321,
-     "fastdetect_norm": 0.6317,
-     "lrr": 0.4905,
-     "log_rank": 0.4669,
-     "entropy": 0.4873,
-     "top10": 0.5233,
-     "lp_burstiness": 0.5125,
-     "style_cv": 0.5007,
-     "style_phrases": 0.5574,
-     "logit_classifier_en2": 0.9997
+     "fastdetect": 0.6312,
+     "binoculars": 0.3657,
+     "logit_classifier": 0.8345,
+     "fastdetect_norm": 0.6313,
+     "lrr": 0.503,
+     "log_rank": 0.4579,
+     "entropy": 0.4782,
+     "top10": 0.5332,
+     "lp_burstiness": 0.5124,
+     "style_cv": 0.5088,
+     "style_phrases": 0.5518,
+     "logit_classifier_en2": 0.9992
     },
     "ai_caught_by_model": {},
     "human_flagged_by_source": {
-     "arxiv-human": 0.0303,
-     "genre-human": 0.0173,
+     "arxiv-human": 0.0909,
+     "genre-human": 0.0116,
      "pmc-human": 0.0,
-     "pubmed-human": 0.0387
+     "pubmed-human": 0.0276
     }
    },
    {
@@ -257,9 +257,9 @@
     "name": "当代出版小说（真人，没参与校准的那一半书）与 AI 写的小说段落",
     "n_human": 382,
     "n_ai": 370,
-    "auroc": 0.9963,
-    "ai_caught": 1.0,
-    "human_flagged": 0.0209,
+    "auroc": 0.9977,
+    "ai_caught": 0.9946,
+    "human_flagged": 0.0236,
     "per_signal_auroc": {
      "fastdetect": 0.2787,
      "binoculars": 0.7392,
@@ -272,17 +272,17 @@
      "lp_burstiness": 0.4732,
      "style_cv": 0.3417,
      "style_phrases": 0.5058,
-     "logit_classifier_en2": 0.9965
+     "logit_classifier_en2": 0.9996
     },
     "ai_caught_by_model": {
-     "cs1021ai-ai": 1.0,
+     "cs1021ai-ai": 0.8,
      "claude-ai": 1.0,
-     "chatgpt-ai": 1.0,
+     "chatgpt-ai": 0.9955,
      "gemini-ai": 1.0
     },
     "human_flagged_by_source": {
      "novel-human": 0.0,
-     "selfhelp-human": 0.049,
+     "selfhelp-human": 0.0588,
      "cs1021-human": 0.1875
     }
    },
@@ -290,9 +290,9 @@
     "name": "MAGE：GPT-4 在未见过的领域生成的文本",
     "n_human": 150,
     "n_ai": 150,
-    "auroc": 0.9677,
-    "ai_caught": 0.9067,
-    "human_flagged": 0.1467,
+    "auroc": 0.9795,
+    "ai_caught": 0.92,
+    "human_flagged": 0.14,
     "per_signal_auroc": {
      "fastdetect": 0.8273,
      "binoculars": 0.1768,
@@ -305,18 +305,18 @@
      "lp_burstiness": 0.7117,
      "style_cv": 0.3014,
      "style_phrases": 0.6956,
-     "logit_classifier_en2": 0.9592
+     "logit_classifier_en2": 0.9641
     },
     "ai_caught_by_model": {
      "cnn_gpt4": 0.9143,
-     "imdb_gpt4": 0.8511,
-     "pubmed_gpt4": 0.9167,
+     "imdb_gpt4": 0.9362,
+     "pubmed_gpt4": 0.8611,
      "dialogsum_gpt4": 0.9688
     },
     "human_flagged_by_source": {
      "pubmed_human": 0.102,
      "dialogsum_human": 0.4706,
-     "imdb_human": 0.037,
+     "imdb_human": 0.0,
      "cnn_human": 0.0
     }
    },
@@ -324,9 +324,9 @@
     "name": "MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）",
     "n_human": 150,
     "n_ai": 173,
-    "auroc": 0.8523,
-    "ai_caught": 0.6936,
-    "human_flagged": 0.2067,
+    "auroc": 0.8696,
+    "ai_caught": 0.6994,
+    "human_flagged": 0.1533,
     "per_signal_auroc": {
      "fastdetect": 0.5799,
      "binoculars": 0.4234,
@@ -339,46 +339,46 @@
      "lp_burstiness": 0.5053,
      "style_cv": 0.3114,
      "style_phrases": 0.5934,
-     "logit_classifier_en2": 0.8233
+     "logit_classifier_en2": 0.8421
     },
     "ai_caught_by_model": {
-     "pubmed_gpt4_para": 0.449,
-     "cnn_gpt4_para": 0.6047,
+     "pubmed_gpt4_para": 0.4286,
+     "cnn_gpt4_para": 0.6512,
      "imdb_gpt4_para": 0.7419,
      "dialogsum_gpt4_para": 0.963,
      "repo-ai-english": 1.0
     },
     "human_flagged_by_source": {
-     "pubmed_human": 0.1579,
-     "imdb_human": 0.0435,
+     "pubmed_human": 0.1053,
+     "imdb_human": 0.0,
      "pubmed_human_para": 0.0,
-     "cnn_human": 0.0,
-     "dialogsum_human_para": 0.6522,
+     "cnn_human": 0.0588,
+     "dialogsum_human_para": 0.4783,
      "cnn_human_para": 0.0476,
      "imdb_human_para": 0.2353,
-     "dialogsum_human": 0.5385
+     "dialogsum_human": 0.3077
     }
    },
    {
     "name": "国产大模型英文论文段落（DeepSeek / 文心一言写的摘要、引言、结果、结论）vs 同题 arXiv 真人摘要；题目没参与训练和校准【对照：不用英文第二分类器】",
     "n_human": 478,
-    "n_ai": 664,
-    "auroc": 0.8259,
-    "ai_caught": 0.5889,
+    "n_ai": 700,
+    "auroc": 0.8302,
+    "ai_caught": 0.5914,
     "human_flagged": 0.0397,
     "per_signal_auroc": {
-     "fastdetect": 0.6319,
-     "binoculars": 0.3651,
-     "logit_classifier": 0.8321,
-     "fastdetect_norm": 0.6317,
-     "lrr": 0.4905,
-     "log_rank": 0.4669,
-     "entropy": 0.4873,
-     "top10": 0.5233,
-     "lp_burstiness": 0.5125,
-     "style_cv": 0.5007,
-     "style_phrases": 0.5574,
-     "logit_classifier_en2": 0.9997
+     "fastdetect": 0.6312,
+     "binoculars": 0.3657,
+     "logit_classifier": 0.8345,
+     "fastdetect_norm": 0.6313,
+     "lrr": 0.503,
+     "log_rank": 0.4579,
+     "entropy": 0.4782,
+     "top10": 0.5332,
+     "lp_burstiness": 0.5124,
+     "style_cv": 0.5088,
+     "style_phrases": 0.5518,
+     "logit_classifier_en2": 0.9992
     },
     "ai_caught_by_model": {},
     "human_flagged_by_source": {
@@ -407,7 +407,7 @@
     "name": "当代出版小说（真人，没参与校准的那一半书）与 AI 写的小说段落【对照：不用英文第二分类器】",
     "n_human": 382,
     "n_ai": 370,
-    "auroc": 0.8711,
+    "auroc": 0.8707,
     "ai_caught": 0.3027,
     "human_flagged": 0.0236,
     "per_signal_auroc": {
@@ -422,7 +422,7 @@
      "lp_burstiness": 0.4732,
      "style_cv": 0.3417,
      "style_phrases": 0.5058,
-     "logit_classifier_en2": 0.9965
+     "logit_classifier_en2": 0.9996
     },
     "ai_caught_by_model": {
      "cs1021ai-ai": 0.4,
@@ -440,9 +440,9 @@
     "name": "MAGE：GPT-4 在未见过的领域生成的文本【对照：不用英文第二分类器】",
     "n_human": 150,
     "n_ai": 150,
-    "auroc": 0.9702,
+    "auroc": 0.9701,
     "ai_caught": 0.9,
-    "human_flagged": 0.0933,
+    "human_flagged": 0.0867,
     "per_signal_auroc": {
      "fastdetect": 0.8273,
      "binoculars": 0.1768,
@@ -455,7 +455,7 @@
      "lp_burstiness": 0.7117,
      "style_cv": 0.3014,
      "style_phrases": 0.6956,
-     "logit_classifier_en2": 0.9592
+     "logit_classifier_en2": 0.9641
     },
     "ai_caught_by_model": {
      "cnn_gpt4": 0.8571,
@@ -467,16 +467,16 @@
      "pubmed_human": 0.102,
      "dialogsum_human": 0.1765,
      "imdb_human": 0.0,
-     "cnn_human": 0.075
+     "cnn_human": 0.05
     }
    },
    {
     "name": "MAGE：GPT-4 文本经改写后（含本仓库英文 AI 样本）【对照：不用英文第二分类器】",
     "n_human": 150,
     "n_ai": 173,
-    "auroc": 0.86,
+    "auroc": 0.8602,
     "ai_caught": 0.6994,
-    "human_flagged": 0.18,
+    "human_flagged": 0.1733,
     "per_signal_auroc": {
      "fastdetect": 0.5799,
      "binoculars": 0.4234,
@@ -489,7 +489,7 @@
      "lp_burstiness": 0.5053,
      "style_cv": 0.3114,
      "style_phrases": 0.5934,
-     "logit_classifier_en2": 0.8233
+     "logit_classifier_en2": 0.8421
     },
     "ai_caught_by_model": {
      "pubmed_gpt4_para": 0.7755,
@@ -502,7 +502,7 @@
      "pubmed_human": 0.1053,
      "imdb_human": 0.0,
      "pubmed_human_para": 0.1176,
-     "cnn_human": 0.1765,
+     "cnn_human": 0.1176,
      "dialogsum_human_para": 0.4783,
      "cnn_human_para": 0.2857,
      "imdb_human_para": 0.1765,
@@ -513,17 +513,17 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v29"
+   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v31"
   }
  },
  "en_paper": {
   "calibration_report": {
    "n_human": 480,
-   "n_ai": 620,
+   "n_ai": 648,
    "auroc": {
-    "fastdetect": 0.6488,
-    "binoculars": 0.6532,
-    "classifier": 0.8393
+    "fastdetect": 0.6468,
+    "binoculars": 0.6512,
+    "classifier": 0.8407
    },
    "features_used": [
     "logit_classifier_en2",
@@ -531,40 +531,40 @@
     "binoculars"
    ],
    "cross_validated": true,
-   "combined_auroc": 0.9929,
-   "threshold": 0.9491,
+   "combined_auroc": 0.9963,
+   "threshold": 0.9312,
    "human_flagged_rate": 0.0083,
-   "ai_caught_rate": 0.9145,
+   "ai_caught_rate": 0.963,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
   },
   "evaluation": [
    {
     "name": "英文学术论文：没参与训练和校准的题目（国产模型写的论文 vs arXiv / PubMed / PMC 真人，含中国作者）",
     "n_human": 478,
-    "n_ai": 664,
-    "auroc": 0.9943,
-    "ai_caught": 0.9548,
-    "human_flagged": 0.0167,
+    "n_ai": 700,
+    "auroc": 0.999,
+    "ai_caught": 0.98,
+    "human_flagged": 0.0105,
     "per_signal_auroc": {
-     "fastdetect": 0.6319,
-     "binoculars": 0.3651,
-     "logit_classifier": 0.8321,
-     "fastdetect_norm": 0.6317,
-     "lrr": 0.4905,
-     "log_rank": 0.4669,
-     "entropy": 0.4873,
-     "top10": 0.5233,
-     "lp_burstiness": 0.5125,
-     "style_cv": 0.5007,
-     "style_phrases": 0.5574,
-     "logit_classifier_en2": 0.9997
+     "fastdetect": 0.6312,
+     "binoculars": 0.3657,
+     "logit_classifier": 0.8345,
+     "fastdetect_norm": 0.6313,
+     "lrr": 0.503,
+     "log_rank": 0.4579,
+     "entropy": 0.4782,
+     "top10": 0.5332,
+     "lp_burstiness": 0.5124,
+     "style_cv": 0.5088,
+     "style_phrases": 0.5518,
+     "logit_classifier_en2": 0.9992
     },
     "ai_caught_by_model": {},
     "human_flagged_by_source": {
-     "arxiv-human": 0.0303,
-     "genre-human": 0.0116,
+     "arxiv-human": 0.0455,
+     "genre-human": 0.0058,
      "pmc-human": 0.0,
-     "pubmed-human": 0.0221
+     "pubmed-human": 0.0055
     }
    },
    {
@@ -572,13 +572,13 @@
     "n_human": 0,
     "n_ai": 15,
     "auroc": null,
-    "ai_caught": 0.8,
+    "ai_caught": 1.0,
     "human_flagged": null,
     "per_signal_auroc": {},
     "ai_caught_by_model": {
-     "repo-ai-deepseek": 0.8,
+     "repo-ai-deepseek": 1.0,
      "repo-ai-kimi": 1.0,
-     "repo-ai-wenxin": 0.6667
+     "repo-ai-wenxin": 1.0
     },
     "human_flagged_by_source": {}
    }
@@ -586,7 +586,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v29"
+   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v31"
   }
  },
  "en_poetry": {
@@ -607,14 +607,14 @@
    "cross_validated": true,
    "or_rule": {
     "t": 0.945,
-    "threshold": 0.72,
-    "ai_caught": 0.9922,
+    "threshold": 0.865,
+    "ai_caught": 0.9767,
     "human_flagged": 0.0285
    },
-   "combined_auroc": 0.9954,
-   "threshold": 0.72,
+   "combined_auroc": 0.9921,
+   "threshold": 0.865,
    "human_flagged_rate": 0.0285,
-   "ai_caught_rate": 0.9922,
+   "ai_caught_rate": 0.9767,
    "note": "以上指标用 5 折交叉验证（每次用没参与拟合的样本）算出；样本越多、越接近你要检测的文本，越可信。"
   },
   "evaluation": [
@@ -622,9 +622,9 @@
     "name": "英文诗：没参与校准的作者（Poetry Foundation 真人诗）与没参与校准的主题（各家模型写的英文诗）",
     "n_human": 444,
     "n_ai": 420,
-    "auroc": 0.9953,
-    "ai_caught": 0.9952,
-    "human_flagged": 0.0293,
+    "auroc": 0.9962,
+    "ai_caught": 0.9881,
+    "human_flagged": 0.0203,
     "per_signal_auroc": {
      "fastdetect": 0.8233,
      "binoculars": 0.1847,
@@ -637,16 +637,16 @@
      "lp_burstiness": 0.6039,
      "style_cv": 0.361,
      "style_phrases": 0.4894,
-     "logit_classifier_en2": 0.9951
+     "logit_classifier_en2": 0.9946
     },
     "ai_caught_by_model": {
      "poem-deepseek": 1.0,
      "poem-doubao": 1.0,
-     "poem-qwen": 0.9866,
+     "poem-qwen": 0.9664,
      "poem-claude": 1.0
     },
     "human_flagged_by_source": {
-     "poetryfoundation": 0.0293
+     "poetryfoundation": 0.0203
     }
    },
    {
@@ -654,7 +654,7 @@
     "n_human": 444,
     "n_ai": 420,
     "auroc": 0.895,
-    "ai_caught": 0.3905,
+    "ai_caught": 0.3881,
     "human_flagged": 0.0225,
     "per_signal_auroc": {
      "fastdetect": 0.8233,
@@ -668,12 +668,12 @@
      "lp_burstiness": 0.6039,
      "style_cv": 0.361,
      "style_phrases": 0.4894,
-     "logit_classifier_en2": 0.9951
+     "logit_classifier_en2": 0.9946
     },
     "ai_caught_by_model": {
      "poem-deepseek": 0.4521,
      "poem-doubao": 0.1346,
-     "poem-qwen": 0.5302,
+     "poem-qwen": 0.5235,
      "poem-claude": 0.2381
     },
     "human_flagged_by_source": {
@@ -684,7 +684,7 @@
   "models": {
    "observer": "Qwen/Qwen2.5-0.5B",
    "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v29"
+   "classifier": "desklib/ai-text-detector-v1.01+english-classifier-v31"
   }
  },
  "zh_classical": {
