@@ -803,7 +803,7 @@ def user_style_topics(rnd):
 
 def working_endpoints(name, key, endpoints, limit=4):
     """找出这个密钥能用的全部模型（最多 limit 个），轮流使用，覆盖同一家的不同版本（如文心 4.5 / X1）。"""
-    if name in ("kimi", "doubao"):
+    if name in ("kimi", "doubao", "wenxin"):     # 文心：千帆 v2 也有 /models，先问这个密钥能用哪些模型（2026-11-04 全部 invalid_model 时排查用）
         endpoints = discover_models(name, key, endpoints)
         if name == "doubao":          # 只保留文字对话模型，最新的排前面
             # 只用豆包自己的 Seed 文字模型（最新的排前面；用户在 DOUBAO_MODEL 指定的排最前）
