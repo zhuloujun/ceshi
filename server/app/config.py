@@ -171,6 +171,9 @@ EN_INSTR_IMP = float(os.getenv("EN_INSTR_IMP", "0.25") or 0.25)
 EN_INSTR_PROB = float(os.getenv("EN_INSTR_PROB", "0.90") or 0.90)
 EN_INSTR_EN2 = float(os.getenv("EN_INSTR_EN2", "0.85") or 0.85)
 EN_INSTR_EN3 = float(os.getenv("EN_INSTR_EN3", "0.90") or 0.90)
+# 三个英文分类器都 ≥ EN_INSTR_ALL 且综合分数 ≥ EN_INSTR_ALL_PROB 时，说明类文字也计入（0 = 关闭；2026-11-04 试验中）
+EN_INSTR_ALL = float(os.getenv("EN_INSTR_ALL", "0") or 0)
+EN_INSTR_ALL_PROB = float(os.getenv("EN_INSTR_ALL_PROB", "0.6") or 0.6)
 MEMORIZED_PPL = float(os.getenv("MEMORIZED_PPL", "3.5") or 3.5)
 # 管理页校准时，用户样本与内置公开数据合并，用户样本合计所占的权重比例
 USER_SAMPLE_SHARE = float(os.getenv("USER_SAMPLE_SHARE", "0.3") or 0.3)
