@@ -234,6 +234,9 @@ def _get_json(url, key):
         return json.loads(r.read())
 
 
+DISCOVERED: dict = {}
+
+
 def discover_models(name, key, endpoints):
     """问接口"这个密钥能用哪些模型"（OpenAI 兼容的 /models），把能用的聊天模型排到最前面；顺便打印余额（不打印密钥）。"""
     extra = []
@@ -243,6 +246,7 @@ def discover_models(name, key, endpoints):
             shown = sorted((i for i in ids if "seed" in i and not re.search(r"seedance|seedream|seed3d|seedtts", i)), reverse=True) \
                 if name == "doubao" else ids[:40]
             print(f"::notice title={name} 可用模型（{base}）::{', '.join(shown) or '（空）'}", flush=True)
+            DISCOVERED.setdefault(name, set()).update(ids)
             chat_ids = [i for i in ids if not re.search(r"embed|vision|tts|audio|image|rerank", i, re.I)]
             chat_ids.sort(key=lambda i: ("code" in i, ("8k" not in i and "turbo" not in i), i))
             extra += [(base + "/chat/completions", i) for i in chat_ids]
@@ -822,6 +826,9 @@ def working_endpoints(name, key, endpoints, limit=4):
                 base = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
                 evo = [(base, "doubao-seed-evolving"), (base, "doubao-seed-evolving-latest-version")]
             endpoints = seed[:4] + evo + [e for e in endpoints if e not in seed and e not in evo and "doubao" in e[1]]
+        if name == "wenxin":          # 千帆上的 DeepSeek / 通义 / GLM 不是文心，只用 ERNIE；能用的排前面（不能用的旧名字会报 invalid_model）
+            found = [e for e in endpoints if e[1].lower().startswith("ernie")]
+            endpoints = sorted(dict.fromkeys(found), key=lambda e: (e[1] not in DISCOVERED.get(name, ()), e[1]), reverse=False)
     ok = []
     for url, model in endpoints[:12]:
         try:
