@@ -617,20 +617,30 @@ exportBtn.addEventListener('click', async ()=>{
   const old = exportBtn.innerHTML;
   exportBtn.disabled = true; exportBtn.textContent = '正在生成 PDF…';
   try{
+    // 英文界面出英文报告：服务器生成的提示、标签、结论先用界面的中英对照表（/__i18n.js 提供的 __atcT）翻译；
+    // 用户自己的文字（段落原文、文稿名、作品标题、格式检查里的例句）不翻译。报告里固定的文字由服务器按 lang 换成英文。
+    const EN = window.__atcLang === 'en' && typeof window.__atcT === 'function';
+    const T = x => (EN && typeof x === 'string') ? window.__atcT(x) : x;
+    const sm = lastResult.summary || {};
+    const summary = EN ? { ...sm, reliability_notes: (sm.reliability_notes || []).map(T),
+      error_rates: (sm.error_rates || []).map(g=>({ ...g, name: T(g.name), ppv_basis: T(g.ppv_basis || ''),
+        sets: (g.sets || []).map(e=>({ ...e, name: T(e.name) })) })) } : sm;
     const payload = {
-      source: currentSource, generated_at: new Date().toLocaleString('zh-CN'), detail: techOn(),
-      method: techOn() ? METHOD_LINE() : '', works_note: WORKS_NOTE,
-      result: { summary: lastResult.summary, works: lastResult.works || [],
+      lang: EN ? 'en' : 'zh',
+      source: (EN && currentSource === '粘贴文本') ? '' : currentSource,
+      generated_at: new Date().toLocaleString(EN ? 'en-US' : 'zh-CN'), detail: techOn(),
+      method: techOn() ? T(METHOD_LINE()) : '', works_note: T(WORKS_NOTE),
+      result: { summary, works: (lastResult.works || []).map(w=>({ ...w, verdict: T(w.verdict) })),
                 segments: lastResult.segments.map(seg=>({ index: seg.index, kind: seg.kind, register: seg.register, chars: seg.chars,
-                  prob: seg.prob, ref_prob: seg.ref_prob, level: seg.level, label: seg.label, near_threshold: seg.near_threshold,
-                  text: seg.text, indicators: techOn() ? segIndicators(seg) : (seg.short ? '篇幅短，结果仅供参考' : '') })) },
-      format_items: (lastFormatItems || []).map(r=>({ group: r.group, name: r.name, count: r.count, sev: r.sev, extra: r.extra || '',
-        html: r.html ? r.html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim() : '',
+                  prob: seg.prob, ref_prob: seg.ref_prob, level: seg.level, label: T(seg.label), near_threshold: seg.near_threshold,
+                  text: seg.text, indicators: T(techOn() ? segIndicators(seg) : (seg.short ? '篇幅短，结果仅供参考' : '')) })) },
+      format_items: (lastFormatItems || []).map(r=>({ group: T(r.group), name: T(r.name), count: r.count, sev: r.sev, extra: T(r.extra || ''),
+        html: r.html ? T(r.html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()) : '',
         samples: (r.samples||[]).slice(0,2).map(s=>typeof s === 'string' ? s : `${s.before}【${s.hit}】${s.after}`) }))
     };
     const r = await fetch('/v1/report/pdf', { method:'POST', headers:{ 'Content-Type':'application/json', ...authHeaders() }, body: JSON.stringify(payload) });
     if(!r.ok){ let m = `HTTP ${r.status}`; try{ m = (await r.json()).message || m; }catch(e){} throw new Error(m); }
-    download(await r.blob(), `审读报告_${new Date().toISOString().slice(0,10)}.pdf`);
+    download(await r.blob(), `${window.__atcLang === 'en' ? 'Shendu_report' : '审读报告'}_${new Date().toISOString().slice(0,10)}.pdf`);
   }catch(err){
     showError('生成 PDF 失败：' + err.message + '。可以先用“导出 .txt”。');
   }finally{

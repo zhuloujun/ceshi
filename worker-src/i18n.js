@@ -72,7 +72,11 @@ function client(D) {
       v = v.replace(/(\d[\d,.]*)\s*(字|段|篇|分钟|秒|天|小时|次|位|人|页)/g, function (x, n, u) { return n + ' ' + UNIT[u]; });
       if (v === t) return s;
     }
-    return v === null ? s : lead + v + tail;
+    if (v === null) return s;
+    // 整句译完、已经没有汉字时，把残留的全角标点换成英文标点（服务器提示里的括号、顿号等）
+    if (!CJK.test(v)) v = v.replace(/（/g, ' (').replace(/）/g, ')').replace(/、/g, ', ').replace(/。/g, '. ').replace(/；/g, '; ')
+      .replace(/：/g, ': ').replace(/，/g, ', ').replace(/\( /g, '(').replace(/ {2,}/g, ' ').trim();
+    return lead + v + tail;
   }
   window.__atcT = tr;
   var SKIP = 'script,style,textarea,code,pre,noscript,[data-noi18n],[contenteditable],.para-text,.lib-name,#fileName,.works-table td:first-child';
