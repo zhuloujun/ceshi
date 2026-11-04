@@ -38,7 +38,7 @@ PROVIDERS = {
                                         "kimi-k2-0905-preview", "kimi-latest")]),
     # 千帆 v2：账号没开通的模型会返回 401 invalid_model；ernie-speed / ernie-lite 通常免费默认可用
     "wenxin": ("WENXIN_API_KEY", [("https://qianfan.baidubce.com/v2/chat/completions", m)
-                                  for m in ("ernie-5.0", "ernie-x1.1-preview", "ernie-4.5-turbo-32k", "ernie-x1-turbo-32k", "ernie-4.5-turbo-128k",
+                                  for m in ("ernie-5.1", "ernie-5.0", "ernie-x1.1-preview", "ernie-4.5-turbo-32k", "ernie-x1-turbo-32k", "ernie-4.5-turbo-128k",
                                             "ernie-4.0-turbo-8k", "ernie-3.5-8k", "ernie-speed-128k",
                                             "ernie-speed-8k", "ernie-lite-8k")]),
     "qwen": ("DASHSCOPE_API_KEY", [("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", m)
@@ -266,6 +266,11 @@ def pick_endpoint(name, key, endpoints):
     """先用一句话试一下，找到这个密钥能用的接口；都不行就返回 None（并打印原因，不打印密钥）。"""
     if name == "kimi":
         endpoints = discover_models(name, key, endpoints)
+        if name == "wenxin":
+            # 千帆平台上还能调用 DeepSeek、通义、GLM 等别家模型；这里只用百度自己的文心（ERNIE）模型，新版本排前面
+            # （2026-11-04：旧的 ernie-4.5-turbo 等名字已下线，密钥能用的文心模型只有 ernie-5.1）
+            ernie = sorted({e for e in endpoints if e[1].lower().startswith("ernie")}, key=lambda e: e[1], reverse=True)
+            endpoints = ernie
     for url, model in endpoints[:12]:
         try:
             try:
