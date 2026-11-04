@@ -1140,7 +1140,29 @@ def _unwrap_short(text: str):
     return "\n\n".join(out) + "\n", True
 
 
+_LIST_ITEM = re.compile(r"^\s{0,3}(?:[-*•+]|\d{1,2}[.)])\s+\S")
+_LIST_CONT = re.compile(r"^\s{2,}(?![-*•+]\s|\d{1,2}[.)]\s)\S")
+
+
+def join_list_continuations(text: str) -> str:
+    """Markdown / pandoc 版式的清单条目断行：条目写不下时换行、下一行缩进续写（ChatGPT 导出的 .txt 每 72 字符断一次）。
+    把缩进的续行接回所在条目，否则续行（如“drained and rinsed”）会被当成独立的短段落，条目本身也被截成半句。
+    只在“清单条目 / 续行”之后紧跟（中间没有空行）、缩进 ≥ 2 个空格、本身不是新条目的行才接上。
+    依据（2026-11-04）：用户上传的 ChatGPT 菜谱《The Sunday Table》按原样 AI 率 49.7%，配料和步骤被切成几十个半句碎段。"""
+    lines = (text or "").split("\n")
+    out, in_item = [], False
+    for l in lines:
+        if in_item and _LIST_CONT.match(l) and out:
+            out[-1] = out[-1].rstrip() + " " + l.strip()
+            continue
+        in_item = bool(_LIST_ITEM.match(l))
+        out.append(l)
+    return "\n".join(out)
+
+
 def unwrap_hard_wraps(text: str):
-    """固定宽度断行的英文散文合并成段落：先用长文本规则（≥ 20 行），不命中再用更严的短文本规则。返回 (文本, 是否改动)。"""
+    """固定宽度断行的英文散文合并成段落：先用长文本规则（≥ 20 行），不命中再用更严的短文本规则。返回 (文本, 是否改动)。
+    清单条目的缩进续行先接回条目（不算“断行合并”，不出提示）。"""
+    text = join_list_continuations(text)
     t, changed = _unwrap_wide(text)
     return (t, True) if changed else _unwrap_short(text)

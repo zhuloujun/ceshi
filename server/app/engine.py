@@ -1298,6 +1298,11 @@ class Engine:
                 r = results[i]
                 sure = (pr >= config.EN_INSTR_PROB and (r.get("classifier_en2") or 0) >= config.EN_INSTR_EN2
                         and (r.get("classifier_en3") or 0) >= config.EN_INSTR_EN3)
+                # 三个新一代英文分类器（逐段 / 整篇 / 第四）都非常肯定时，综合分数略低（第一分类器对菜谱步骤偏保守）也计入
+                if (not sure and config.EN_INSTR_ALL > 0 and pr >= config.EN_INSTR_ALL_PROB
+                        and min(r.get("classifier_en2") or 0, r.get("classifier_en3") or 0,
+                                r.get("classifier_en4") or 0) >= config.EN_INSTR_ALL):
+                    sure = True
                 if not sure:
                     en_instr.add(i)
         # 7.7) 学术摘要 / 学术文字（见 academic_density）：本段（或本段所在、不足 EN_ABS_MAX_WORDS 词的作品）学术用语密度
