@@ -427,6 +427,8 @@ def en_gen_parts():
     if not GEN_EN_DIR.exists():
         return out
     for f in sorted(GEN_EN_DIR.glob("*.jsonl")):
+        if f.stem.startswith("pl_"):      # AI 润色真人原文的测试数据（轻度润色基本还是人写），只用来测“润色”，不参与校准
+            continue
         human = f.stem.endswith("_human")
         for line in f.read_text("utf-8").split("\n"):
             if not line.strip():
