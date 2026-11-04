@@ -261,6 +261,8 @@ def build_rows(args, rnd):
             raw.append((text, 0, f"{tag}-human", split_of(key), 1))
     gen_models = []
     for f in sorted(GEN_DIR.glob("*.jsonl")):
+        if f.stem.startswith("pl_"):      # AI 润色测试数据：轻度润色基本还是人写，不能当 AI 样本训练
+            continue
         if f.stem in HUMAN_FILES or any(f.stem.startswith(x) for x in args.skip_prefix):
             continue
         gen_models.append(f.stem)
