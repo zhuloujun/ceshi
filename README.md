@@ -55,7 +55,7 @@ Cloudflare 后台 → **Workers 和 Pages** → `ai-text-checker` → **设置**
 
 数据库（Cloudflare D1 `a_t_c_db`）和签发检测 Key 的密钥都已配好。只差发验证码邮件用的 Resend 密钥；添加后网站自动切换为"注册登录后才能使用"，没添加之前照旧公开访问。
 
-1. 登录 <https://resend.com/api-keys>（账户 orgxyz）→ **Create API Key** → Name 填 `ai-text-checker`，Permission 选 **Sending access**，Domain 选 `9369369.xyz`（需要在 <https://resend.com/domains> 显示 Verified）→ **Add**，复制 `re_…`（只显示一次）。
+1. 登录 <https://resend.com/api-keys>（账户 orgxyz）→ **Create API Key** → Name 填 `a-t-c`，Permission 选 **Sending access**，Domain 选 `9369369.xyz`（需要在 <https://resend.com/domains> 显示 Verified）→ **Add**，复制 `re_…`（只显示一次）。
 2. 打开 <https://github.com/zhuloujun/ceshi/settings/secrets/actions> → **New repository secret** → Name 填 `RESEND_API_KEY`，Secret 粘贴 `re_…` → **Add secret**。
 3. 由维护者运行"写入网站密钥"工作流（需要一次性设置令牌），网站会给管理员邮箱发一封测试邮件。
 
