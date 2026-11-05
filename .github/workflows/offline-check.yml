@@ -129,7 +129,7 @@ jobs:
         if: github.event.inputs.raid != ''
         working-directory: server
         run: python -u tools/fetch_raid.py "${{ github.event.inputs.raid }}" "${{ github.event.inputs.shard }}" /tmp/payload.txt
-      - name: 解密用户文档（payload 以 enc: 开头时）
+      - name: "解密用户文档（payload 以 enc 开头时）"
         if: startsWith(github.event.inputs.payload, 'enc:')
         run: |
           EXTRA=$(jq -r '.inputs.payload // ""' "$GITHUB_EVENT_PATH")   # 从事件文件读取，先屏蔽密钥再使用
