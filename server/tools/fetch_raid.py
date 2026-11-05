@@ -6,6 +6,9 @@ RAID 有 11 个领域（abstracts = arXiv 论文摘要、recipes = 菜谱、revi
 
 用法（离线验收工作流里调用）：
   python tools/fetch_raid.py "abstracts:human,gpt4,chatgpt,llama-chat:40;recipes:human,gpt4:30" 0/1 /tmp/payload.txt
+模型名后加 @攻击名 取对抗攻击过的样本，如 gpt4@paraphrase、chatgpt@homoglyph、human@whitespace
+（RAID 的攻击：homoglyph、zero_width_space、whitespace、upper_lower、insert_paragraphs、article_deletion、
+number、alternative_spelling、perplexity_misspelling、synonym、paraphrase）。
 第二个参数是分片 i/n：同一份取样分成 n 份，这次只检测第 i 份（多个工作流并行跑）。
 """
 import base64
@@ -20,8 +23,8 @@ import urllib.request
 API = "https://datasets-server.huggingface.co/filter"
 
 
-def fetch(domain, model, n, seed=29):
-    where = f"\"domain\"='{domain}' AND \"model\"='{model}' AND \"attack\"='none'"
+def fetch(domain, model, n, seed=29, attack="none"):
+    where = f"\"domain\"='{domain}' AND \"model\"='{model}' AND \"attack\"='{attack}'"
     rows, offset = [], 0
     # 先取一大页，再按固定随机种子抽 n 条（每次结果一样，前后版本可比）
     while len(rows) < max(n * 3, 60) and offset < 2000:
@@ -56,8 +59,12 @@ def main():
     for part in spec.split(";"):
         domain, models, k = part.split(":")
         for model in models.split(","):
-            rows = fetch(domain, model, int(k))
-            print(f"::notice title=RAID 取样::{domain}/{model}: {len(rows)} 条", flush=True)
+            model, _, attack = model.partition("@")
+            attack = attack or "none"
+            rows = fetch(domain, model, int(k), attack=attack)
+            print(f"::notice title=RAID 取样::{domain}/{model}@{attack}: {len(rows)} 条", flush=True)
+            if attack != "none":
+                model = f"{model}-{attack}"
             for j, r in enumerate(rows):
                 title = (r.get("title") or "").strip()
                 text = r["generation"].strip()
