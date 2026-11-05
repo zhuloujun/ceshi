@@ -135,7 +135,7 @@ server/                完整版检测服务（说明见 server/README.md）
 
 费用提示：GPTZero 单次请求最多约 5 万字符，20 万字的文档会自动分成 **5 次左右**请求。计费以你套餐的官方说明为准，建议先用一小段文字试一次，确认扣费方式。
 
-配置方式（二选一）：在网页"⚙ 官方 API 增强检测"里直接填写 Key；或在 Cloudflare 的 Worker `ai-text-checker` → **Settings → Variables and Secrets** 添加两个 Secret：`GPTZERO_API_KEY` 和 `ACCESS_PASSWORD`（后者必须设置，防止别人用掉你的额度），然后在网页上填写访问密码。
+配置方式（二选一）：在网页"⚙ 官方 API 增强检测"里直接填写 Key；或在 Cloudflare 的 Worker `a-t-c` → **Settings → Variables and Secrets** 添加两个 Secret：`GPTZERO_API_KEY` 和 `ACCESS_PASSWORD`（后者必须设置，防止别人用掉你的额度），然后在网页上填写访问密码。
 
 **关于隐私**：本地检测不上传任何内容；启用 GPTZero 后，文本会发送到 GPTZero 服务器。未发表的论文请自行权衡。
 
