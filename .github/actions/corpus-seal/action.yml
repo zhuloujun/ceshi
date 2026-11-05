@@ -1,0 +1,33 @@
+name: 重新加密真人语料
+description: >-
+  生成数据的工作流（如收集真人英文、AI 润色测试数据）会新增或改写真人语料文件。这些文件被 .gitignore 排除、不进公开仓库；
+  本步骤在它们和还原时相比有变化时，重新打包加密并更新 data-1020 分支的 pub_corpus.enc。
+inputs:
+  admin_token:
+    description: secrets.ADMIN_TOKEN
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        AT: ${{ inputs.admin_token }}
+      run: |
+        L=$(ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/gen_en/pl_*.jsonl \
+              server/tools/data/human_cl/*.jsonl server/tools/data/eval_en_user_docs.jsonl server/tools/data/eval_zh_user_docs.jsonl 2>/dev/null)
+        D=$(cat $L | sha256sum | awk '{print $1}')
+        if [ "$D" = "$(cat /tmp/corpus.digest 2>/dev/null)" ]; then echo "真人语料没有变化"; exit 0; fi
+        [ -n "$AT" ] || { echo "::error::缺少 ADMIN_TOKEN，无法保存新的真人语料"; exit 1; }
+        printf '%s\n' $L > /tmp/list; tar cJf /tmp/pub_corpus.tar.xz -T /tmp/list
+        K=$(printf '%s' corpus-v1 | openssl dgst -sha256 -hmac "$AT" | awk '{print $NF}'); echo "::add-mask::$K"
+        printf '%s' "$K" > /tmp/k; unset K
+        openssl enc -e -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass file:/tmp/k -in /tmp/pub_corpus.tar.xz -out /tmp/pub_corpus.enc; rm -f /tmp/k
+        for i in 1 2 3 4 5; do
+          rm -rf /tmp/dw; git worktree prune
+          git fetch -q --depth 1 origin data-1020 && git worktree add -q /tmp/dw FETCH_HEAD
+          cp /tmp/pub_corpus.enc /tmp/dw/pub_corpus.enc
+          (cd /tmp/dw && git config user.name github-actions[bot] && git config user.email 41898282+github-actions[bot]@users.noreply.github.com \
+            && git add pub_corpus.enc && git commit -q -m "data: pub_corpus.enc 更新（$(wc -l < /tmp/list) 个文件）" && git push -q origin HEAD:data-1020) && break
+          sleep 15
+        done
+        echo "::notice title=真人语料已重新加密::$(wc -l < /tmp/list) 个文件"

@@ -52,6 +52,10 @@ jobs:
         part: [cal1, cal2, test, csl, cal1s, cal2s, tests, en_cal1, en_cal2, en_ood, en_para, cl_cal, cl_test, po_cal, po_test, po_story, po_classic]
     steps:
       - uses: actions/checkout@v4
+      - name: 还原加密的真人语料
+        uses: ./.github/actions/corpus
+        with:
+          admin_token: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -132,6 +136,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: 还原加密的真人语料
+        uses: ./.github/actions/corpus
+        with:
+          admin_token: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

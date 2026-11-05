@@ -18,7 +18,7 @@ jobs:
           ref: ${{ github.event.inputs.from_sha || github.ref }}
       - name: 打包并加密
         env:
-          AT: ${{ secrets.ADMIN_TOKEN }}
+          AT: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
         run: |
           [ -n "$AT" ] || { echo "::error::缺少 ADMIN_TOKEN"; exit 1; }
           ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/gen_en/pl_*.jsonl \

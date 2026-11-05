@@ -24,6 +24,7 @@ KERNEL = r'''
 import os, subprocess, sys, tarfile, time
 REPO, SHA, LANG, ARGS = {repo!r}, {sha!r}, {lang!r}, {args!r}
 USER_DOCS = {user_docs!r}
+CORPUS = {corpus!r}   # 加密的真人语料（data-1020 分支 pub_corpus.enc）的 地址#密钥，只在这个私有脚本里
 def sh(*cmd, **kw):
     print("$", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True, **kw)
@@ -49,6 +50,16 @@ except subprocess.CalledProcessError:
     import shutil
     shutil.rmtree("/tmp/ceshi")
     shutil.move(f"/tmp/_src/{{top}}", "/tmp/ceshi")
+if CORPUS and not os.path.exists("/tmp/ceshi/server/tools/data/gen_en/genre_human.jsonl"):
+    import urllib.request
+    _url, _key = CORPUS.rsplit("#", 1)
+    urllib.request.urlretrieve(_url, "/tmp/pc.enc")
+    open("/tmp/pc.key", "w").write(_key)
+    _raw = subprocess.run(["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-iter", "200000", "-pass", "file:/tmp/pc.key",
+                           "-in", "/tmp/pc.enc"], capture_output=True, check=True).stdout
+    os.remove("/tmp/pc.key")
+    subprocess.run(["tar", "xJ", "-C", "/tmp/ceshi"], input=_raw, check=True)
+    print("已还原真人语料", flush=True)
 sh(sys.executable, "-m", "pip", "install", "-q", "transformers>=4.45,<5", "tokenizers>=0.20", "sentencepiece", "protobuf", "safetensors", "pypinyin")
 import torch
 print("torch", torch.__version__, "cuda", torch.cuda.is_available(),
@@ -158,7 +169,8 @@ def main():
             "classical": "classical-classifier"}[a.lang]
 
     d = Path(tempfile.mkdtemp())
-    (d / "train.py").write_text(KERNEL.format(repo=a.repo, sha=a.sha, lang=a.lang, args=a.args.split(), user_docs=a.user_docs_b64.strip()), "utf-8")
+    (d / "train.py").write_text(KERNEL.format(repo=a.repo, sha=a.sha, lang=a.lang, args=a.args.split(), user_docs=a.user_docs_b64.strip(),
+                                                corpus=os.getenv("CORPUS_SPEC", "")), "utf-8")
     (d / "kernel-metadata.json").write_text(json.dumps({
         "id": ref, "title": slug, "code_file": "train.py", "language": "python", "kernel_type": "script",
         "is_private": True, "enable_gpu": True, "enable_internet": True,
