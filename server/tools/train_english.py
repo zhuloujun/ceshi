@@ -234,6 +234,50 @@ def extra_human_excerpts(want_each: int, rnd: random.Random, max_minutes: float 
     return out
 
 
+RAID_DOMAINS = ["abstracts", "books", "news", "poetry", "recipes", "reddit", "reviews", "wiki"]
+RAID_MODELS = ["gpt4", "chatgpt", "gpt3", "gpt2", "llama-chat", "mistral", "mistral-chat", "mpt", "mpt-chat", "cohere", "cohere-chat"]
+
+
+def raid_rows(per_model: int, per_human: int):
+    """公开基准 RAID（liamdugan/raid，Dugan 等 ACL 2024，MIT）：8 个英文领域 × 11 个国外模型 + 同题真人原文，只取无对抗攻击的样本。
+    desklib 英文分类器正是在 RAID 上训练的；自己训练英文主分类器替换它时，用同一类数据补上国外模型和各种文体（2026-11-05）。
+    从第 3000 行起取，避开离线验收（tools/fetch_raid.py）用到的前 2000 行。返回 (文本, 标签, 来源, 标题)。"""
+    import urllib.parse
+    import urllib.request
+    api = "https://datasets-server.huggingface.co/filter"
+    out = []
+    for domain in RAID_DOMAINS:
+        for model in ["human"] + RAID_MODELS:
+            want = per_human if model == "human" else per_model
+            rows, offset = [], 3000
+            while len(rows) < want and offset < 3000 + 100 * max(3, want // 50):
+                q = urllib.parse.urlencode({"dataset": "liamdugan/raid", "config": "raid", "split": "train",
+                                            "where": f"\"domain\"='{domain}' AND \"model\"='{model}' AND \"attack\"='none'",
+                                            "offset": offset, "length": 100})
+                page = None
+                for k in range(6):
+                    try:
+                        time.sleep(1.5)
+                        with urllib.request.urlopen(f"{api}?{q}", timeout=180) as r:
+                            page = json.loads(r.read())
+                        break
+                    except Exception as e:  # noqa: BLE001
+                        print(f"RAID 重试 {domain}/{model} {offset}: {e}", flush=True)
+                        time.sleep(10 * (k + 1))
+                got = [x["row"] for x in (page or {}).get("rows", [])]
+                if not got:
+                    break
+                rows += [r for r in got if len((r.get("generation") or "").split()) >= 80]
+                offset += 100
+            for r in rows[:want]:
+                text = r["generation"].strip()
+                if domain == "abstracts" and r.get("title"):
+                    text = f"{r['title'].strip()}\n\nAbstract\n{text}"
+                out.append((text, 0 if model == "human" else 1, f"raid-{domain}-{model}", f"raid:{domain}:{r.get('title') or r.get('id')}"))
+            print(f"RAID {domain}/{model}: {min(len(rows), want)}", flush=True)
+    return out
+
+
 def build_rows(args, rnd):
     from app.segmenter import normalize_english
     raw = []   # (text, y, src, split, n_windows)
@@ -256,6 +300,9 @@ def build_rows(args, rnd):
     if args.novel_human > 0:
         for text, title in novel_excerpts(args.novel_human, rnd):
             raw.append((text, 0, "novel-human", split_of("novel:" + title), 2))
+    if args.raid_per_model > 0:
+        for text, y, src, key in raid_rows(args.raid_per_model, args.raid_per_human):
+            raw.append((text, y, src, split_of(key), 1))
     if args.extra_human > 0:
         for text, key, tag in extra_human_excerpts(args.extra_human, rnd):
             raw.append((text, 0, f"{tag}-human", split_of(key), 1))
@@ -324,6 +371,9 @@ def main():
     ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='en' 为英文）")
     ap.add_argument("--user-docs-reps", type=int, default=3, help="用户英文在训练集里取几个窗口")
     ap.add_argument("--extra-human", type=int, default=0, help="其他领域真人英文（政府报告、法案、BBC 新闻、维基百科等）每个来源取多少段")
+    ap.add_argument("--raid-per-model", type=int, default=0, help="RAID 每个领域 × 每个国外模型取多少篇（0 = 不用）")
+    ap.add_argument("--raid-per-human", type=int, default=300, help="RAID 每个领域取多少篇真人原文")
+    ap.add_argument("--grad-ckpt", action="store_true", help="梯度检查点（大模型如 deberta-v3-large 在 16 GB 显卡上训练时省显存）")
     ap.add_argument("--novel-human", type=int, default=0, help="从 BookCorpusOpen 取多少段当代真人小说片段（0 = 不用）")
     args = ap.parse_args()
     if args.base.startswith("release:"):
@@ -375,6 +425,8 @@ def main():
     tok = AutoTokenizer.from_pretrained(args.base)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.base, num_labels=2, id2label={0: "human", 1: "ai"}, label2id={"human": 0, "ai": 1}).to(dev)
+    if args.grad_ckpt:
+        model.gradient_checkpointing_enable()
 
     def batches(data, bs, shuffle):
         idx = list(range(len(data)))
