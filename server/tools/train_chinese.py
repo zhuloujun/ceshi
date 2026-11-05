@@ -109,6 +109,7 @@ def main():
     ap.add_argument("--n-nlpcc-human", type=int, default=1500, help="NLPCC 每个领域取多少篇真人")
     ap.add_argument("--n-nlpcc-ai", type=int, default=500, help="NLPCC 每个领域、每个模型取多少篇 AI")
     ap.add_argument("--max-segs", type=int, default=6, help="每篇长文最多取多少段训练")
+    ap.add_argument("--augment", type=float, default=0.0, help="给多大比例的训练样本加一份轻度扰动副本（0 = 不用）")
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--time-budget-min", type=float, default=150)
     ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='z' 为现代汉语）")
@@ -141,6 +142,11 @@ def main():
         else:
             a_tr = (a_tr * math.ceil(len(h_tr) / len(a_tr)))[:len(h_tr)]
     train = h_tr + a_tr
+    if args.augment > 0:   # 轻度扰动增强（tools/augment.py）：真人、AI 同比例，标签不变
+        from augment import augment_rows
+        _ex = augment_rows(train, args.augment, "zh", rnd)
+        print(f"扰动增强 {len(_ex)} 段", flush=True)
+        train += _ex
     rnd.shuffle(train)
     cnt = lambda rs: {s: sum(r["src"] == s for r in rs) for s in sorted({r["src"] for r in rs})}
     print(f"训练 {len(train)}：{json.dumps(cnt(train), ensure_ascii=False)}", flush=True)

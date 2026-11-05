@@ -160,8 +160,19 @@ def _aggregate(t: dict, lo: int, hi: int) -> dict | None:
         sd = math.sqrt(sum((x - m) ** 2 for x in wins) / len(wins))
         burst = sd / m if m > 0 else None
     div = _surprisal_diversity(nll_all)
+    # 去掉“最出乎意料”的 10% token 再算 Fast-DetectGPT（Wang 等的异常过滤思路，见 2025 年综述《Enhancing the Robustness of
+    # AI-Generated Text Detectors》的噪声过滤一节）：人工小改动、错别字、专有名词会造成个别极低概率的 token，把整段分数拉向“人写”；
+    # 剔除后对轻度人工修改的 AI 文字更稳。只作为可选特征，由校准拟合决定是否使用。
+    fd_trim = None
+    vs = t["var"][lo:hi]
+    zs = sorted(((l - m) / math.sqrt(v) if v > 0 else 0.0, l, m, v) for l, m, v in zip(ll, mu, vs))
+    keep = zs[max(1, int(0.1 * len(zs))):] if len(zs) >= 20 else zs
+    sv = sum(z[3] for z in keep)
+    if sv > 0:
+        fd_trim = (sum(z[1] for z in keep) - sum(z[2] for z in keep)) / math.sqrt(sv) / math.sqrt(len(keep))
     return {
         **div,
+        "fastdetect_trim": fd_trim,
         "binoculars": ppl / x_ppl if x_ppl > 0 else None,
         "fastdetect": fd,
         "fastdetect_norm": fd / math.sqrt(n_tok) if fd is not None else None,

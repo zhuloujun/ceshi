@@ -90,6 +90,7 @@ GUIDE_EN = {
     "一篇文章分成很多段分别判断时": "When a document is split into many paragraphs that are judged separately, more paragraphs also means more chance flags; be especially cautious when only a few scattered paragraphs are flagged (the Notes give the expected number of chance flags).",
     "人写、AI 改写混合的文字": "Mixed human / AI-revised text (e.g. AI polishing or translation) has no clear “ground truth”; a middling score (e.g. 40%) can correspond to several ways of writing, some of which are permitted.",
     "检测模型只认得训练时见过的 AI 写法": "Detectors only recognise AI writing styles seen during training: detection drops for newer models and for text that was rewritten by hand or translated; short, formulaic registers such as Chinese poetry and classical Chinese also have larger errors.",
+    "短篇作业、理工科程式化的写法": "Short assignments and formulaic STEM writing (procedures, method descriptions) are more prone to false positives, while AI drafts that have been mixed with human edits can largely evade detection (a 2026 Computers & Education evaluation of 13 detectors found hybrid editing let up to 88% of AI content go undetected). Treat the AI rate as an indication of the degree of AI involvement, not as a verdict of misconduct.",
     "英文非母语作者的文字更容易被误判": "Text by non-native English writers is more likely to be falsely flagged (Liang et al., 2023); this tool's human English test sets include papers by Chinese authors.",
 }
 
@@ -274,6 +275,7 @@ def _build(payload: dict) -> bytes:
         "一篇文章分成很多段分别判断时，段数越多，偶然误标的段落也越多；只有零星几段被标出时尤其要谨慎（本报告“提示”中会给出偶然误标的期望段数）。",
         "人写、AI 改写混合的文字（如 AI 润色、翻译）没有明确的“标准答案”，分数落在中间（如 40%）可能对应多种写作方式，其中有的是允许的。",
         "检测模型只认得训练时见过的 AI 写法：对更新的模型、经过人工改写或翻译的文字，检出率会下降；诗词、文言这类短小、程式化的文体误差也更大（见上表）。",
+        "短篇作业、理工科程式化的写法（步骤、方法描述）更容易被误判；AI 稿经过人工混合编辑后也可能大量漏检（2026 年《Computers & Education》对 13 种检测器的评估：混合编辑可让最多 88% 的 AI 内容逃过检测）。AI 率更适合当作“AI 参与程度”的参考，而不是“是否违规”的判决。",
     ]
     if not detail:
         guide = [g for g in guide if not g.startswith(("报告里列出的多个检测器", "分段明细里的“人写对照”"))]
