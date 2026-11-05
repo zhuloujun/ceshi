@@ -261,6 +261,10 @@ DEFAULT_DAILY_CHARS = _int("DEFAULT_DAILY_CHARS", 1_000_000)
 
 # ---------- 校准 ----------
 # 可以直接把校准结果 JSON 填在 CALIBRATION_JSON 变量里；否则读 calibration.json；都没有就用内置默认值。
+# 参考文献真实性核查（app/refcheck.py）：逐条到 Crossref / Semantic Scholar / arXiv 查是否存在，只作提示
+REF_CHECK = _bool("REF_CHECK", True)
+REF_CHECK_MAX = _int("REF_CHECK_MAX", 40)
+REF_CHECK_BUDGET_S = float(os.getenv("REF_CHECK_BUDGET_S", "25") or 25)
 CALIBRATION_FILE = Path(os.getenv("CALIBRATION_FILE", str(BASE_DIR / "calibration.json")))
 
 
