@@ -29,7 +29,7 @@ PERFORMER_MODEL = os.getenv("PERFORMER_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
 # 中文 AI 文本分类器（MPU，ICLR 2024）。留空则不启用。
 # 自主训练的中文 / 英文主分类器（2026-11-05 起试验，替换外部的 zhv3 / desklib）：填本仓库 Release 名（如 chinese-classifier-own1），
 # 部署 / 验收工作流把它解压到 server/chinese-main-classifier、server/english-main-classifier。留空 = 仍用外部模型。
-ZH1_CLASSIFIER_ID = os.getenv("ZH1_CLASSIFIER_ID", "")
+ZH1_CLASSIFIER_ID = os.getenv("ZH1_CLASSIFIER_ID", "chinese-classifier-own1")
 EN1_CLASSIFIER_ID = os.getenv("EN1_CLASSIFIER_ID", "")
 _ZH1_DIR, _EN1_DIR = BASE_DIR / "chinese-main-classifier", BASE_DIR / "english-main-classifier"
 _ZH1_ON = bool(ZH1_CLASSIFIER_ID) and _ZH1_DIR.exists()
