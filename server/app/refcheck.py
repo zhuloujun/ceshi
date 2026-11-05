@@ -199,4 +199,5 @@ def check_references(ref_texts: list[str], budget_s: float | None = None) -> dic
     n_found = sum(r["status"] == "found" for r in out)
     n_nf = sum(r["status"] == "not_found" for r in out)
     return {"total": len(out), "found": n_found, "not_found": n_nf, "unverified": len(out) - n_found - n_nf,
-            "missing": [r["entry"] for r in out if r["status"] == "not_found"][:10]}
+            "missing": [r["entry"] for r in out if r["status"] == "not_found"][:10],
+            "items": [{"status": r["status"], "source": r.get("source"), "entry": r["entry"][:120]} for r in out][:40]}
