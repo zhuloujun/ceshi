@@ -432,7 +432,7 @@ def main():
     model = AutoModelForSequenceClassification.from_pretrained(
         args.base, num_labels=2, id2label={0: "human", 1: "ai"}, label2id={"human": 0, "ai": 1}).to(dev)
     if args.grad_ckpt:
-        model.gradient_checkpointing_enable()
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})  # DeBERTa 用旧式检查点会报"backward through the graph a second time"
 
     def batches(data, bs, shuffle):
         idx = list(range(len(data)))
