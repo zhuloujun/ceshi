@@ -104,7 +104,7 @@ def split_entries(ref_text: str) -> list[str]:
         if re.fullmatch(r"(参考文献|references?|bibliography|works cited)[:：]?", l, re.I):
             continue
         parts = re.split(r"(?=\[\d{1,3}\]\s)", l)
-        out += [p.strip() for p in parts if len(p.strip()) >= 25]
+        out += [p.strip() for p in parts if len(p.strip()) >= 25 and re.search(r"(19|20)\d\d", p)]   # 没有年份的多半是上一条的续行
     return out
 
 
@@ -137,8 +137,16 @@ def check_entry(entry: str, timeout: float = 6.0) -> dict:
     doi = _DOI.search(entry)
     if doi:
         d = doi.group(1).rstrip(".,;)")
-        st, _ = _get("https://api.crossref.org/works/" + urllib.parse.quote(d), timeout)
+        st, body = _get("https://api.crossref.org/works/" + urllib.parse.quote(d), timeout)
         if st == 200:
+            # DOI 存在但题目对不上（大模型常给真论文的 DOI 配上编造的题目）
+            t_ = guess_title(entry)
+            try:
+                real = (json.loads(body)["message"].get("title") or [""])[0]
+            except (ValueError, KeyError):
+                real = ""
+            if t_ and real and _sim(t_, real) < 0.5 and not _CJK.search(entry):
+                return {**res, "status": "not_found", "source": "doi-title-mismatch", "title": t_}
             return {**res, "status": "found", "source": "crossref-doi"}
         if st == 404:
             st2, _ = _get("https://doi.org/api/handles/" + urllib.parse.quote(d), timeout)   # Crossref 以外的 DOI（DataCite 等）
@@ -152,6 +160,10 @@ def check_entry(entry: str, timeout: float = 6.0) -> dict:
         st, body = _get(f"https://export.arxiv.org/api/query?id_list={ax.group(1)}", timeout)
         if st == 200:
             ok = b"<entry>" in body and b"<title>Error</title>" not in body
+            t_ = guess_title(entry)
+            ts = [x.decode("utf-8", "ignore") for x in re.findall(rb"<title>(.*?)</title>", body, re.S)[1:]]
+            if ok and t_ and ts and max(_sim(t_, x) for x in ts) < 0.5:
+                return {**res, "status": "not_found", "source": "arxiv-id-title-mismatch", "title": t_}
             return {**res, "status": "found" if ok else "not_found", "source": "arxiv-id"}
         return res
     if _CJK.search(entry):
