@@ -190,6 +190,10 @@ def train_tagger(rows, args, lang, out_dir):
         res[f"threshold_{k}"] = round(thr, 4)
         res[f"ai_caught_at_{k}"] = round(sum(p > thr for p in pos) / max(len(pos), 1), 4)
         res[f"human_flagged_at_{k}"] = round(sum(p > thr for p in neg) / max(len(neg), 1), 4)
+    # 训练工作流读取的键（与整段分类器的结果文件同名，免得发布前的汇总步骤报错）
+    for k in ("1pct", "5pct"):
+        res[f"segments_at_{k}"] = {"ai_caught": res[f"ai_caught_at_{k}"], "human_flagged": res[f"human_flagged_at_{k}"]}
+    res["doc_level"] = {"pure_human_docs_flagged_share": res["pure_human_docs_flagged_share"]}
     print("::notice title=句级标注模型评估::" + json.dumps(res, ensure_ascii=False), flush=True)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
