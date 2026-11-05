@@ -29,13 +29,60 @@ _CJK = re.compile(r"[一-鿿]")
 
 def _get(url: str, timeout: float):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.status, r.read()
-    except urllib.error.HTTPError as e:
-        return e.code, b""
-    except Exception:  # noqa: BLE001
-        return None, b""
+    for k in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 502, 503) and k < 2:      # 限流 / 临时故障：稍等重试
+                time.sleep(1.5 * (k + 1))
+                continue
+            return e.code, b""
+        except Exception:  # noqa: BLE001
+            if k < 1:
+                time.sleep(1)
+                continue
+            return None, b""
+    return None, b""
+
+
+def _title_hits(title: str, timeout: float):
+    """依次查 OpenAlex、DBLP（计算机会议论文最全）、Crossref、Semantic Scholar、arXiv。返回 (是否查到, 正常应答的数据库数)。"""
+    q = urllib.parse.quote(title)
+    answered = 0
+    checks = [
+        ("https://api.openalex.org/works?per-page=5&select=title&search=" + q,
+         lambda d: [x.get("title") or "" for x in d.get("results", [])]),
+        ("https://dblp.org/search/publ/api?format=json&h=5&q=" + q,
+         lambda d: [((h.get("info") or {}).get("title") or "") for h in ((d.get("result") or {}).get("hits") or {}).get("hit", [])]),
+        ("https://api.crossref.org/works?rows=5&select=title&query.bibliographic=" + q,
+         lambda d: [(x.get("title") or [""])[0] for x in d["message"]["items"]]),
+        ("https://api.semanticscholar.org/graph/v1/paper/search/match?fields=title&query=" + q,
+         lambda d: [x.get("title", "") for x in d.get("data") or []]),
+    ]
+    for url, pick in checks:
+        st, body = _get(url, timeout)
+        if st == 404 and "semanticscholar" in url:
+            answered += 1
+            continue
+        if st != 200:
+            continue
+        try:
+            titles = pick(json.loads(body))
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+        answered += 1
+        if any(_sim(title, t) >= 0.85 for t in titles):
+            return True, answered
+        if answered >= 3:
+            break
+    st, body = _get("https://export.arxiv.org/api/query?max_results=3&search_query=" + urllib.parse.quote(f'ti:"{title}"'), timeout)
+    if st == 200:
+        answered += 1
+        for t in re.findall(rb"<title>(.*?)</title>", body, re.S)[1:]:
+            if _sim(title, t.decode("utf-8", "ignore")) >= 0.85:
+                return True, answered
+    return False, answered
 
 
 def _norm(t: str) -> str:
@@ -99,7 +146,7 @@ def check_entry(entry: str, timeout: float = 6.0) -> dict:
         return res
     ax = _ARXIV.search(entry)
     if ax:
-        st, body = _get(f"http://export.arxiv.org/api/query?id_list={ax.group(1)}", timeout)
+        st, body = _get(f"https://export.arxiv.org/api/query?id_list={ax.group(1)}", timeout)
         if st == 200:
             ok = b"<entry>" in body and b"<title>Error</title>" not in body
             return {**res, "status": "found" if ok else "not_found", "source": "arxiv-id"}
@@ -109,36 +156,9 @@ def check_entry(entry: str, timeout: float = 6.0) -> dict:
     title = guess_title(entry)
     if len(title) < 15:
         return res
-    tried = 0
-    st, body = _get("https://api.semanticscholar.org/graph/v1/paper/search/match?fields=title&query="
-                    + urllib.parse.quote(title), timeout)
-    if st == 200:
-        tried += 1
-        try:
-            data = json.loads(body).get("data") or []
-            if any(_sim(title, x.get("title", "")) >= 0.85 for x in data):
-                return {**res, "status": "found", "source": "semanticscholar", "title": title}
-        except ValueError:
-            pass
-    elif st == 404:
-        tried += 1                                   # 标题匹配接口查不到时返回 404
-    st, body = _get("https://api.crossref.org/works?rows=5&select=title&query.bibliographic="
-                    + urllib.parse.quote(title), timeout)
-    if st == 200:
-        tried += 1
-        try:
-            items = json.loads(body)["message"]["items"]
-            if any(_sim(title, (x.get("title") or [""])[0]) >= 0.85 for x in items):
-                return {**res, "status": "found", "source": "crossref", "title": title}
-        except (ValueError, KeyError):
-            pass
-    st, body = _get("http://export.arxiv.org/api/query?max_results=3&search_query="
-                    + urllib.parse.quote(f'ti:"{title}"'), timeout)
-    if st == 200:
-        tried += 1
-        for t in re.findall(rb"<title>(.*?)</title>", body, re.S)[1:]:
-            if _sim(title, t.decode("utf-8", "ignore")) >= 0.85:
-                return {**res, "status": "found", "source": "arxiv", "title": title}
+    ok, tried = _title_hits(title, timeout)
+    if ok:
+        return {**res, "status": "found", "source": "title", "title": title}
     if tried >= 2:                                   # 至少两个数据库正常应答、都没查到，才算“查不到”
         return {**res, "status": "not_found", "source": "title", "title": title}
     return res
@@ -153,7 +173,7 @@ def check_references(ref_texts: list[str], budget_s: float | None = None) -> dic
     budget = budget_s if budget_s is not None else config.REF_CHECK_BUDGET_S
     t0 = time.time()
     out = []
-    with cf.ThreadPoolExecutor(max_workers=6) as ex:
+    with cf.ThreadPoolExecutor(max_workers=4) as ex:
         futs = [ex.submit(check_entry, e) for e in entries]
         for f in futs:
             left = budget - (time.time() - t0)
