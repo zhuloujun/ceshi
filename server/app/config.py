@@ -266,7 +266,10 @@ REF_CHECK = _bool("REF_CHECK", True)
 # 行内作品编号、同段中英文交替时先拆开再判断（segmenter.split_inline_labels / split_script_switches）
 SPLIT_INLINE = _bool("SPLIT_INLINE", True)
 # 人机混写切分（app/hybrid.py）：同一段里人写、AI 写的句子交替时，在作者疑似换了的地方切开、分别判断
-HYBRID_SPLIT = _bool("HYBRID_SPLIT", True)
+# 默认关闭（2026-11-05 测试）：60 篇带答案的混写文章里只对英文“人写中插入一段 AI”有小幅提升（AI 字检出 50% → 60%），
+# 中文几乎没有作用；200 + 91 篇真人文字被判 AI 的篇数不变，但平均 AI 率升了约 1 个百分点（零星句子被单独切出后过线）。
+# 需要专门的句级模型后再开启。HYBRID_SPLIT=1 可做对照。
+HYBRID_SPLIT = _bool("HYBRID_SPLIT", False)
 HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "2.0") or 2.0)   # 每换一次作者的代价（对数似然）
 HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
 HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长
