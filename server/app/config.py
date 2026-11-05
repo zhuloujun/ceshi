@@ -271,9 +271,10 @@ HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "2.0") or 2.0)   # �
 HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
 HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长
 HYBRID_MIN_ZH_CHARS = _int("HYBRID_MIN_ZH_CHARS", 40)
-HYBRID_AI_MEAN = float(os.getenv("HYBRID_AI_MEAN", "0.8") or 0.8)        # AI 块的单句分数平均至少这么高才切
+HYBRID_AI_MEAN = float(os.getenv("HYBRID_AI_MEAN", "0.9") or 0.9)        # AI 块的单句分数平均至少这么高才切
 HYBRID_HUMAN_MEAN = float(os.getenv("HYBRID_HUMAN_MEAN", "0.35") or 0.35)  # 人写块的平均至多这么高才切
-HYBRID_AI_SURE = float(os.getenv("HYBRID_AI_SURE", "0.9") or 0.9)        # AI 块平均达到此值，综合分数没过阈值也计入
+HYBRID_AI_SURE = float(os.getenv("HYBRID_AI_SURE", "1.01") or 1.01)      # AI 块平均达到此值，综合分数没过阈值也计入（默认关闭：
+# 2026-11-05 测试中短句的分类器分数整体偏高，这条让 91 篇真人说明文多误判 1 篇，只按完整流程的分数判断）
 REF_CHECK_MAX = _int("REF_CHECK_MAX", 40)
 REF_CHECK_BUDGET_S = float(os.getenv("REF_CHECK_BUDGET_S", "45") or 45)
 CALIBRATION_FILE = Path(os.getenv("CALIBRATION_FILE", str(BASE_DIR / "calibration.json")))

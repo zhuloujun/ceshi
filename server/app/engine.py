@@ -730,7 +730,10 @@ class Engine:
             b = self.cls_en4.predict(texts) if (self.cls_en4 and self.cls_en4.ready and texts) else [None] * len(texts)
             return [None if x is None and y is None else (x if y is None else y if x is None else (x + y) / 2)
                     for x, y in zip(a, b)]
-        return self.classify_zh2(texts, regs)
+        # 现代汉语：中文第二分类器（新一代国产大模型）与主分类器取平均——C-ReD 的新闻类 AI 文字第二分类器只给 5 分左右
+        a, b = self.classify_zh2(texts, regs), self.classify(texts, regs)
+        return [None if x is None and y is None else (x if y is None else y if x is None else (x + y) / 2)
+                for x, y in zip(a, b)]
 
     def _hybrid_split(self, segs):
         """同一段里人写、AI 写的句子交替时，在作者换了的地方切开（见 app/hybrid.py）。返回 (新段落列表, 切开的段数)。"""
