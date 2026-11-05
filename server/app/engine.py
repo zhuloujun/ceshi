@@ -761,6 +761,9 @@ class Engine:
                 out.append(s)
                 continue
             tagger = self.tag_en if s.register == "en" else self.tag_zh
+            if config.HYBRID_REQUIRE_TAGGER and not (tagger and tagger.ready):
+                out.append(s)
+                continue
             if tagger and tagger.ready:
                 # 句级标注模型：整段一起看（有上下文），按句子区间取平均；不再需要“相邻两句”的分数
                 single = tagger.span_probs(text, spans)
