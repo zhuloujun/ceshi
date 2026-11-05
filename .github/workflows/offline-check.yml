@@ -17,6 +17,10 @@ on:
         description: "（可选）RAID 取样的分片 i/n"
         required: false
         default: "0/1"
+      taggers:
+        description: "（可选）句级标注模型 Release，如 zh=chinese-tagger-v1 en=english-tagger-v1"
+        required: false
+        default: ""
       envs:
         description: "（可选）临时覆盖 config 参数做对照，空格分隔，如 EN_ABS_EN2=0"
         required: false
@@ -125,6 +129,17 @@ jobs:
           else
             echo "::warning title=第二个英文整篇分类器::没有找到 Release $TAG，本次不部署它"
           fi
+      - name: 取出句级标注模型（可选，见输入 taggers）
+        if: github.event.inputs.taggers != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for kv in ${{ github.event.inputs.taggers }}; do
+            L="${kv%%=*}"; TAG="${kv#*=}"; A=$([ "$L" = zh ] && echo chinese-classifier.tar.gz || echo english-classifier.tar.gz)
+            mkdir -p /tmp/tag-$L && gh release download "$TAG" -p "$A" -D /tmp/tag-$L -R "${{ github.repository }}" && tar xzf /tmp/tag-$L/$A -C /tmp/tag-$L
+            D=$(dirname "$(find /tmp/tag-$L -name config.json | head -1)")
+            U=$(echo "$L" | tr a-z A-Z); echo "TAGGER_${U}_MODEL=$D" >> "$GITHUB_ENV"; echo "::notice title=句级标注模型::$L $TAG -> $D"
+          done
       - name: 从 RAID 取样（可选）
         if: github.event.inputs.raid != ''
         working-directory: server
