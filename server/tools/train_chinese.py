@@ -114,6 +114,8 @@ def main():
     ap.add_argument("--time-budget-min", type=float, default=150)
     ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='z' 为现代汉语）")
     ap.add_argument("--grad-ckpt", action="store_true", help="梯度检查点（large 底座在 16 GB 显卡上省显存）")
+    ap.add_argument("--tagger", action="store_true", help="改为训练句级“作者标注”模型（人机混写定位，见 tools/tagger_train.py）")
+    ap.add_argument("--tagger-steps", type=int, default=6000, help="句级模型训练多少步")
     ap.add_argument("--user-docs-reps", type=int, default=1, help="用户段落在训练集里重复几次")
     args = ap.parse_args()
 
@@ -130,6 +132,10 @@ def main():
         segs = d["segs"] if d["split"] == "test" else rnd.sample(d["segs"], min(len(d["segs"]), args.max_segs))
         for t, n in segs:
             rows.append({"text": t, "y": d["y"], "src": d["src"], "split": d["split"], "doc": d["doc"], "n": n})
+    if args.tagger:
+        from tagger_train import train_tagger
+        train_tagger(rows, args, "zh", args.out)
+        return
     train = [r for r in rows if r["split"] == "train"]
     test = [r for r in rows if r["split"] == "test"]
     rnd.shuffle(train)
