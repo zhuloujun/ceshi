@@ -118,7 +118,10 @@ def guess_title(entry: str) -> str:
     # 去掉开头的作者名单（“Lastname, X. Y., Lastname, X., & …”），否则作者缩写里的句点会把标题切碎
     e = re.sub(r"^(?:(?:and\s+|&\s*)?[A-Z][\w'\-]+,\s*(?:[A-Z]\.\s?(?:-?[A-Z]\.\s?)*),?\s*)+(?:et al\.?,?\s*)?", "", e)
     parts = [p.strip() for p in re.split(r"(?<![A-Z])\.\s+", e) if p.strip()]
-    for p in parts[1:] + parts[:1]:
+    venue = re.compile(r"^(in\b|proceedings|proc\.|journal|arxiv|vol\.|pp\.|doi|https?:|retrieved|accessed|\d)", re.I)
+    for p in parts:
+        if venue.match(p):
+            continue
         words = p.split()
         if len(words) < 4 or len(p) > 260:
             continue
