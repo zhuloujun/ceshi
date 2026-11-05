@@ -18,7 +18,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (REGISTER_NAMES, unwrap_hard_wraps, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -768,6 +768,7 @@ class Engine:
         self.wait_loaded()
         self.maybe_refresh_calibration()
         # 按固定宽度断行的英文散文先合并成段落（见 segmenter.unwrap_hard_wraps）：否则每行被当成独立短段落，文心作品 AI 率从 83% 掉到 35%
+        text, n_zw, n_hw = deobfuscate(text)
         text, unwrapped = unwrap_hard_wraps(text)
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 全文都被判为引文/参考文献时，退回为全部计入，否则报告里没有任何数值
@@ -1478,6 +1479,9 @@ class Engine:
 
         # 可信度提示（参考 Turnitin、GPTZero 等平台对短文本、未校准、非常规文体的处理）
         notes = []
+        if n_zw or n_hw:
+            notes.append(f"文中有 {n_zw} 个零宽 / 不可见字符、{n_hw} 个夹着西里尔或希腊形近字母的英文单词（常见的规避检测手法），"
+                         "检测前已还原为正常字符；这些痕迹本身见“标点与排版格式检查”。")
         if unwrapped:
             notes.append("原文按固定宽度断行（每行几十个字符就换行，常见于从 PDF、邮件或部分 AI 平台复制的文字），"
                          "已先把断开的行合并成段落再检测；否则每一行会被当成独立的短段落，检测结果会明显偏低。")
