@@ -243,7 +243,7 @@ def test_calibration_extended_features():
     def mk(ai):
         return {"fastdetect": rnd.gauss(2.8 if ai else 0.6, 0.8), "binoculars": rnd.gauss(0.82 if ai else 0.98, 0.06),
                 "classifier": rnd.uniform(0.4, 0.95) if ai else rnd.uniform(0.05, 0.6),
-                "fastdetect_norm": rnd.gauss(0.2 if ai else 0.05, 0.05), "lrr": rnd.gauss(1.6 if ai else 1.2, 0.2),
+                "fastdetect_norm": rnd.gauss(0.2 if ai else 0.05, 0.05), "fastdetect_trim": rnd.gauss(0.25 if ai else 0.06, 0.06), "lrr": rnd.gauss(1.6 if ai else 1.2, 0.2),
                 "log_rank": rnd.gauss(0.8 if ai else 1.4, 0.3), "entropy": rnd.gauss(2.0 if ai else 2.6, 0.4),
                 "top10": rnd.gauss(0.85 if ai else 0.7, 0.05), "lp_burstiness": rnd.gauss(0.15 if ai else 0.3, 0.08),
                 "style_cv": rnd.gauss(0.3 if ai else 0.6, 0.15), "style_phrases": rnd.gauss(3 if ai else 1, 1)}
