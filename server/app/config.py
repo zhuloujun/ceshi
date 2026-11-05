@@ -263,6 +263,24 @@ DEFAULT_DAILY_CHARS = _int("DEFAULT_DAILY_CHARS", 1_000_000)
 # 可以直接把校准结果 JSON 填在 CALIBRATION_JSON 变量里；否则读 calibration.json；都没有就用内置默认值。
 # 参考文献真实性核查（app/refcheck.py）：逐条到 Crossref / Semantic Scholar / arXiv 查是否存在，只作提示
 REF_CHECK = _bool("REF_CHECK", True)
+# 行内作品编号、同段中英文交替时先拆开再判断（segmenter.split_inline_labels / split_script_switches）
+SPLIT_INLINE = _bool("SPLIT_INLINE", True)
+# 人机混写切分（app/hybrid.py）：同一段里人写、AI 写的句子交替时，在作者疑似换了的地方切开、分别判断
+# 默认关闭（2026-11-05 测试）：60 篇带答案的混写文章里只对英文“人写中插入一段 AI”有小幅提升（AI 字检出 50% → 60%），
+# 中文几乎没有作用；200 + 91 篇真人文字被判 AI 的篇数不变，但平均 AI 率升了约 1 个百分点（零星句子被单独切出后过线）。
+# 需要专门的句级模型后再开启。HYBRID_SPLIT=1 可做对照。
+HYBRID_SPLIT = _bool("HYBRID_SPLIT", False)
+# 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
+TAGGER_EN_MODEL = os.getenv("TAGGER_EN_MODEL", "")
+TAGGER_ZH_MODEL = os.getenv("TAGGER_ZH_MODEL", "")
+HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "2.0") or 2.0)   # 每换一次作者的代价（对数似然）
+HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
+HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长
+HYBRID_MIN_ZH_CHARS = _int("HYBRID_MIN_ZH_CHARS", 40)
+HYBRID_AI_MEAN = float(os.getenv("HYBRID_AI_MEAN", "0.9") or 0.9)        # AI 块的单句分数平均至少这么高才切
+HYBRID_HUMAN_MEAN = float(os.getenv("HYBRID_HUMAN_MEAN", "0.35") or 0.35)  # 人写块的平均至多这么高才切
+HYBRID_AI_SURE = float(os.getenv("HYBRID_AI_SURE", "1.01") or 1.01)      # AI 块平均达到此值，综合分数没过阈值也计入（默认关闭：
+# 2026-11-05 测试中短句的分类器分数整体偏高，这条让 91 篇真人说明文多误判 1 篇，只按完整流程的分数判断）
 REF_CHECK_MAX = _int("REF_CHECK_MAX", 40)
 REF_CHECK_BUDGET_S = float(os.getenv("REF_CHECK_BUDGET_S", "45") or 45)
 CALIBRATION_FILE = Path(os.getenv("CALIBRATION_FILE", str(BASE_DIR / "calibration.json")))

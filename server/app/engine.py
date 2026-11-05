@@ -18,7 +18,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -536,6 +536,9 @@ class Engine:
         self.cls_en4 = (Classifier(config.EN4_CLASSIFIER_MODEL, 320) if config.EN4_CLASSIFIER_MODEL else None)
         self.cls_poetry = (Classifier(config.POETRY_CLASSIFIER_MODEL, 128) if config.POETRY_CLASSIFIER_MODEL else None)
         self.cls_classical = (Classifier(config.CLASSICAL_CLASSIFIER_MODEL, 256) if config.CLASSICAL_CLASSIFIER_MODEL else None)
+        from .detectors.tagger import SentenceTagger
+        self.tag_en = SentenceTagger(config.TAGGER_EN_MODEL) if config.TAGGER_EN_MODEL else None
+        self.tag_zh = SentenceTagger(config.TAGGER_ZH_MODEL) if config.TAGGER_ZH_MODEL else None
         self.loading = True
         self.loaded_event = threading.Event()
         self.load_started = time.time()
@@ -627,7 +630,8 @@ class Engine:
         try:
             for name, det in (("语言模型", self.lm), ("中文分类器", self.cls), ("英文分类器", self.cls_en),
                               ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("英文整篇分类器", self.cls_en3), ("英文整篇分类器 2", self.cls_en4),
-                              ("诗词分类器", self.cls_poetry), ("文言分类器", self.cls_classical)):
+                              ("诗词分类器", self.cls_poetry), ("文言分类器", self.cls_classical),
+                              ("英文句级标注模型", self.tag_en), ("中文句级标注模型", self.tag_zh)):
                 if det is None:
                     continue
                 try:
@@ -722,6 +726,70 @@ class Engine:
                 out[i] = p
         return out
 
+    def _hybrid_unit_scores(self, texts: list[str], register: str) -> list:
+        """人机混写切分用的短文本分数：英文取第二、第四分类器的平均，现代汉语取中文第二分类器。"""
+        regs = [register] * len(texts)
+        if register == "en":
+            a = self.classify_en2(texts, regs)
+            b = self.cls_en4.predict(texts) if (self.cls_en4 and self.cls_en4.ready and texts) else [None] * len(texts)
+            return [None if x is None and y is None else (x if y is None else y if x is None else (x + y) / 2)
+                    for x, y in zip(a, b)]
+        # 现代汉语：中文第二分类器（新一代国产大模型）与主分类器取平均——C-ReD 的新闻类 AI 文字第二分类器只给 5 分左右
+        a, b = self.classify_zh2(texts, regs), self.classify(texts, regs)
+        return [None if x is None and y is None else (x if y is None else y if x is None else (x + y) / 2)
+                for x, y in zip(a, b)]
+
+    def _hybrid_split(self, segs):
+        """同一段里人写、AI 写的句子交替时，在作者换了的地方切开（见 app/hybrid.py）。返回 (新段落列表, 切开的段数)。"""
+        from . import hybrid
+        cfg = {"switch_cost": config.HYBRID_SWITCH_COST, "temp": config.HYBRID_TEMP,
+               "min_en": config.HYBRID_MIN_EN_WORDS, "min_zh": config.HYBRID_MIN_ZH_CHARS,
+               "ai_mean": config.HYBRID_AI_MEAN, "human_mean": config.HYBRID_HUMAN_MEAN}
+        out, n_split = [], 0
+        next_block = max((x.block for x in segs), default=0) + 1
+        for s in segs:
+            if s.kind != "body" or s.register not in ("zh", "en"):
+                out.append(s)
+                continue
+            head = s.title if (s.title and s.text.startswith(s.title)) else ""
+            text = s.text[len(head):]
+            if hybrid.size_of(text, s.register) < (2 * cfg["min_en"] if s.register == "en" else 2 * cfg["min_zh"]):
+                out.append(s)
+                continue
+            spans = hybrid.sentence_units(text, s.register)
+            if len(spans) < 3:
+                out.append(s)
+                continue
+            tagger = self.tag_en if s.register == "en" else self.tag_zh
+            if tagger and tagger.ready:
+                # 句级标注模型：整段一起看（有上下文），按句子区间取平均；不再需要“相邻两句”的分数
+                single = tagger.span_probs(text, spans)
+                pairs = [None] * (len(spans) - 1)
+            else:
+                single = self._hybrid_unit_scores([text[a:b] for a, b in spans], s.register)
+                pairs = self._hybrid_unit_scores([text[spans[k][0]:spans[k + 1][1]] for k in range(len(spans) - 1)], s.register)
+            plan = hybrid.plan_split(text, s.register, single, pairs, spans, cfg)
+            if not plan:
+                out.append(s)
+                continue
+            n_split += 1
+            for k, (a, b, st, mean) in enumerate(plan):
+                piece = text[a:b]
+                lead = len(piece) - len(piece.lstrip())
+                if k == 0 and head:
+                    piece, lead = head + piece, 0
+                sub = Segment(index=0, text=piece.strip(), start=s.start + len(head) * (k > 0) + a + lead, kind="body",
+                              notes=list(s.notes) + [("人机混写切分：这几句与前后文明显不同，单独判断" if st else
+                                                      "人机混写切分：与相邻的疑似 AI 部分分开判断")],
+                              register=s.register, block=next_block, title=head if k == 0 else "")
+                sub.orig_block = s.block
+                sub.hybrid = {"state": st, "mean": mean}
+                next_block += 1
+                out.append(sub)
+        for k, x in enumerate(out):
+            x.index = k
+        return out, n_split
+
     def classify_zh2(self, texts: list[str], registers: list[str]) -> list:
         """现代汉语段落再用中文第二分类器（见过新一代国产大模型的散文、游记、论文）打一次分。"""
         out = [None] * len(texts)
@@ -770,6 +838,10 @@ class Engine:
         # 按固定宽度断行的英文散文先合并成段落（见 segmenter.unwrap_hard_wraps）：否则每行被当成独立短段落，文心作品 AI 率从 83% 掉到 35%
         text, n_zw, n_hw = deobfuscate(text)
         text, unwrapped = unwrap_hard_wraps(text)
+        n_lab = n_scr = 0
+        if config.SPLIT_INLINE:
+            text, n_lab = split_inline_labels(text)
+            text, n_scr = split_script_switches(text)
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 参考文献核查要联网查询，和模型打分同时进行（见 app/refcheck.py）
         _ref_texts = [s.text for s in segs if s.kind == "reference"]
@@ -808,6 +880,9 @@ class Engine:
             if s.kind == "body" and d and d[1] and d[0] < config.EN_MIN_WORDS_WORK:
                 s.kind = "reference_only"
                 s.notes = list(s.notes) + [f"篇幅过短（不足 {config.EN_MIN_WORDS_WORK} 词），检测结果不可靠，仅供参考、不计入 AI 率"]
+        n_hybrid = 0
+        if config.HYBRID_SPLIT:
+            segs, n_hybrid = self._hybrid_split(segs)
         counted = [s for s in segs if s.counted]
         # 不计入的引文段落也打分，作为"参考值"显示（不影响 AI 率）；参考文献条目没有检测意义，不打分
         ref_scored = [s for s in segs if s.kind in ("quotation", "reference_only")]
@@ -1396,6 +1471,11 @@ class Engine:
                 level, label, near = "mid", "中度疑似（整篇判断）", False
             elif by_work:
                 level, label, near = "light", "轻度疑似（整篇判断）", False
+            elif (s.counted and prob is not None and prob < thr and level in ("low", "none") and getattr(s, "hybrid", None)
+                  and s.hybrid["state"] and s.hybrid["mean"] >= config.HYBRID_AI_SURE):
+                # 人机混写切分出来的 AI 块：这几句的“新一代大模型”分类器分数整体很高、前后文整体很低，
+                # 单独拿出来篇幅短、综合分数达不到阈值时，按分类器的一致意见计入
+                level, label, near = "mid", "中度疑似（人机混写：这几句与前后文明显不同，像 AI 写的）", False
             elif s.counted and prob is not None and prob < thr and level in ("low", "none") and _detectors_disagree(sc):
                 # 选择性判断（selective classification）：专门见过新一代大模型的第二分类器很肯定是 AI，综合分数却很低——
                 # 证据互相矛盾时不下结论，标出来请人复核，不计入 AI 率（不把"没标出"当成"确认是人写"）
@@ -1452,7 +1532,7 @@ class Engine:
                     uncalibrated_regs.add(s.register)
             seg_out.append({
                 "index": s.index, "start": s.start, "chars": len(s.text), "text": s.text,
-                "kind": s.kind, "notes": s.notes, "register": s.register, "block": s.block, "title": s.title,
+                "kind": s.kind, "notes": s.notes, "register": s.register, "block": getattr(s, "orig_block", s.block), "title": s.title,
                 "register_name": REGISTER_NAMES.get(s.register, s.register),
                 "threshold": thr,
                 "prob": None if prob is None else round(prob, 4),
@@ -1502,6 +1582,14 @@ class Engine:
         if n_zw or n_hw:
             notes.append(f"文中有 {n_zw} 个零宽 / 不可见字符、{n_hw} 个夹着西里尔或希腊形近字母的英文单词（常见的规避检测手法），"
                          "检测前已还原为正常字符；这些痕迹本身见“标点与排版格式检查”。")
+        if n_hybrid:
+            notes.append(f"有 {n_hybrid} 段里人写和 AI 写的句子疑似交替出现，已在作者疑似换了的地方切开、分别判断"
+                         "（标“人机混写切分”）。句子级判断比整段更容易出错，请重点复核这些位置。")
+        if n_lab:
+            notes.append(f"文中有 {n_lab + 1} 处带字母编号的条目（如“A2、”“Z3、”）连写在同一段里，已按编号拆开逐条判断；"
+                         "每条较短时结果波动较大。")
+        if n_scr:
+            notes.append(f"同一段里中文和英文成段交替，已在 {n_scr} 处语言切换的地方断开，分别用中文、英文的模型判断。")
         if unwrapped:
             notes.append("原文按固定宽度断行（每行几十个字符就换行，常见于从 PDF、邮件或部分 AI 平台复制的文字），"
                          "已先把断开的行合并成段落再检测；否则每一行会被当成独立的短段落，检测结果会明显偏低。")
@@ -1541,7 +1629,7 @@ class Engine:
         if counted_chars and 0 < flagged_chars / counted_chars < 0.2:
             notes.append("整体 AI 率低于 20%：这一区间误判的可能性较高（Turnitin 对 1%–19% 只显示星号“*%”，不给具体数值），"
                          "数字后加 * 表示仅作提示，请逐段复核被标出的部分，不宜据此下结论。")
-        n_works = len({s.block for s in segs})
+        n_works = len({getattr(s, "orig_block", s.block) for s in segs})
         if genre == "classical":
             notes.append(f"按“中国古典文学作品”检测：共 {n_works} 篇（每个编号条目单独判断），文言、诗词和古白话对话都计入，不当作引文排除。")
         if chars_by_register.get("zh_poetry"):

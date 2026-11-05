@@ -1,5 +1,6 @@
 """把长文切成适合检测的段落，并识别不应计入 AI 率的部分（参考文献、以引文为主的段落）。"""
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 from . import config
@@ -1179,6 +1180,8 @@ _HOMO = str.maketrans({
     "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X", "Ζ": "Z",
 })
 _MIXED_WORD = re.compile(r"[A-Za-z\u0370-\u03ff\u0400-\u04ff]+")
+_HOMO_KEYS = {chr(k) for k in _HOMO}
+_FW_LATIN = re.compile("[\uff21-\uff3a\uff41-\uff5a]|[\U0001d400-\U0001d6a3]")
 
 
 def deobfuscate(text: str):
@@ -1187,13 +1190,107 @@ def deobfuscate(text: str):
     t, n_zw = _ZERO_WIDTH.subn("", text or "")
     n_hw = 0
 
+    # 全文是英文时（几乎没有真正的俄语 / 希腊语单词），整词都被换成形近字母的英文单词也还原：RAID 的同形字攻击常把
+    # "ocean"里的 o、c、e、a 全换掉，只剩一个 n 是拉丁字母，按“拉丁字母过半”的旧规则认不出（2026-11-05 RAID 测试：
+    # 被攻击的 GPT-4 摘要只抓到 47%，未攻击的是 75%）。俄语、希腊语为主的文字不受影响。
+    # 判断依据：真正的俄语 / 希腊语单词几乎总含形近表以外的字母（б、д、л、я、λ、π……），被攻击的英文单词则全是形近字母。只还原西里尔字母、两个字母以上的词：
+    # 希腊字母在英文里常是正经用法（α-synuclein、哲学著作里的希腊词），不能动
+    words = _MIXED_WORD.findall(t)
+    real_foreign = sum(1 for w in words if any(not c.isascii() and c not in _HOMO_KEYS for c in w))
+    latin_doc = len(words) >= 30 and real_foreign <= 0.02 * len(words)
+
     def fix(m):
         nonlocal n_hw
         w = m.group(0)
         lat = sum(c.isascii() for c in w)
-        if 0 < lat < len(w) and lat >= 0.5 * len(w):
+        if lat == len(w):
+            return w
+        if (0 < lat and lat >= 0.5 * len(w)) or (latin_doc and len(w) >= 2 and all(c.isascii() or (c in _HOMO_KEYS and '\u0400' <= c <= '\u04ff') for c in w)):
             n_hw += 1
             return w.translate(_HOMO)
         return w
     t = _MIXED_WORD.sub(fix, t)
+    # 全角拉丁字母和数学字母（ａ、𝐚、𝑎）：逐字 NFKC，只在结果是 ASCII 字母时替换（不动中文全角标点）
+    def fw(m):
+        nonlocal n_hw
+        n_hw += 1
+        return unicodedata.normalize("NFKC", m.group(0))
+    t = _FW_LATIN.sub(fw, t)
     return t, n_zw, n_hw
+
+
+# 行内的作品编号（"……我站住脚，看了他一会儿。Z3、夕阳下的……"）：用户把真人、AI 的句子交替排在同一个大段里测试时，
+# 编号不在行首，作品集模式认不出来，整段被当成一篇判断，人写和 AI 写的句子平均下来大多“未达阈值”（2026-11-05 cs1105）。
+# 只认“字母 + 数字 + 顿号”且全文 ≥ 4 处、至少 2 处不在行首：日常文字里几乎不会出现这种写法。
+_INLINE_LABEL = re.compile(r"(?<![A-Za-z0-9])[A-Z]{1,2}\d{1,3}、(?=\S)")
+
+
+def split_inline_labels(text: str):
+    """把行内的作品编号前面断成新行，交给作品集模式逐条判断。返回 (文本, 断开的处数)。"""
+    ms = list(_INLINE_LABEL.finditer(text or ""))
+    inline = [m for m in ms if m.start() > 0 and text[m.start() - 1] not in "\n"
+              and text[:m.start()].rsplit("\n", 1)[-1].strip()]
+    if len(ms) < 4 or len(inline) < 2:
+        return text, 0
+    out, last = [], 0
+    for m in inline:
+        out.append(text[last:m.start()].rstrip())
+        out.append("\n\n")
+        last = m.start()
+    out.append(text[last:])
+    return "".join(out), len(inline)
+
+
+_SCRIPT_SENT = re.compile(r"(?<=[。！？!?；])|(?<=[.!?])(?=\s*[A-Z\"“‘(一-鿿])")
+
+
+def _script_of(s: str) -> str:
+    cjk, lat = len(_CJK.findall(s)), len(_LATIN.findall(s))
+    if cjk >= 4 and cjk >= 0.3 * (cjk + lat):
+        return "zh"
+    if lat >= 20 and cjk <= 0.05 * lat:
+        return "en"
+    return "?"
+
+
+def split_script_switches(text: str):
+    """同一段里中文和英文成段交替（中文正文后面直接接一大段英文，或反过来）时，在语言切换处断开：
+    两种语言要用不同的模型和阈值判断，混在一段里只能按占多数的那种语言判断，另一种语言的句子等于没检测
+    （2026-11-05 cs1105：一段 1273 字的“现代汉语”里夹着一句 56 词的英文）。
+    只在两边都够长（中文 ≥ 40 字、英文 ≥ 25 词）时断开，中文里夹的英文术语、书名、引文不受影响。返回 (文本, 断开的处数)。"""
+    lines = (text or "").split("\n")
+    n_split = 0
+    for li, line in enumerate(lines):
+        if len(line) < 120 or not (_CJK.search(line) and _LATIN.search(line)):
+            continue
+        sents = [s for s in _SCRIPT_SENT.split(line) if s]
+        runs = []                      # [script, text]
+        for s in sents:
+            sc = _script_of(s)
+            if sc == "?" and runs:
+                runs[-1][1] += s
+            elif runs and runs[-1][0] == sc:
+                runs[-1][1] += s
+            else:
+                runs.append([sc, s])
+        if len(runs) < 2:
+            continue
+
+        def long_enough(r):
+            return (r[0] == "zh" and len(_CJK.findall(r[1])) >= 40) or (r[0] == "en" and len(r[1].split()) >= 25)
+        # 不够长的小块并入前一块，再看还剩几块
+        merged = []
+        for r in runs:
+            if merged and not long_enough(r):
+                merged[-1][1] += r[1]
+            elif merged and merged[-1][0] == r[0]:
+                merged[-1][1] += r[1]
+            else:
+                merged.append(list(r))
+        if len(merged) >= 2 and not long_enough(merged[0]):
+            merged[1][1] = merged[0][1] + merged[1][1]
+            merged.pop(0)
+        if len(merged) >= 2 and all(long_enough(r) for r in merged):
+            lines[li] = "\n\n".join(r[1].strip() for r in merged)
+            n_split += len(merged) - 1
+    return "\n".join(lines), n_split
