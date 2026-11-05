@@ -27,8 +27,8 @@ Worker 转发的目标地址写在 `wrangler.toml` 的 `BACKEND_URL`。删掉那
 
 Worker `ai-text-checker` 已在 Cloudflare 后台连接本仓库（设置 → 构建 → Git 存储库），`main` 分支有新提交时自动构建并部署。
 
-- 部署记录：Cloudflare 后台 → Workers 和 Pages → `ai-text-checker` → **部署** 标签。
-- 如果以后提示"已与 Git 帐户断开连接"：到 <https://github.com/settings/installations> → **Cloudflare Workers and Pages** → **Configure**，确认仓库权限包含 `Ai-text-checker`；必要时在 Cloudflare 里点 **断开连接** 再 **连接**（构建命令留空，部署命令 `npx wrangler deploy`）。
+- 部署记录：Cloudflare 后台 → Workers 和 Pages → `a-t-c` → **部署** 标签。
+- 如果以后提示"已与 Git 帐户断开连接"：到 <https://github.com/settings/installations> → **Cloudflare Workers and Pages** → **Configure**，确认仓库权限包含 `A-t-c`；必要时在 Cloudflare 里点 **断开连接** 再 **连接**（构建命令留空，部署命令 `npx wrangler deploy`）。
 
 ### 绑定自己的域名（在 Cloudflare 后台操作一次）
 
@@ -46,14 +46,14 @@ Cloudflare 后台 → **Workers 和 Pages** → `ai-text-checker` → **设置**
    - 管理员密码沿用已添加的 `HF_ADMIN_TOKEN`，不用再加。
 4. **第一次部署**：打开 <https://github.com/zhuloujun/ceshi/actions> → 左侧 **部署检测服务到 Modal** → **Run workflow**。
    - 首次要构建镜像、下载约 2 GB 模型，约 10–20 分钟。
-   - 完成后，在这次运行的页面顶部（Summary）能看到网站地址，形如 `https://<你的 Modal 用户名>--ai-text-checker-web.modal.run`。
+   - 完成后，在这次运行的页面顶部（Summary）能看到网站地址，形如 `https://<你的 Modal 用户名>--a-t-cr-web.modal.run`。
 5. 打开 `网站地址/admin`，输入 `HF_ADMIN_TOKEN` 的密码，生成 API Key。
 
 **费用**：Modal 只在服务运行时计费（8 核 CPU、12 GB 内存约 $0.47/小时）。没人访问时 10 分钟后自动关闭、不计费；下次打开自动启动（约 1 分钟加载模型）。20 万字完整检测约 $0.1，每月 $30 免费额度对个人使用绰绰有余。用量可在 Modal 的 **Settings → Usage / Billing** 页面查看。
 
 ### C. 注册登录、邮箱验证码、管理后台（只需添加一个 GitHub Secret）
 
-数据库（Cloudflare D1 `ai_text_checker_db`）和签发检测 Key 的密钥都已配好。只差发验证码邮件用的 Resend 密钥；添加后网站自动切换为"注册登录后才能使用"，没添加之前照旧公开访问。
+数据库（Cloudflare D1 `a_t_c_db`）和签发检测 Key 的密钥都已配好。只差发验证码邮件用的 Resend 密钥；添加后网站自动切换为"注册登录后才能使用"，没添加之前照旧公开访问。
 
 1. 登录 <https://resend.com/api-keys>（账户 orgxyz）→ **Create API Key** → Name 填 `ai-text-checker`，Permission 选 **Sending access**，Domain 选 `9369369.xyz`（需要在 <https://resend.com/domains> 显示 Verified）→ **Add**，复制 `re_…`（只显示一次）。
 2. 打开 <https://github.com/zhuloujun/ceshi/settings/secrets/actions> → **New repository secret** → Name 填 `RESEND_API_KEY`，Secret 粘贴 `re_…` → **Add secret**。
