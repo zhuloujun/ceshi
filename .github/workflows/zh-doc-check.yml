@@ -20,6 +20,10 @@ jobs:
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
+      - name: 还原加密的真人语料
+        uses: ./.github/actions/corpus
+        with:
+          admin_token: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
       - name: 生成并检测
         env:
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
@@ -27,6 +31,10 @@ jobs:
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY || secrets.MOONSHOT_API_KEY }}
           WENXIN_API_KEY: ${{ secrets.WENXIN_API_KEY || secrets.APIKey_20260930163541 || secrets.APIKEY_20260930163541 }}
         run: python -u server/tools/zh_doc_check.py --n-human "${{ github.event.inputs.n_human || '80' }}" --n-ai "${{ github.event.inputs.n_ai || '12' }}"
+      - name: 重新加密有变化的真人语料
+        uses: ./.github/actions/corpus-seal
+        with:
+          admin_token: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
       - name: 提交
         if: always()
         run: |

@@ -8,3 +8,11 @@ tiny_models/
 
 server/poetry-classifier/
 server/.web_label
+
+# 受版权保护 / 用户提供的真人语料：加密存放在 data-1020 分支的 pub_corpus.enc，由 .github/actions/corpus 还原（2026-11-05）
+server/tools/data/gen_zh/human_*.jsonl
+server/tools/data/gen_en/*_human.jsonl
+server/tools/data/gen_en/pl_*.jsonl
+server/tools/data/human_cl/*.jsonl
+server/tools/data/eval_en_user_docs.jsonl
+server/tools/data/eval_zh_user_docs.jsonl

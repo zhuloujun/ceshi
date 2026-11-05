@@ -22,6 +22,10 @@ jobs:
     timeout-minutes: 340
     steps:
       - uses: actions/checkout@v4
+      - name: 还原加密的真人语料
+        uses: ./.github/actions/corpus
+        with:
+          admin_token: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

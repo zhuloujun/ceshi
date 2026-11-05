@@ -38,6 +38,10 @@ jobs:
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
+      - name: 还原加密的真人语料
+        uses: ./.github/actions/corpus
+        with:
+          admin_token: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -78,6 +82,8 @@ jobs:
           elif [ "${{ github.event.inputs.backend || 'kaggle' }}" = "modal" ]; then
             modal run server/tools/train_english_modal.py --args "${{ github.event.inputs.args }}"
           else
+            _AT="${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}"; _CK=$(printf %s corpus-v1 | openssl dgst -sha256 -hmac "$_AT" | awk '{print $NF}'); echo "::add-mask::$_CK"; unset _AT
+            export CORPUS_SPEC="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/data-1020/pub_corpus.enc#$_CK"; unset _CK   # Kaggle 上还原加密的真人语料
             python -u server/tools/kaggle_train.py --lang en --sha "$GITHUB_SHA" --args "${{ github.event.inputs.args }}"
           fi
           mkdir -p /tmp/x && tar xzf english-classifier.tar.gz -C /tmp/x

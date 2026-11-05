@@ -15,7 +15,9 @@ runs:
       env:
         AT: ${{ inputs.admin_token }}
       run: |
-        if [ -f server/tools/data/gen_en/genre_human.jsonl ]; then echo "语料已在工作区"; exit 0; fi
+        dg() { cat $(ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/gen_en/pl_*.jsonl \
+              server/tools/data/human_cl/*.jsonl server/tools/data/eval_en_user_docs.jsonl server/tools/data/eval_zh_user_docs.jsonl 2>/dev/null) | sha256sum | awk '{print $1}'; }
+        if [ -f server/tools/data/gen_en/genre_human.jsonl ]; then echo "语料已在工作区"; dg > /tmp/corpus.digest; exit 0; fi
         if [ -z "$AT" ]; then echo "::warning title=语料未还原::缺少 ADMIN_TOKEN"; exit 0; fi
         K=$(printf '%s' corpus-v1 | openssl dgst -sha256 -hmac "$AT" | awk '{print $NF}')
         echo "::add-mask::$K"
@@ -24,4 +26,5 @@ runs:
         printf '%s' "$K" > /tmp/corpus.key; unset K
         openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:/tmp/corpus.key -in /tmp/pub_corpus.enc | tar xJ
         rm -f /tmp/corpus.key /tmp/pub_corpus.enc
+        dg > /tmp/corpus.digest
         echo "已还原真人语料：$(ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/human_cl/*.jsonl | wc -l) 个文件"
