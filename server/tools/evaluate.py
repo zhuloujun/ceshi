@@ -577,8 +577,8 @@ def evaluate_rows(rows, cal, name):
            "ai_caught": round(sum(p >= thr for p in ap_) / len(ap_), 4) if ap_ else None,
            "human_flagged": round(sum(p >= thr for p in hp) / len(hp), 4) if hp else None,
            "per_signal_auroc": {}, "ai_caught_by_model": {}, "human_flagged_by_source": {}}
-    # 低误报下的检出率（Tufts 等、RAID 推荐的 TPR@1%FPR）：把阈值放在"人写只冤枉 1%"处，看还能抓到多少 AI。
-    # 布里尔分数（NIST AI 700-1 推荐）：概率本身准不准，越低越好（0 完美，0.25 等于瞎猜 50%）。都只用于报告，不改判定。
+    # 低误报下的检出率（近年检测论文常用的 TPR@1%FPR）：把阈值放在"人写只冤枉 1%"处，看还能抓到多少 AI。
+    # 布里尔分数（概率校准的常用指标）：概率本身准不准，越低越好（0 完美，0.25 等于瞎猜 50%）。都只用于报告，不改判定。
     if len(hp) >= 50 and ap_:
         hs_ = sorted(hp)
         t1 = hs_[min(len(hs_) - 1, int(0.99 * len(hs_)))]
