@@ -52,11 +52,56 @@ def fetch(domain, model, n, seed=29, attack="none"):
     return rows[:n]
 
 
+ROWS = "https://datasets-server.huggingface.co/rows"
+
+
+def fetch_hf(dataset, cols, n, seed=29, split="train", config="default", max_rows=1500):
+    """其它公开数据集（如 Beemo：toloka/beemo，专家修改过的 AI 文字）：按行分页取，再对每一列各抽 n 条。"""
+    rows, offset = [], 0
+    while offset < max_rows:
+        q = urllib.parse.urlencode({"dataset": dataset, "config": config, "split": split, "offset": offset, "length": 100})
+        for k in range(8):
+            try:
+                time.sleep(2)
+                with urllib.request.urlopen(f"{ROWS}?{q}", timeout=180) as r:
+                    page = json.loads(r.read())
+                break
+            except Exception as e:  # noqa: BLE001
+                print(f"retry {dataset} {offset}: {e}", flush=True)
+                time.sleep(15 * (k + 1))
+        else:
+            break
+        got = [x["row"] for x in page.get("rows", [])]
+        if not got:
+            break
+        rows += got
+        offset += 100
+    out = {}
+    for c in cols:
+        vals = [(r.get("id", i), (r.get(c) or "").strip()) for i, r in enumerate(rows)]
+        vals = [v for v in vals if len(v[1].split()) >= 80]
+        random.Random(seed).shuffle(vals)
+        out[c] = vals[:n]
+    return out
+
+
 def main():
     spec, shard, out = sys.argv[1], sys.argv[2], sys.argv[3]
     i, n = (int(x) for x in shard.split("/"))
     items = []
     for part in spec.split(";"):
+        if part.startswith("hf="):
+            # hf=数据集[@split]:列1,列2:每列条数，如 hf=toloka/beemo:human_output,model_output,human_edits:40
+            ds, cols, k = part[3:].split(":")
+            ds, _, split = ds.partition("@")
+            got = fetch_hf(ds, cols.split(","), int(k), split=split or "train")
+            short = ds.split("/")[-1].replace("-", "")
+            for c, vals in got.items():
+                print(f"::notice title=HF 取样::{ds}/{c}: {len(vals)} 条", flush=True)
+                tag = c.replace("_", "").replace("-", "").replace(".", "")
+                for j, (rid, text) in enumerate(vals):
+                    items.append({"name": f"{short}_{tag}_{j:03d}_{rid}", "text": text})
+            continue
         domain, models, k = part.split(":")
         for model in models.split(","):
             model, _, attack = model.partition("@")
