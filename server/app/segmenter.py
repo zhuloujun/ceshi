@@ -1166,3 +1166,34 @@ def unwrap_hard_wraps(text: str):
     text = join_list_continuations(text)
     t, changed = _unwrap_wide(text)
     return (t, True) if changed else _unwrap_short(text)
+
+
+# 规避检测的字符手法（零宽字符、拉丁词里混入形近的西里尔 / 希腊字母）：分词被打断后，语言模型和分类器都会把 AI 文字看成“人写”。
+# 依据：RAID（Dugan 等 ACL 2024）的同形字 / 零宽攻击让多数检测器大幅失效，2026 年多篇研究主张检测前先做 Unicode 归一化。
+# 只做定向还原，不做 NFKC（NFKC 会把中文全角标点改成半角）。网页上的“标点与排版格式检查”仍按原文提示这些痕迹。
+_ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\ufeff\u00ad\u180e]")
+_HOMO = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "һ": "h",
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X", "І": "I",
+    "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ρ": "p", "τ": "t", "υ": "u", "χ": "x",
+    "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X", "Ζ": "Z",
+})
+_MIXED_WORD = re.compile(r"[A-Za-z\u0370-\u03ff\u0400-\u04ff]+")
+
+
+def deobfuscate(text: str):
+    """去掉零宽字符；把“拉丁字母为主、夹着西里尔 / 希腊字母”的单词还原成纯拉丁字母（整词都是西里尔或希腊字母的不动）。
+    返回 (文本, 去掉的零宽字符数, 还原的单词数)。"""
+    t, n_zw = _ZERO_WIDTH.subn("", text or "")
+    n_hw = 0
+
+    def fix(m):
+        nonlocal n_hw
+        w = m.group(0)
+        lat = sum(c.isascii() for c in w)
+        if 0 < lat < len(w) and lat >= 0.5 * len(w):
+            n_hw += 1
+            return w.translate(_HOMO)
+        return w
+    t = _MIXED_WORD.sub(fix, t)
+    return t, n_zw, n_hw
