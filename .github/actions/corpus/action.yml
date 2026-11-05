@@ -1,0 +1,27 @@
+name: 还原受版权保护的真人语料
+description: >-
+  真人训练 / 评估文本（新闻、影评、学生论文、知乎、网文、PMC 论文、古文、用户文档等）版权归原作者，
+  2026-11-05 起不再明文放在公开仓库里，而是加密存放在 data-1020 分支的 pub_corpus.enc。
+  密钥由仓库 Secret ADMIN_TOKEN 派生（HMAC-SHA256，标签 corpus-v1），不出现在日志里。
+  文件已在工作区里（旧提交）时什么也不做。
+inputs:
+  admin_token:
+    description: secrets.ADMIN_TOKEN
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        AT: ${{ inputs.admin_token }}
+      run: |
+        if [ -f server/tools/data/gen_en/genre_human.jsonl ]; then echo "语料已在工作区"; exit 0; fi
+        if [ -z "$AT" ]; then echo "::warning title=语料未还原::缺少 ADMIN_TOKEN"; exit 0; fi
+        K=$(printf '%s' corpus-v1 | openssl dgst -sha256 -hmac "$AT" | awk '{print $NF}')
+        echo "::add-mask::$K"
+        git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}" data-1020
+        git show FETCH_HEAD:pub_corpus.enc > /tmp/pub_corpus.enc
+        printf '%s' "$K" > /tmp/corpus.key; unset K
+        openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:/tmp/corpus.key -in /tmp/pub_corpus.enc | tar xJ
+        rm -f /tmp/corpus.key /tmp/pub_corpus.enc
+        echo "已还原真人语料：$(ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/human_cl/*.jsonl | wc -l) 个文件"

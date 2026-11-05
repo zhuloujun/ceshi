@@ -1,0 +1,41 @@
+# 一次性：把公开仓库里明文的真人语料加密，存到 data-1020 分支的 pub_corpus.enc（之后从 main 删除这些明文文件）。
+# 密钥由仓库 Secret ADMIN_TOKEN 派生；以后更换 ADMIN_TOKEN 前，要先用旧密钥解密、再用这个工作流重新加密。
+name: 加密真人语料（一次性）
+on:
+  workflow_dispatch:
+    inputs:
+      from_sha:
+        description: "从哪个提交取明文文件（留空 = 当前分支）"
+        default: ""
+permissions:
+  contents: write
+jobs:
+  seal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.from_sha || github.ref }}
+      - name: 打包并加密
+        env:
+          AT: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          [ -n "$AT" ] || { echo "::error::缺少 ADMIN_TOKEN"; exit 1; }
+          ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/gen_en/pl_*.jsonl \
+             server/tools/data/human_cl/*.jsonl server/tools/data/eval_en_user_docs.jsonl server/tools/data/eval_zh_user_docs.jsonl > /tmp/list
+          wc -l /tmp/list; cat /tmp/list
+          tar cJf /tmp/pub_corpus.tar.xz -T /tmp/list
+          K=$(printf '%s' corpus-v1 | openssl dgst -sha256 -hmac "$AT" | awk '{print $NF}'); echo "::add-mask::$K"
+          printf '%s' "$K" > /tmp/k; unset K
+          openssl enc -e -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass file:/tmp/k -in /tmp/pub_corpus.tar.xz -out /tmp/pub_corpus.enc
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:/tmp/k -in /tmp/pub_corpus.enc | tar tJ | wc -l
+          rm -f /tmp/k; ls -la /tmp/pub_corpus.enc
+      - name: 提交到 data-1020 分支
+        run: |
+          git fetch -q --depth 1 origin data-1020
+          git worktree add -q /tmp/dw FETCH_HEAD
+          cp /tmp/pub_corpus.enc /tmp/dw/pub_corpus.enc
+          cd /tmp/dw
+          git config user.name github-actions[bot]; git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add pub_corpus.enc && git commit -q -m "data: pub_corpus.enc（公开仓库原明文真人语料，加密）" && git push -q origin HEAD:data-1020
+          echo "::notice title=已加密::$(ls -la pub_corpus.enc)"
