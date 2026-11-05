@@ -770,6 +770,15 @@ class Engine:
         # 按固定宽度断行的英文散文先合并成段落（见 segmenter.unwrap_hard_wraps）：否则每行被当成独立短段落，文心作品 AI 率从 83% 掉到 35%
         text, unwrapped = unwrap_hard_wraps(text)
         segs = segment_text(text, exclude_references, flag_quotations, genre)
+        # 参考文献核查要联网查询，和模型打分同时进行（见 app/refcheck.py）
+        _ref_texts = [s.text for s in segs if s.kind == "reference"]
+        _ref_future = None
+        if _ref_texts and config.REF_CHECK:
+            import concurrent.futures as _cf
+            from .refcheck import check_references
+            _ref_pool = _cf.ThreadPoolExecutor(max_workers=1)
+            _ref_future = _ref_pool.submit(check_references, _ref_texts)
+            _ref_pool.shutdown(wait=False)
         # 全文都被判为引文/参考文献时，退回为全部计入，否则报告里没有任何数值
         fallback_all = bool(segs) and not any(s.counted for s in segs)
         if fallback_all:
@@ -1478,6 +1487,17 @@ class Engine:
 
         # 可信度提示（参考 Turnitin、GPTZero 等平台对短文本、未校准、非常规文体的处理）
         notes = []
+        refcheck = None
+        if _ref_future is not None:
+            try:
+                refcheck = _ref_future.result(timeout=config.REF_CHECK_BUDGET_S + 5)
+            except Exception:  # noqa: BLE001
+                refcheck = None
+        if refcheck and refcheck["not_found"] and (refcheck["not_found"] >= 2 or refcheck["not_found"] >= 0.3 * refcheck["total"]):
+            ex_ = "；".join("“" + m[:80] + ("…" if len(m) > 80 else "") + "”" for m in refcheck["missing"][:3])
+            notes.append(f"参考文献核查：共 {refcheck['total']} 条，其中 {refcheck['not_found']} 条在公开学术数据库（Crossref、Semantic Scholar、"
+                         f"arXiv）里查不到，如 {ex_}。大模型常编造看似真实的文献；查不到也可能是书籍、学位论文、会议资料或数据库未收录，"
+                         "请逐条人工核对。此项只作提示，不改变 AI 率。")
         if unwrapped:
             notes.append("原文按固定宽度断行（每行几十个字符就换行，常见于从 PDF、邮件或部分 AI 平台复制的文字），"
                          "已先把断开的行合并成段落再检测；否则每一行会被当成独立的短段落，检测结果会明显偏低。")
@@ -1694,6 +1714,7 @@ class Engine:
                 "calibration_note": main_cal.get("note"),
                 "calibration_features": (main_cal.get("lr") or {}).get("features"),
                 "reliability_notes": notes,
+                "refcheck": refcheck,
                 "methods": {
                     "fastdetect": bool(self.lm and self.lm.ready),
                     "binoculars": bool(self.lm and self.lm.ready),
