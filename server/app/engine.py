@@ -1493,7 +1493,7 @@ class Engine:
                 refcheck = _ref_future.result(timeout=config.REF_CHECK_BUDGET_S + 5)
             except Exception:  # noqa: BLE001
                 refcheck = None
-        if refcheck and refcheck["not_found"] and (refcheck["not_found"] >= 2 or refcheck["not_found"] >= 0.3 * refcheck["total"]):
+        if refcheck and refcheck["not_found"] >= 2 and refcheck["not_found"] >= 0.2 * refcheck["total"]:
             ex_ = "；".join("“" + m[:80] + ("…" if len(m) > 80 else "") + "”" for m in refcheck["missing"][:3])
             notes.append(f"参考文献核查：共 {refcheck['total']} 条，其中 {refcheck['not_found']} 条在公开学术数据库（Crossref、Semantic Scholar、"
                          f"arXiv）里查不到，如 {ex_}。大模型常编造看似真实的文献；查不到也可能是书籍、学位论文、会议资料或数据库未收录，"
