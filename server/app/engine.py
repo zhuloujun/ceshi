@@ -536,6 +536,9 @@ class Engine:
         self.cls_en4 = (Classifier(config.EN4_CLASSIFIER_MODEL, 320) if config.EN4_CLASSIFIER_MODEL else None)
         self.cls_poetry = (Classifier(config.POETRY_CLASSIFIER_MODEL, 128) if config.POETRY_CLASSIFIER_MODEL else None)
         self.cls_classical = (Classifier(config.CLASSICAL_CLASSIFIER_MODEL, 256) if config.CLASSICAL_CLASSIFIER_MODEL else None)
+        from .detectors.tagger import SentenceTagger
+        self.tag_en = SentenceTagger(config.TAGGER_EN_MODEL) if config.TAGGER_EN_MODEL else None
+        self.tag_zh = SentenceTagger(config.TAGGER_ZH_MODEL) if config.TAGGER_ZH_MODEL else None
         self.loading = True
         self.loaded_event = threading.Event()
         self.load_started = time.time()
@@ -627,7 +630,8 @@ class Engine:
         try:
             for name, det in (("语言模型", self.lm), ("中文分类器", self.cls), ("英文分类器", self.cls_en),
                               ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("英文整篇分类器", self.cls_en3), ("英文整篇分类器 2", self.cls_en4),
-                              ("诗词分类器", self.cls_poetry), ("文言分类器", self.cls_classical)):
+                              ("诗词分类器", self.cls_poetry), ("文言分类器", self.cls_classical),
+                              ("英文句级标注模型", self.tag_en), ("中文句级标注模型", self.tag_zh)):
                 if det is None:
                     continue
                 try:
@@ -756,8 +760,14 @@ class Engine:
             if len(spans) < 3:
                 out.append(s)
                 continue
-            single = self._hybrid_unit_scores([text[a:b] for a, b in spans], s.register)
-            pairs = self._hybrid_unit_scores([text[spans[k][0]:spans[k + 1][1]] for k in range(len(spans) - 1)], s.register)
+            tagger = self.tag_en if s.register == "en" else self.tag_zh
+            if tagger and tagger.ready:
+                # 句级标注模型：整段一起看（有上下文），按句子区间取平均；不再需要“相邻两句”的分数
+                single = tagger.span_probs(text, spans)
+                pairs = [None] * (len(spans) - 1)
+            else:
+                single = self._hybrid_unit_scores([text[a:b] for a, b in spans], s.register)
+                pairs = self._hybrid_unit_scores([text[spans[k][0]:spans[k + 1][1]] for k in range(len(spans) - 1)], s.register)
             plan = hybrid.plan_split(text, s.register, single, pairs, spans, cfg)
             if not plan:
                 out.append(s)

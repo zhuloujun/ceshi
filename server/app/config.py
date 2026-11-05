@@ -270,6 +270,9 @@ SPLIT_INLINE = _bool("SPLIT_INLINE", True)
 # 中文几乎没有作用；200 + 91 篇真人文字被判 AI 的篇数不变，但平均 AI 率升了约 1 个百分点（零星句子被单独切出后过线）。
 # 需要专门的句级模型后再开启。HYBRID_SPLIT=1 可做对照。
 HYBRID_SPLIT = _bool("HYBRID_SPLIT", False)
+# 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
+TAGGER_EN_MODEL = os.getenv("TAGGER_EN_MODEL", "")
+TAGGER_ZH_MODEL = os.getenv("TAGGER_ZH_MODEL", "")
 HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "2.0") or 2.0)   # 每换一次作者的代价（对数似然）
 HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
 HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长
