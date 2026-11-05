@@ -1,0 +1,27 @@
+name: 取出自主训练的主分类器
+description: >-
+  server/app/config.py 里 ZH1_CLASSIFIER_ID / EN1_CLASSIFIER_ID 填了 Release 名时（替换外部的 zhv3 / desklib），
+  下载解压到 server/chinese-main-classifier、server/english-main-classifier。没填时什么也不做（仍用外部模型）。
+inputs:
+  token:
+    description: github.token
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        Z=$(grep -oE 'ZH1_CLASSIFIER_ID", "[A-Za-z0-9.-]+' server/app/config.py | sed 's/.*"//' || true)
+        E=$(grep -oE 'EN1_CLASSIFIER_ID", "[A-Za-z0-9.-]+' server/app/config.py | sed 's/.*"//' || true)
+        if [ -n "$Z" ]; then
+          gh release download "$Z" -p chinese-classifier.tar.gz -D /tmp/zh1 -R "$GITHUB_REPOSITORY"
+          mkdir -p /tmp/zh1x && tar xzf /tmp/zh1/chinese-classifier.tar.gz -C /tmp/zh1x && mv /tmp/zh1x/chinese-classifier server/chinese-main-classifier
+          echo "::notice title=中文主分类器::$Z（自主训练）"
+        fi
+        if [ -n "$E" ]; then
+          gh release download "$E" -p english-classifier.tar.gz -D /tmp/en1 -R "$GITHUB_REPOSITORY"
+          mkdir -p /tmp/en1x && tar xzf /tmp/en1/english-classifier.tar.gz -C /tmp/en1x && mv /tmp/en1x/english-classifier server/english-main-classifier
+          echo "::notice title=英文主分类器::$E（自主训练）"
+        fi

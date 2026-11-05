@@ -41,6 +41,16 @@ HAS_EN3 = (EN3_LOCAL / "config.json").exists()
 EN4_LOCAL = Path(__file__).resolve().parent / "english-doc-classifier-2"
 EN4_DIR = "/models/english-doc-classifier-2"
 HAS_EN4 = (EN4_LOCAL / "config.json").exists()
+# 自主训练的主分类器（config.ZH1_CLASSIFIER_ID / EN1_CLASSIFIER_ID，替换外部的 zhv3 / desklib）：部署工作流下载到
+# server/chinese-main-classifier、server/english-main-classifier；没有时仍用外部模型
+ZH1_LOCAL = Path(__file__).resolve().parent / "chinese-main-classifier"
+EN1_LOCAL = Path(__file__).resolve().parent / "english-main-classifier"
+HAS_ZH1 = (ZH1_LOCAL / "config.json").exists()
+HAS_EN1 = (EN1_LOCAL / "config.json").exists()
+if HAS_ZH1:
+    CLASSIFIER_MODEL = "/models/chinese-main-classifier"
+if HAS_EN1:
+    EN_CLASSIFIER_MODEL = "/models/english-main-classifier"
 CPU_CORES = 4
 # 网址里的名字（https://<用户名>--<名字>.modal.run）：部署工作流用管理员密码算出一个随机名字写进 .web_label，
 # 不写在公开代码里，别人猜不到检测服务的地址（只能经本站 Worker 访问）。没有这个文件时用旧名字。
@@ -72,7 +82,8 @@ image = (
     })
     # 构建镜像时就把模型下载进去，启动时不用再下载
     .add_local_file("download_models.py", "/root/download_models.py", copy=True)
-    .run_commands(f"python /root/download_models.py {OBSERVER_MODEL} {PERFORMER_MODEL} {CLASSIFIER_MODEL} {EN_CLASSIFIER_MODEL}")
+    .run_commands("python /root/download_models.py " + " ".join(
+        m for m in (OBSERVER_MODEL, PERFORMER_MODEL, CLASSIFIER_MODEL, EN_CLASSIFIER_MODEL) if not m.startswith("/")))
     .add_local_dir("app", "/root/app")
     .add_local_dir("static", "/root/static")
     # 各文体在独立测试集上的检出率 / 误判率（报告里的"已知误差"一节）
@@ -80,6 +91,10 @@ image = (
 )
 if _LABEL_FILE.exists():
     image = image.add_local_file(str(_LABEL_FILE), "/root/.web_label")
+if HAS_ZH1:
+    image = image.add_local_dir(str(ZH1_LOCAL), CLASSIFIER_MODEL)
+if HAS_EN1:
+    image = image.add_local_dir(str(EN1_LOCAL), EN_CLASSIFIER_MODEL)
 if HAS_POETRY:
     image = image.add_local_dir(str(POETRY_LOCAL), POETRY_DIR)
 if HAS_CLASSICAL:

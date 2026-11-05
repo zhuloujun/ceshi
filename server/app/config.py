@@ -27,11 +27,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 OBSERVER_MODEL = os.getenv("OBSERVER_MODEL", "Qwen/Qwen2.5-0.5B")
 PERFORMER_MODEL = os.getenv("PERFORMER_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
 # 中文 AI 文本分类器（MPU，ICLR 2024）。留空则不启用。
-CLASSIFIER_MODEL = os.getenv("CLASSIFIER_MODEL", "yuchuantian/AIGC_detector_zhv3")
+# 自主训练的中文 / 英文主分类器（2026-11-05 起试验，替换外部的 zhv3 / desklib）：填本仓库 Release 名（如 chinese-classifier-own1），
+# 部署 / 验收工作流把它解压到 server/chinese-main-classifier、server/english-main-classifier。留空 = 仍用外部模型。
+ZH1_CLASSIFIER_ID = os.getenv("ZH1_CLASSIFIER_ID", "")
+EN1_CLASSIFIER_ID = os.getenv("EN1_CLASSIFIER_ID", "")
+_ZH1_DIR, _EN1_DIR = BASE_DIR / "chinese-main-classifier", BASE_DIR / "english-main-classifier"
+_ZH1_ON = bool(ZH1_CLASSIFIER_ID) and _ZH1_DIR.exists()
+_EN1_ON = bool(EN1_CLASSIFIER_ID) and _EN1_DIR.exists()
+CLASSIFIER_MODEL = os.getenv("CLASSIFIER_MODEL", str(_ZH1_DIR) if _ZH1_ON else "yuchuantian/AIGC_detector_zhv3")
 # 分类器中哪个标签表示"AI 生成"。auto = 按标签名自动判断，判断不了时取下标 1。
 CLASSIFIER_AI_LABEL = os.getenv("CLASSIFIER_AI_LABEL", "auto")
 # 英文 AI 文本分类器（desklib，DeBERTa-v3-large，RAID 基准）。留空则英文只用语言模型特征。
-EN_CLASSIFIER_MODEL = os.getenv("EN_CLASSIFIER_MODEL", "desklib/ai-text-detector-v1.01")
+EN_CLASSIFIER_MODEL = os.getenv("EN_CLASSIFIER_MODEL", str(_EN1_DIR) if _EN1_ON else "desklib/ai-text-detector-v1.01")
+# 校准里记录的模型名：自主模型记 Release 名（各机器上的目录路径不同），外部模型记 Hugging Face 名
+CLASSIFIER_NAME = ZH1_CLASSIFIER_ID if (ZH1_CLASSIFIER_ID and Path(CLASSIFIER_MODEL).is_dir()) else CLASSIFIER_MODEL
+EN_CLASSIFIER_NAME = EN1_CLASSIFIER_ID if (EN1_CLASSIFIER_ID and Path(EN_CLASSIFIER_MODEL).is_dir()) else EN_CLASSIFIER_MODEL
 ENABLE_EN_CLASSIFIER = _bool("ENABLE_EN_CLASSIFIER", True)
 EN_CLS_MAX_TOKENS = _int("EN_CLS_MAX_TOKENS", 512)
 # 英文第二分类器（tools/train_english.py：arXiv / MAGE 人写 vs DeepSeek、文心一言等国产大模型写的英文论文段落，
@@ -257,12 +267,12 @@ CALIBRATION_FILE = Path(os.getenv("CALIBRATION_FILE", str(BASE_DIR / "calibratio
 def classifier_for(register: str) -> str:
     if register in ("en", "en_paper", "en_poetry"):
         # 用了第二分类器时，校准参数必须是按两个分类器一起拟合的，所以把两个名字一起记进校准的 models 里
-        return f"{EN_CLASSIFIER_MODEL}+{EN2_CLASSIFIER_ID}" if EN2_CLASSIFIER_MODEL else EN_CLASSIFIER_MODEL
+        return f"{EN_CLASSIFIER_NAME}+{EN2_CLASSIFIER_ID}" if EN2_CLASSIFIER_MODEL else EN_CLASSIFIER_NAME
     if register == "zh_poetry" and POETRY_CLASSIFIER_MODEL:
         return POETRY_CLASSIFIER_ID
     if register == "zh_classical" and CLASSICAL_CLASSIFIER_MODEL:
         return CLASSICAL_CLASSIFIER_ID
-    return CLASSIFIER_MODEL
+    return CLASSIFIER_NAME
 
 
 def _models_match(cal: dict, register: str) -> bool:

@@ -133,6 +133,10 @@ jobs:
       - name: 下载模型
         working-directory: server
         run: python download_models.py Qwen/Qwen2.5-0.5B Qwen/Qwen2.5-0.5B-Instruct yuchuantian/AIGC_detector_zhv3 desklib/ai-text-detector-v1.01
+      - name: 取出自主训练的主分类器（config 里 ZH1 / EN1_CLASSIFIER_ID 填了 Release 名时）
+        uses: ./.github/actions/main-classifiers
+        with:
+          token: ${{ github.token }}
       - name: 下载数据集（现代汉语：NLPCC 2025 Task 1）
         if: ${{ !startsWith(matrix.part, 'en_') && !startsWith(matrix.part, 'cl_') && !startsWith(matrix.part, 'po_') }}
         run: git clone --depth 1 https://github.com/NLP2CT/NLPCC-2025-Task1 /tmp/nlpcc
@@ -281,10 +285,12 @@ jobs:
         env:
           OBSERVER_MODEL: Qwen/Qwen2.5-0.5B
           PERFORMER_MODEL: Qwen/Qwen2.5-0.5B-Instruct
-          CLASSIFIER_MODEL: yuchuantian/AIGC_detector_zhv3
-          EN_CLASSIFIER_MODEL: desklib/ai-text-detector-v1.01
           POETRY_CLASSIFIER_MODEL: /tmp/poetry-classifier
         run: |
+          # 主分类器：config 里填了自主训练的 Release 名时，校准记录 Release 名（这一步不加载模型，建个空目录即可让 config 认出来）
+          grep -qE 'ZH1_CLASSIFIER_ID", "[A-Za-z0-9]' app/config.py && { mkdir -p chinese-main-classifier; export CLASSIFIER_MODEL=$PWD/chinese-main-classifier; } || export CLASSIFIER_MODEL=yuchuantian/AIGC_detector_zhv3
+          grep -qE 'EN1_CLASSIFIER_ID", "[A-Za-z0-9]' app/config.py && { mkdir -p english-main-classifier; export EN_CLASSIFIER_MODEL=$PWD/english-main-classifier; } || export EN_CLASSIFIER_MODEL=desklib/ai-text-detector-v1.01
+          echo "主分类器：$CLASSIFIER_MODEL · $EN_CLASSIFIER_MODEL"
           # 校准里记录的诗词 / 文言分类器版本：用本次打分所用的版本（工作流输入，留空则沿用当前校准里的版本）
           T="${{ github.event.inputs.poetry_tag }}"; [ -z "$T" ] && T=$(grep -oE '"poetry-classifier-v[0-9]+"' app/default_calibration.json | head -1 | tr -d '"')
           [ -n "$T" ] && export POETRY_CLASSIFIER_ID=$T

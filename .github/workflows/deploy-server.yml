@@ -58,6 +58,10 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install "modal==1.5.5"
+      - name: 取出自主训练的主分类器（config 里 ZH1 / EN1_CLASSIFIER_ID 填了 Release 名时）
+        uses: ./.github/actions/main-classifiers
+        with:
+          token: ${{ github.token }}
       - name: 取出诗词分类器（仓库是私有的，Release 文件需要用本工作流的令牌下载）
         env:
           GH_TOKEN: ${{ github.token }}
