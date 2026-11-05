@@ -577,7 +577,15 @@ def evaluate_rows(rows, cal, name):
            "ai_caught": round(sum(p >= thr for p in ap_) / len(ap_), 4) if ap_ else None,
            "human_flagged": round(sum(p >= thr for p in hp) / len(hp), 4) if hp else None,
            "per_signal_auroc": {}, "ai_caught_by_model": {}, "human_flagged_by_source": {}}
-    for k in scoring.EXTENDED_FEATURES + ["logit_classifier_mpu", "logit_classifier_en2"]:
+    # 低误报下的检出率（近年检测论文常用的 TPR@1%FPR）：把阈值放在"人写只冤枉 1%"处，看还能抓到多少 AI。
+    # 布里尔分数（概率校准的常用指标）：概率本身准不准，越低越好（0 完美，0.25 等于瞎猜 50%）。都只用于报告，不改判定。
+    if len(hp) >= 50 and ap_:
+        hs_ = sorted(hp)
+        t1 = hs_[min(len(hs_) - 1, int(0.99 * len(hs_)))]
+        res["tpr_at_1fpr"] = round(sum(p > t1 for p in ap_) / len(ap_), 4)
+    if hp or ap_:
+        res["brier"] = round((sum(p * p for p in hp) + sum((1 - p) ** 2 for p in ap_)) / (len(hp) + len(ap_)), 4)
+    for k in scoring.EXTENDED_FEATURES + scoring.LATE_FEATURES + ["logit_classifier_mpu", "logit_classifier_en2"]:
         pv = [scoring.feature_value(r["s"], k) for r in rows if r["y"] == 1]
         nv = [scoring.feature_value(r["s"], k) for r in rows if r["y"] == 0]
         pv = [v for v in pv if v is not None]; nv = [v for v in nv if v is not None]
@@ -631,6 +639,8 @@ def fit_profile(prof, parts, target_fpr):
                     ("语言模型特征", [f for f in scoring.EXTENDED_FEATURES if f != "logit_classifier"])]
         if all(scoring.feature_value(r, "div_std") is not None for r in hs[:20]):
             variants.append(("全部特征 + 惊奇度多样性（DivEye）", scoring.EXTENDED_FEATURES + scoring.DIVEYE_FEATURES))
+        if sum(scoring.feature_value(r, "late_volatility") is not None for r in hs[:20]) >= 10:
+            variants.append(("全部特征 + 后段稳定性/熵过滤", scoring.EXTENDED_FEATURES + scoring.LATE_FEATURES))
         if all(scoring.feature_value(r, "logit_classifier_mpu") is not None for r in hs[:20]):
             # 有专用分类器（如文言分类器）时，通用中文分类器作为第二意见一起参与比较
             variants.append(("全部特征 + 通用分类器", scoring.EXTENDED_FEATURES + ["logit_classifier_mpu"]))
@@ -797,6 +807,10 @@ def stage_fit(args):
                 parts_txt.append(f"检出率 {e['ai_caught']:.1%}")
             if e["human_flagged"] is not None:
                 parts_txt.append(f"误判率 {e['human_flagged']:.1%}")
+            if e.get("tpr_at_1fpr") is not None:
+                parts_txt.append(f"1% 误报下检出 {e['tpr_at_1fpr']:.1%}")
+            if e.get("brier") is not None:
+                parts_txt.append(f"布里尔 {e['brier']}")
             lines.append(f"- **{e['name']}**（{e['n_ai']} AI / {e['n_human']} 人写）：" + "；".join(parts_txt))
             if e["ai_caught_by_model"]:
                 lines.append("  - 各来源检出率：" + "，".join(f"{m} {v:.0%}" for m, v in e["ai_caught_by_model"].items()))
