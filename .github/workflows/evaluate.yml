@@ -307,6 +307,8 @@ jobs:
           fi
           python tools/evaluate.py --stage fit --scores-dir tools/scores --target-fpr 0.05
       - name: 把结果提交回仓库
+        # 校准直接决定线上判定，必须先离线验收再合并（真人误判不升、AI 检出不降）：main 上因代码改动自动触发的评估只出报告，不改 main 的校准
+        if: ${{ !(github.event_name == 'push' && github.ref_name == 'main') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
