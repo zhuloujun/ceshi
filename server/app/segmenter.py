@@ -1,5 +1,6 @@
 """把长文切成适合检测的段落，并识别不应计入 AI 率的部分（参考文献、以引文为主的段落）。"""
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 from . import config
@@ -1179,6 +1180,8 @@ _HOMO = str.maketrans({
     "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X", "Ζ": "Z",
 })
 _MIXED_WORD = re.compile(r"[A-Za-z\u0370-\u03ff\u0400-\u04ff]+")
+_HOMO_KEYS = {chr(k) for k in _HOMO}
+_FW_LATIN = re.compile("[\uff21-\uff3a\uff41-\uff5a]|[\U0001d400-\U0001d6a3]")
 
 
 def deobfuscate(text: str):
@@ -1187,15 +1190,32 @@ def deobfuscate(text: str):
     t, n_zw = _ZERO_WIDTH.subn("", text or "")
     n_hw = 0
 
+    # 全文是英文时（几乎没有真正的俄语 / 希腊语单词），整词都被换成形近字母的英文单词也还原：RAID 的同形字攻击常把
+    # "ocean"里的 o、c、e、a 全换掉，只剩一个 n 是拉丁字母，按“拉丁字母过半”的旧规则认不出（2026-11-05 RAID 测试：
+    # 被攻击的 GPT-4 摘要只抓到 47%，未攻击的是 75%）。俄语、希腊语为主的文字不受影响。
+    # 判断依据：真正的俄语 / 希腊语单词几乎总含形近表以外的字母（б、д、л、я、λ、π……），被攻击的英文单词则全是形近字母。只还原西里尔字母、两个字母以上的词：
+    # 希腊字母在英文里常是正经用法（α-synuclein、哲学著作里的希腊词），不能动
+    words = _MIXED_WORD.findall(t)
+    real_foreign = sum(1 for w in words if any(not c.isascii() and c not in _HOMO_KEYS for c in w))
+    latin_doc = len(words) >= 30 and real_foreign <= 0.02 * len(words)
+
     def fix(m):
         nonlocal n_hw
         w = m.group(0)
         lat = sum(c.isascii() for c in w)
-        if 0 < lat < len(w) and lat >= 0.5 * len(w):
+        if lat == len(w):
+            return w
+        if (0 < lat and lat >= 0.5 * len(w)) or (latin_doc and len(w) >= 2 and all(c.isascii() or (c in _HOMO_KEYS and '\u0400' <= c <= '\u04ff') for c in w)):
             n_hw += 1
             return w.translate(_HOMO)
         return w
     t = _MIXED_WORD.sub(fix, t)
+    # 全角拉丁字母和数学字母（ａ、𝐚、𝑎）：逐字 NFKC，只在结果是 ASCII 字母时替换（不动中文全角标点）
+    def fw(m):
+        nonlocal n_hw
+        n_hw += 1
+        return unicodedata.normalize("NFKC", m.group(0))
+    t = _FW_LATIN.sub(fw, t)
     return t, n_zw, n_hw
 
 
