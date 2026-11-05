@@ -1,0 +1,17 @@
+# 检查加密真人语料能否正常还原（文件数、总行数）
+name: 检查真人语料还原
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 还原加密的真人语料
+        uses: ./.github/actions/corpus
+        with:
+          admin_token: ${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}
+      - run: |
+          n=$(ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/gen_en/pl_*.jsonl server/tools/data/human_cl/*.jsonl server/tools/data/eval_*_user_docs.jsonl | wc -l)
+          l=$(cat server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/human_cl/*.jsonl | wc -l)
+          echo "::notice title=还原结果::$n 个文件，真人语料 $l 行"
+          [ "$n" -ge 20 ]
