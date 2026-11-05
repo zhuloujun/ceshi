@@ -105,6 +105,21 @@ jobs:
           else
             echo "::warning title=中文第二分类器::没有找到 Release $TAG，本次不部署它"
           fi
+      - name: 取出句级标注模型（版本见 server/app/config.py 的 TAGGER_ZH_ID / TAGGER_EN_ID）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for L in zh en; do
+            U=$(echo $L | tr a-z A-Z); TAG=$(grep -oE "TAGGER_${U}_ID\", \"[A-Za-z0-9.-]+" server/app/config.py | grep -oE '[A-Za-z0-9.-]+$' || true)
+            [ -z "$TAG" ] && continue
+            A=$([ $L = zh ] && echo chinese-classifier.tar.gz || echo english-classifier.tar.gz)
+            mkdir -p /tmp/tg-$L
+            if gh release download "$TAG" -p "$A" -D /tmp/tg-$L -R "${{ github.repository }}"; then
+              tar xzf /tmp/tg-$L/$A -C /tmp/tg-$L && D=$(dirname "$(find /tmp/tg-$L -name config.json | head -1)") && echo "TAGGER_${U}_MODEL=$D" >> "$GITHUB_ENV" && ls "$D"
+            else
+              echo "::warning title=句级标注模型::没有找到 Release $TAG，本次不部署它"
+            fi
+          done
       - name: 取出英文整篇分类器（版本见 server/app/config.py 的 EN3_CLASSIFIER_ID）
         env:
           GH_TOKEN: ${{ github.token }}

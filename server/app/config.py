@@ -269,10 +269,16 @@ SPLIT_INLINE = _bool("SPLIT_INLINE", True)
 # 默认关闭（2026-11-05 测试）：60 篇带答案的混写文章里只对英文“人写中插入一段 AI”有小幅提升（AI 字检出 50% → 60%），
 # 中文几乎没有作用；200 + 91 篇真人文字被判 AI 的篇数不变，但平均 AI 率升了约 1 个百分点（零星句子被单独切出后过线）。
 # 需要专门的句级模型后再开启。HYBRID_SPLIT=1 可做对照。
-HYBRID_SPLIT = _bool("HYBRID_SPLIT", False)
+HYBRID_SPLIT = _bool("HYBRID_SPLIT", True)
+# 只在该语言的句级标注模型可用时才切（2026-11-05：中文句级模型 chinese-tagger-v1 通过对照；英文没有句级模型时不切，
+# 因为只用整段分类器拼句子分数时，真人英文平均分会升高约 1 分）
+HYBRID_REQUIRE_TAGGER = _bool("HYBRID_REQUIRE_TAGGER", True)
 # 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
 TAGGER_EN_MODEL = os.getenv("TAGGER_EN_MODEL", "")
 TAGGER_ZH_MODEL = os.getenv("TAGGER_ZH_MODEL", "")
+# 部署 / 离线验收按这里的 Release 名下载句级标注模型（空 = 不用）
+TAGGER_ZH_ID = os.getenv("TAGGER_ZH_ID", "chinese-tagger-v1")
+TAGGER_EN_ID = os.getenv("TAGGER_EN_ID", "")
 HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "2.0") or 2.0)   # 每换一次作者的代价（对数似然）
 HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
 HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长
