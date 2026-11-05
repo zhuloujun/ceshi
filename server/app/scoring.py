@@ -52,6 +52,9 @@ EXTENDED_FEATURES = BASE_FEATURES + [
 ]
 # 逐 token 惊奇度的分布与起伏（DivEye，Basani & Chen 2026）：作为候选特征组参与评估比较，交叉验证更好才采用
 DIVEYE_FEATURES = ["div_std", "div_skew", "div_kurt", "div_d1_std", "div_d2_std"]
+# 2026 年 EMNLP 的两项零样本新信号：后段稳定性（Sun 等）与熵过滤 Fast-DetectGPT（Han 等）。
+# 同样只作为候选组参与比较，交叉验证明显更好才采用，默认的"全部特征"不变。
+LATE_FEATURES = ["late_d1_disp", "late_volatility", "fastdetect_ent"]
 _LEGACY_NAMES = {"logit(classifier)": "logit_classifier"}
 
 

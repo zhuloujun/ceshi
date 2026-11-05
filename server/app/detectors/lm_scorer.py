@@ -170,9 +170,37 @@ def _aggregate(t: dict, lo: int, hi: int) -> dict | None:
     sv = sum(z[3] for z in keep)
     if sv > 0:
         fd_trim = (sum(z[1] for z in keep) - sum(z[2] for z in keep)) / math.sqrt(sv) / math.sqrt(len(keep))
+    # 熵过滤版 Fast-DetectGPT（Han 等，EMNLP 2026《When Less is More》）：只保留模型"有得选"（熵最高）的约 40% token，
+    # 低熵 token（固定搭配、标点、专名后半）人和 AI 都只能那样写，混进来只会稀释差异。论文也指出它并非总是更好，所以只作候选特征。
+    fd_ent = None
+    es = t["ent"][lo:hi]
+    if n_tok >= 40:
+        cut = sorted(es, reverse=True)[int(0.4 * n_tok) - 1]
+        sel = [(l, m, v) for l, m, v, e in zip(ll, mu, vs, es) if e >= cut]
+        sv2 = sum(x[2] for x in sel)
+        if sv2 > 0:
+            fd_ent = (sum(x[0] for x in sel) - sum(x[1] for x in sel)) / math.sqrt(sv2) / math.sqrt(len(sel))
+    # 后段稳定性（Sun、Bao 等，Findings of EMNLP 2026《When AI Settles Down》）：AI 写到后半段，逐 token 对数概率的起伏
+    # 比人写更快"安定"下来。两个特征都只看后半段：一阶差分的离散度（Derivative Dispersion）、局部窗口标准差的均值（Local Volatility）。
+    late_d1, late_vol = None, None
+    lh = ll[n_tok // 2:]
+    if len(lh) >= 24:
+        d1 = [b - a for a, b in zip(lh, lh[1:])]
+        m1 = sum(d1) / len(d1)
+        late_d1 = math.sqrt(sum((x - m1) ** 2 for x in d1) / len(d1))
+        k = 8
+        sds = []
+        for i in range(0, len(lh) - k + 1):
+            win = lh[i:i + k]
+            mw = sum(win) / k
+            sds.append(math.sqrt(sum((x - mw) ** 2 for x in win) / k))
+        late_vol = sum(sds) / len(sds) if sds else None
     return {
         **div,
         "fastdetect_trim": fd_trim,
+        "fastdetect_ent": fd_ent,
+        "late_d1_disp": late_d1,
+        "late_volatility": late_vol,
         "binoculars": ppl / x_ppl if x_ppl > 0 else None,
         "fastdetect": fd,
         "fastdetect_norm": fd / math.sqrt(n_tok) if fd is not None else None,
