@@ -112,6 +112,7 @@ def main():
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--time-budget-min", type=float, default=150)
     ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='z' 为现代汉语）")
+    ap.add_argument("--grad-ckpt", action="store_true", help="梯度检查点（large 底座在 16 GB 显卡上省显存）")
     ap.add_argument("--user-docs-reps", type=int, default=1, help="用户段落在训练集里重复几次")
     args = ap.parse_args()
 
@@ -148,6 +149,8 @@ def main():
     tok = AutoTokenizer.from_pretrained(args.base)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.base, num_labels=2, id2label={0: "human", 1: "ai"}, label2id={"human": 0, "ai": 1}).to(dev)
+    if args.grad_ckpt:
+        model.gradient_checkpointing_enable()
 
     def batches(data, bs, shuffle):
         idx = list(range(len(data)))
