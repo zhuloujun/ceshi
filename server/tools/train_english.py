@@ -375,6 +375,8 @@ def main():
     ap.add_argument("--raid-per-model", type=int, default=0, help="RAID 每个领域 × 每个国外模型取多少篇（0 = 不用）")
     ap.add_argument("--raid-per-human", type=int, default=300, help="RAID 每个领域取多少篇真人原文")
     ap.add_argument("--grad-ckpt", action="store_true", help="梯度检查点（大模型如 deberta-v3-large 在 16 GB 显卡上训练时省显存）")
+    ap.add_argument("--tagger", action="store_true", help="改为训练句级“作者标注”模型（人机混写定位，见 tools/tagger_train.py）")
+    ap.add_argument("--tagger-steps", type=int, default=6000, help="句级模型训练多少步")
     ap.add_argument("--novel-human", type=int, default=0, help="从 BookCorpusOpen 取多少段当代真人小说片段（0 = 不用）")
     args = ap.parse_args()
     if args.base.startswith("release:"):
@@ -405,6 +407,10 @@ def main():
     torch.manual_seed(0)
     rnd = random.Random(0)
     rows, gen_models = build_rows(args, rnd)
+    if args.tagger:
+        from tagger_train import train_tagger
+        train_tagger(rows, args, "en", args.out)
+        return
     train = [r for r in rows if r["split"] == "train"]
     test = [r for r in rows if r["split"] == "test"]
     rnd.shuffle(train)
