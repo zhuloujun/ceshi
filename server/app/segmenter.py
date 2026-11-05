@@ -1197,3 +1197,80 @@ def deobfuscate(text: str):
         return w
     t = _MIXED_WORD.sub(fix, t)
     return t, n_zw, n_hw
+
+
+# 行内的作品编号（"……我站住脚，看了他一会儿。Z3、夕阳下的……"）：用户把真人、AI 的句子交替排在同一个大段里测试时，
+# 编号不在行首，作品集模式认不出来，整段被当成一篇判断，人写和 AI 写的句子平均下来大多“未达阈值”（2026-11-05 cs1105）。
+# 只认“字母 + 数字 + 顿号”且全文 ≥ 4 处、至少 2 处不在行首：日常文字里几乎不会出现这种写法。
+_INLINE_LABEL = re.compile(r"(?<![A-Za-z0-9])[A-Z]{1,2}\d{1,3}、(?=\S)")
+
+
+def split_inline_labels(text: str):
+    """把行内的作品编号前面断成新行，交给作品集模式逐条判断。返回 (文本, 断开的处数)。"""
+    ms = list(_INLINE_LABEL.finditer(text or ""))
+    inline = [m for m in ms if m.start() > 0 and text[m.start() - 1] not in "\n"
+              and text[:m.start()].rsplit("\n", 1)[-1].strip()]
+    if len(ms) < 4 or len(inline) < 2:
+        return text, 0
+    out, last = [], 0
+    for m in inline:
+        out.append(text[last:m.start()].rstrip())
+        out.append("\n\n")
+        last = m.start()
+    out.append(text[last:])
+    return "".join(out), len(inline)
+
+
+_SCRIPT_SENT = re.compile(r"(?<=[。！？!?；])|(?<=[.!?])(?=\s*[A-Z\"“‘(一-鿿])")
+
+
+def _script_of(s: str) -> str:
+    cjk, lat = len(_CJK.findall(s)), len(_LATIN.findall(s))
+    if cjk >= 4 and cjk >= 0.3 * (cjk + lat):
+        return "zh"
+    if lat >= 20 and cjk <= 0.05 * lat:
+        return "en"
+    return "?"
+
+
+def split_script_switches(text: str):
+    """同一段里中文和英文成段交替（中文正文后面直接接一大段英文，或反过来）时，在语言切换处断开：
+    两种语言要用不同的模型和阈值判断，混在一段里只能按占多数的那种语言判断，另一种语言的句子等于没检测
+    （2026-11-05 cs1105：一段 1273 字的“现代汉语”里夹着一句 56 词的英文）。
+    只在两边都够长（中文 ≥ 40 字、英文 ≥ 25 词）时断开，中文里夹的英文术语、书名、引文不受影响。返回 (文本, 断开的处数)。"""
+    lines = (text or "").split("\n")
+    n_split = 0
+    for li, line in enumerate(lines):
+        if len(line) < 120 or not (_CJK.search(line) and _LATIN.search(line)):
+            continue
+        sents = [s for s in _SCRIPT_SENT.split(line) if s]
+        runs = []                      # [script, text]
+        for s in sents:
+            sc = _script_of(s)
+            if sc == "?" and runs:
+                runs[-1][1] += s
+            elif runs and runs[-1][0] == sc:
+                runs[-1][1] += s
+            else:
+                runs.append([sc, s])
+        if len(runs) < 2:
+            continue
+
+        def long_enough(r):
+            return (r[0] == "zh" and len(_CJK.findall(r[1])) >= 40) or (r[0] == "en" and len(r[1].split()) >= 25)
+        # 不够长的小块并入前一块，再看还剩几块
+        merged = []
+        for r in runs:
+            if merged and not long_enough(r):
+                merged[-1][1] += r[1]
+            elif merged and merged[-1][0] == r[0]:
+                merged[-1][1] += r[1]
+            else:
+                merged.append(list(r))
+        if len(merged) >= 2 and merged[0][0] != "?" and not long_enough(merged[0]):
+            merged[1][1] = merged[0][1] + merged[1][1]
+            merged.pop(0)
+        if len(merged) >= 2:
+            lines[li] = "\n\n".join(r[1].strip() for r in merged)
+            n_split += len(merged) - 1
+    return "\n".join(lines), n_split
