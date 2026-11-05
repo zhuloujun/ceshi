@@ -54,7 +54,7 @@ def main():
             r = g.get("raw") or {}
             f = lambda k: "" if r.get(k) is None else f" {k.replace('classifier_', '').replace('classifier', 'cls')}{round(r[k] * 100)}"
             reg = {"zh_poetry": "po", "zh_classical": "cl", "en": "en"}.get(g.get("register"), "")
-            segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}] {g.get('label') or g.get('kind')} p{round((g.get('prob') or g.get('ref_prob') or 0) * 100)}"
+            segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}]@{g.get('start')}+{g.get('chars')} {g.get('label') or g.get('kind')} p{round((g.get('prob') or g.get('ref_prob') or 0) * 100)}"
                         f" {reg}{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}")
         # 注释条数有上限：每篇文档的分段明细合并成尽量少的几条
         chunk, out = "", []
