@@ -1267,10 +1267,10 @@ def split_script_switches(text: str):
                 merged[-1][1] += r[1]
             else:
                 merged.append(list(r))
-        if len(merged) >= 2 and merged[0][0] != "?" and not long_enough(merged[0]):
+        if len(merged) >= 2 and not long_enough(merged[0]):
             merged[1][1] = merged[0][1] + merged[1][1]
             merged.pop(0)
-        if len(merged) >= 2:
+        if len(merged) >= 2 and all(long_enough(r) for r in merged):
             lines[li] = "\n\n".join(r[1].strip() for r in merged)
             n_split += len(merged) - 1
     return "\n".join(lines), n_split
