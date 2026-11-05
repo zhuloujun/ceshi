@@ -47,7 +47,7 @@ def signal_prob(name: str, value, cal: dict):
 # 逻辑回归可用的特征。BASE 在样本少时使用；样本足够多（每类 ≥ 30 段）时使用 EXTENDED。
 BASE_FEATURES = ["fastdetect", "binoculars", "logit_classifier"]
 EXTENDED_FEATURES = BASE_FEATURES + [
-    "fastdetect_norm", "lrr", "log_rank", "entropy", "top10", "lp_burstiness",
+    "fastdetect_norm", "fastdetect_trim", "lrr", "log_rank", "entropy", "top10", "lp_burstiness",
     "style_cv", "style_phrases",
 ]
 # 逐 token 惊奇度的分布与起伏（DivEye，Basani & Chen 2026）：作为候选特征组参与评估比较，交叉验证更好才采用

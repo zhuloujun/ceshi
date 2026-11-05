@@ -366,6 +366,7 @@ def main():
     ap.add_argument("--n-mage-ai", type=int, default=2500, help="MAGE AI 取多少段")
     ap.add_argument("--genre-human-windows", type=int, default=3, help="每篇非论文真人长文取几段")
     ap.add_argument("--skip-prefix", nargs="*", default=[], help="不使用这些前缀的生成数据（如 tr_），用于对比实验")
+    ap.add_argument("--augment", type=float, default=0.0, help="给多大比例的训练样本加一份轻度扰动副本（0 = 不用）")
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--time-budget-min", type=float, default=270)
     ap.add_argument("--user-docs", default="", help="用户提供的已标注段落（jsonl，r='en' 为英文）")
@@ -417,6 +418,11 @@ def main():
     elif len(a_tr) < len(h_tr):
         a_tr = (a_tr * math.ceil(len(h_tr) / len(a_tr)))[:len(h_tr)]
     train = h_tr + a_tr
+    if args.augment > 0:   # 轻度扰动增强（tools/augment.py）：真人、AI 同比例，标签不变
+        from augment import augment_rows
+        _ex = augment_rows(train, args.augment, "en", rnd)
+        print(f"扰动增强 {len(_ex)} 段", flush=True)
+        train += _ex
     rnd.shuffle(train)
     by = lambda rs: {s: sum(r["src"] == s for r in rs) for s in sorted({r["src"] for r in rs})}
     print(f"训练 {len(train)}：{json.dumps(by(train), ensure_ascii=False)}", flush=True)
