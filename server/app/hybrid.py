@@ -15,7 +15,7 @@ import math
 import re
 
 _ZH_SENT = re.compile(r"(?<=[。！？!?；;…])(?![”’」』\"'）)])|(?<=[。！？!?；;…][”’」』\"'）)])")
-_EN_SENT = re.compile(r"(?<=[.!?])(?=\s|[A-Z\"“‘(])|(?<=[.!?][\"”’)])(?=\s|[A-Z])")
+_EN_SENT = re.compile(r"(?<=[.!?])(?=\s|[A-Z\"“‘(])|(?<=[.!?][\"”’)])(?=\s|[A-Z])|(?<=[a-z%)\]][.!?;])(?=[A-Z](?:[a-z]|\s))")
 _CJK = re.compile(r"[一-鿿]")
 
 
@@ -127,8 +127,13 @@ def plan_split(text: str, register: str, single: list, pairs: list, spans: list,
     if len(spans) < 3:
         return None
     ev = unit_evidence(single, pairs)
-    path = viterbi(ev, cfg["switch_cost"], cfg["temp"])
     sizes = [size_of(text[a:b], register) for a, b in spans]
+    if cfg.get("size_weight"):
+        # 长的句子单元证据更足：按单元长度加权（以 12 词 / 20 字为 1 份，最多 3 份）。2026-11-06 cs1106：
+        # 一整段 70 词的真人文字只算一个单元时，敌不过两次“换作者”的代价，被并进了前后的 AI 菜谱
+        unit = 12 if register == "en" else 20
+        ev = [e * min(3.0, max(1.0, n / unit)) for e, n in zip(ev, sizes)]
+    path = viterbi(ev, cfg["switch_cost"], cfg["temp"])
     path = merge_short_runs(path, sizes, cfg["min_en"] if register == "en" else cfg["min_zh"])
     rs = runs_of(path)
     if len(rs) < 2 or not any(s for s, _, _ in rs):
