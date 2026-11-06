@@ -1294,3 +1294,55 @@ def split_script_switches(text: str):
             lines[li] = "\n\n".join(r[1].strip() for r in merged)
             n_split += len(merged) - 1
     return "\n".join(lines), n_split
+
+
+_ZH_SENT = re.compile(r"(?<=[。！？!?；;])")
+
+
+def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, group: int = 36):
+    """同一段（没有换行）里现代汉语、文言、诗词成块交替时，在文体切换处断开（2026-11-06 cs1106：整篇 1.1 万字
+    只有一个段落，文言、宋词、元曲、对联和现代散文首尾相接，切成 400 字的窗口后，文言和现代文混在一起，按“现代汉语”
+    的模型判断，等于没有检测）。逐句（凑够约 24 字一组）判断文体，相邻同文体的合并；每一块都 ≥ min_run 字才断开，
+    现代文里引的一两句古文不受影响。返回 (文本, 断开的处数)。"""
+    lines = (text or "").split("\n")
+    n_split = 0
+    for li, line in enumerate(lines):
+        if len(_CJK.findall(line)) < min_line:
+            continue
+        sents = [s for s in _ZH_SENT.split(line) if s]
+        groups, cur = [], ""
+        for s in sents:
+            cur += s
+            if len(_CJK.findall(cur)) >= group:
+                groups.append(cur); cur = ""
+        if cur:
+            if groups:
+                groups[-1] += cur
+            else:
+                groups.append(cur)
+        if len(groups) < 3:
+            continue
+        runs = []
+        for g in groups:
+            r = detect_register(g)
+            if r == "en":
+                r = "?"
+            reg = "zh_cl" if r in ("zh_classical", "zh_poetry") else r
+            if runs and (reg == runs[-1][0] or reg == "?"):
+                runs[-1][1] += g
+            else:
+                runs.append([reg, g])
+        size = lambda r: len(_CJK.findall(r[1]))
+        merged = []
+        for r in runs:
+            if merged and (size(r) < min_run or merged[-1][0] == r[0]):
+                merged[-1][1] += r[1]
+            else:
+                merged.append(list(r))
+        if len(merged) >= 2 and size(merged[0]) < min_run:
+            merged[1][1] = merged[0][1] + merged[1][1]
+            merged.pop(0)
+        if len(merged) >= 2 and all(size(r) >= min_run for r in merged):
+            lines[li] = "\n\n".join(r[1].strip() for r in merged)
+            n_split += len(merged) - 1
+    return "\n".join(lines), n_split
