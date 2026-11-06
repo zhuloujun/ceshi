@@ -109,10 +109,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for L in zh en; do
+          for L in zh en zc zp; do
             U=$(echo $L | tr a-z A-Z); TAG=$(grep -oE "TAGGER_${U}_ID\", \"[A-Za-z0-9.-]+" server/app/config.py | grep -oE '[A-Za-z0-9.-]+$' || true)
             [ -z "$TAG" ] && continue
-            A=$([ $L = zh ] && echo chinese-classifier.tar.gz || echo english-classifier.tar.gz)
+            A=$(case $L in zh) echo chinese-classifier.tar.gz;; en) echo english-classifier.tar.gz;; zc) echo classical-classifier.tar.gz;; zp) echo poetry-classifier.tar.gz;; esac)
             mkdir -p /tmp/tg-$L
             if gh release download "$TAG" -p "$A" -D /tmp/tg-$L -R "${{ github.repository }}"; then
               tar xzf /tmp/tg-$L/$A -C /tmp/tg-$L && D=$(dirname "$(find /tmp/tg-$L -name config.json | head -1)") && echo "TAGGER_${U}_MODEL=$D" >> "$GITHUB_ENV" && ls "$D"
@@ -150,7 +150,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           for kv in ${{ github.event.inputs.taggers }}; do
-            L="${kv%%=*}"; TAG="${kv#*=}"; A=$([ "$L" = zh ] && echo chinese-classifier.tar.gz || echo english-classifier.tar.gz)
+            L="${kv%%=*}"; TAG="${kv#*=}"; A=$(case $L in zh) echo chinese-classifier.tar.gz;; en) echo english-classifier.tar.gz;; zc) echo classical-classifier.tar.gz;; zp) echo poetry-classifier.tar.gz;; esac)
             mkdir -p /tmp/tag-$L && gh release download "$TAG" -p "$A" -D /tmp/tag-$L -R "${{ github.repository }}" && tar xzf /tmp/tag-$L/$A -C /tmp/tag-$L
             D=$(dirname "$(find /tmp/tag-$L -name config.json | head -1)")
             U=$(echo "$L" | tr a-z A-Z); echo "TAGGER_${U}_MODEL=$D" >> "$GITHUB_ENV"; echo "::notice title=句级标注模型::$L $TAG -> $D"

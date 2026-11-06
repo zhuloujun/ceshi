@@ -278,19 +278,26 @@ HYBRID_REQUIRE_TAGGER = _bool("HYBRID_REQUIRE_TAGGER", True)
 # 文言 / 诗词也做混写切分（用专用分类器打短句分数，语言模型能逐字复现的名篇原文按人写）；2026-11-06 试验，默认关闭
 HYBRID_CLASSICAL = _bool("HYBRID_CLASSICAL", False)
 HYBRID_FAMOUS_PPL = float(os.getenv("HYBRID_FAMOUS_PPL", "4.0") or 4.0)
+HYBRID_SIZE_WEIGHT = _bool("HYBRID_SIZE_WEIGHT", False)   # 句子单元按长度加权（2026-11-06 试验）
 HYBRID_CL_AI_MEAN = float(os.getenv("HYBRID_CL_AI_MEAN", "0.6") or 0.6)
 # 一整段没有换行、现代汉语 / 文言 / 诗词首尾相接时，在文体切换处断开（segmenter.split_register_switches）；2026-11-06 试验
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
 # 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
 TAGGER_EN_MODEL = os.getenv("TAGGER_EN_MODEL", "")
 TAGGER_ZH_MODEL = os.getenv("TAGGER_ZH_MODEL", "")
+TAGGER_ZC_MODEL = os.getenv("TAGGER_ZC_MODEL", "")   # 文言句级标注模型
+TAGGER_ZP_MODEL = os.getenv("TAGGER_ZP_MODEL", "")   # 诗词句级标注模型
 # 部署 / 离线验收按这里的 Release 名下载句级标注模型（空 = 不用）
 TAGGER_ZH_ID = os.getenv("TAGGER_ZH_ID", "chinese-tagger-v1")
 TAGGER_EN_ID = os.getenv("TAGGER_EN_ID", "english-tagger-v1")
+TAGGER_ZC_ID = os.getenv("TAGGER_ZC_ID", "classical-tagger-v2")
+TAGGER_ZP_ID = os.getenv("TAGGER_ZP_ID", "")
 HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "2.0") or 2.0)   # 每换一次作者的代价（对数似然）
 HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
 HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长
 HYBRID_MIN_ZH_CHARS = _int("HYBRID_MIN_ZH_CHARS", 40)
+# 文言 / 诗词切分出的每一块至少多少字（2026-11-06，90 字：混写卷 AI 检出 50.5%→53.1%、真人误标 1.6%→1.2%；120 字则检出无提升。金史本传末尾 84 字被单独切出、判成 AI；文言句子短、证据少，单独切块要更长）
+HYBRID_MIN_ZC_CHARS = _int("HYBRID_MIN_ZC_CHARS", 90)
 HYBRID_AI_MEAN = float(os.getenv("HYBRID_AI_MEAN", "0.9") or 0.9)        # AI 块的单句分数平均至少这么高才切
 HYBRID_HUMAN_MEAN = float(os.getenv("HYBRID_HUMAN_MEAN", "0.35") or 0.35)  # 人写块的平均至多这么高才切
 HYBRID_AI_SURE = float(os.getenv("HYBRID_AI_SURE", "1.01") or 1.01)      # AI 块平均达到此值，综合分数没过阈值也计入（默认关闭：

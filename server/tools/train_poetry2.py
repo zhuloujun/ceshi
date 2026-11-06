@@ -204,6 +204,10 @@ def main():
     ap.add_argument("--eval-model", default="", help="只评估这个已训练好的模型（同样的评估集，用于新旧版本对比），不训练")
     ap.add_argument("--user-docs", default="", help="用户提供的已标注文档段落（jsonl，见 load_user_docs）")
     ap.add_argument("--user-docs-reps", type=int, default=6, help="用户文档段落在训练集里重复几次")
+    ap.add_argument("--tagger", action="store_true", help="改为训练句级“作者标注”模型（人机混写定位，见 tools/tagger_train.py）")
+    ap.add_argument("--tagger-steps", type=int, default=6000)
+    ap.add_argument("--label-smoothing", type=float, default=0.1)
+    ap.add_argument("--grad-ckpt", action="store_true")
     args = ap.parse_args()
 
     import torch
@@ -254,6 +258,14 @@ def main():
     ud = drop_memorized(ud, threshold_from_env())   # 去掉 AI 文档里照抄的古人原文（困惑度极低）
     print(f"用户已标注文档（诗词）：AI {sum(r['y'] for r in ud)} / 人写 {sum(1 - r['y'] for r in ud)}，各重复 {args.user_docs_reps} 次", flush=True)
     train += ud * args.user_docs_reps
+    if args.tagger:
+        # 句级模型（诗词、词、曲、对联混写定位）：古人作品 + 新模型仿写按句子拼接训练
+        from tagger_train import train_tagger
+        t_rows = [dict(text=r["text"], y=int(r["y"]), split="train") for r in train] + \
+                 [dict(text=r["text"], y=0, split="test") for r in classic_eval + lit_test] + \
+                 [dict(text=r["text"], y=1, split="test") for r in user_test + gen_test]
+        train_tagger(t_rows, args, "zh", args.out)
+        return
     # 国产新模型样本少：过采样到约占 AI 训练样本的 user_share（开发集里的不再复制，避免泄漏）
     ut = [r for r in train if r.get("split") == "fit" and r["y"] == 1 and r.get("model", "").startswith("repo-ai-")]
     n_ai = sum(r["y"] == 1 for r in train)
