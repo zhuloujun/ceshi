@@ -278,7 +278,7 @@ async function runAnalysis(){
     let job = await api('/v1/detect', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', ...authHeaders() },
-      body: JSON.stringify({ text, mode, exclude_references: $('optRefs').checked, flag_quotations: $('optQuotes').checked, wait: false })
+      body: JSON.stringify({ text, mode, exclude_references: $('optRefs').checked, flag_quotations: $('optQuotes').checked, wait: false, watch: true })
     });
     Lib() && Lib().onJobStarted(job.id);
     await finishJob(job, text);
@@ -291,10 +291,27 @@ async function runAnalysis(){
   }
 }
 
+/* 取消检测：服务器上的任务也一并取消（以前只是页面不再等待，任务还占着队列，后面的文档一直排队） */
+let currentJobId = null, cancelRequested = false;
+function cancelJobOnServer(id, keepalive){
+  if(!id) return;
+  try{ fetch('/v1/jobs/' + id, { method: 'DELETE', headers: authHeaders(), keepalive: !!keepalive }).catch(() => {}); }catch(e){ /* 忽略 */ }
+}
+const cancelBtn = $('cancelBtn');
+if(cancelBtn) cancelBtn.addEventListener('click', () => {
+  if(!currentJobId) return;
+  cancelRequested = true;
+  cancelJobOnServer(currentJobId);
+  progressLabel.textContent = '正在取消…';
+});
+window.addEventListener('pagehide', () => { if(currentJobId && cancelRequested) cancelJobOnServer(currentJobId, true); });
+
 /* 轮询任务直到完成，然后显示结果并保存到本地文稿库（刷新页面后也能用 resumeJob 接着等） */
 async function finishJob(job, text){
-  {
+  currentJobId = job.id; cancelRequested = false;
+  try{
     while(job.status === 'queued' || job.status === 'running'){
+      if(cancelRequested){ Lib() && Lib().onJobStarted(null); throw new Error('已取消检测。'); }
       if(job.status === 'queued'){
         progressLabel.textContent = `排队中（第 ${job.queue_position || 1} 位）${job.eta_sec ? ' · 预计检测' + fmtSec(job.eta_sec) : ''}`;
       } else {
@@ -311,6 +328,7 @@ async function finishJob(job, text){
         throw e;
       }
     }
+    if(job.status === 'cancelled'){ Lib() && Lib().onJobStarted(null); throw new Error(job.error || '检测已取消。'); }
     if(job.status === 'error') throw new Error('检测失败：' + job.error);
 
     lastResult = job.result;
@@ -321,6 +339,8 @@ async function finishJob(job, text){
     renderFormatReport(formatReport);
     resultsZone.classList.remove('hidden');
     Lib() && Lib().onResult(lastResult, lastFormatItems, lastFormatNote);
+  } finally {
+    currentJobId = null;
   }
 }
 

@@ -1865,6 +1865,10 @@ class Engine:
 
 # ---------------- 后台任务 ----------------
 
+class JobCancelled(Exception):
+    pass
+
+
 class JobQueue:
     def __init__(self, engine: Engine):
         self.engine = engine
@@ -1877,14 +1881,37 @@ class JobQueue:
         with self.lock:
             return sum(1 for j in self.jobs.values() if j["status"] in ("queued", "running"))
 
-    def submit(self, kind: str, owner: str, payload: dict) -> dict:
+    def cancel(self, jid: str, reason: str = "已取消") -> bool:
+        """取消排队中或正在检测的任务（2026-11-06 用户反馈：取消后任务仍在队列里，后面的文档一直等）。
+        排队中的直接标为已取消，轮到它时跳过；正在检测的在下一次进度回调时停下。"""
+        with self.lock:
+            j = self.jobs.get(jid)
+            if not j or j["status"] not in ("queued", "running"):
+                return False
+            j["cancel"] = reason
+            if j["status"] == "queued":
+                j.update(status="cancelled", error=reason, finished=time.time(), payload={})
+            return True
+
+    def touch(self, jid: str):
+        """页面每隔几秒查询一次进度：记下最后一次查询的时间。很久没人查询的任务视为页面已关闭，自动取消。"""
+        with self.lock:
+            j = self.jobs.get(jid)
+            if j:
+                j["seen"] = time.time()
+
+    def _abandoned(self, job: dict) -> bool:
+        lim = config.JOB_ABANDON_SECONDS
+        return bool(lim and job.get("watch") and time.time() - job.get("seen", job["created"]) > lim)
+
+    def submit(self, kind: str, owner: str, payload: dict, watch: bool = False) -> dict:
         self._gc()
         jid = uuid.uuid4().hex[:16]
         job = {"id": jid, "kind": kind, "owner": owner, "status": "queued", "progress": 0.0,
                "done": 0, "total": 0, "created": time.time(), "started": None, "finished": None,
                "result": None, "error": None, "payload": payload,
                "eta_sec": self.engine.estimate_seconds(payload.get("text", ""), payload.get("mode", "full"))
-               if kind == "detect" else None}
+               if kind == "detect" else None, "watch": watch, "seen": time.time()}
         with self.lock:
             self.jobs[jid] = job
         self.q.put(jid)
@@ -1903,7 +1930,7 @@ class JobQueue:
         return 0
 
     def public(self, job: dict) -> dict:
-        out = {k: v for k, v in job.items() if k not in ("payload", "owner")}
+        out = {k: v for k, v in job.items() if k not in ("payload", "owner", "cancel", "seen", "watch")}
         if job["status"] == "queued":
             out["queue_position"] = self.position(job["id"])
         return out
@@ -1919,11 +1946,16 @@ class JobQueue:
         while True:
             jid = self.q.get()
             job = self.get(jid)
-            if not job:
+            if not job or job["status"] != "queued":
+                continue                      # 已取消
+            if self._abandoned(job):
+                job.update(status="cancelled", error="页面已关闭或很久没有查询进度，已自动取消", finished=time.time(), payload={})
                 continue
             job.update(status="running", started=time.time())
 
             def progress(done, total, job=job):
+                if job.get("cancel") or self._abandoned(job):
+                    raise JobCancelled(job.get("cancel") or "页面已关闭或很久没有查询进度，已自动取消")
                 job.update(done=done, total=total, progress=round(done / total, 4) if total else 1.0)
                 if done and job["started"]:
                     elapsed = time.time() - job["started"]
@@ -1958,6 +1990,8 @@ class JobQueue:
                         saved, _ = apply_user_calibration(self.engine, {**res["calibration"], "guard": AUTOCAL_GUARD})
                         job["result"] = {"report": rep, "saved": saved}
                 job["status"] = "done"
+            except JobCancelled as e:
+                job.update(status="cancelled", error=str(e))
             except Exception as e:  # noqa: BLE001
                 log.exception("job %s failed", jid)
                 job.update(status="error", error=f"{type(e).__name__}: {e}")

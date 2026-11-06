@@ -106,9 +106,21 @@ class Segment:
         return self.kind == "body"
 
 
+# 现代汉语里含文言虚词的常用复合词（"而不是""应用于""可以""其中""之间"……）：统计文言虚词前先去掉，
+# 否则公文、论文这类书面语（"而将环保措施视为附加支出""应用于整个项目周期"）会被当成文言（2026-11-06 用户反馈）
+_MODERN_COMPOUND = re.compile(
+    r"而是|而不是|而且|而言|从而|然而|因而|进而|继而|反而|而已|"
+    r"[对由关在用属基处位大小高低等趋易难归至终急善]于|倾向于|有利于|有助于|取决于|致力于|相当于|"
+    r"可以|所以|以及|以上|以下|以来|以后|以前|以便|以免|以外|以内|加以|予以|难以|得以|足以|用以|借以|以此|以期|"
+    r"其中|其他|其它|其实|尤其|极其|其次|其余|及其|与其|其间|"
+    r"之间|之后|之前|之一|之外|之下|之上|之中|之内|总之|之所以|之类|之际|"
+    r"者们|或者|记者|作者|读者|学者|患者|消费者|参与者|研究者|管理者|使用者|劳动者|"
+    r"乃至|乃是|遂即|盖章|覆盖|涵盖|掩盖|遮盖|盖子")
+
+
 def classical_ratio(text: str) -> float:
     cjk = len(_CJK.findall(text)) or 1
-    return len(_CLASSICAL.findall(text)) / cjk
+    return len(_CLASSICAL.findall(_MODERN_COMPOUND.sub("", text))) / cjk
 
 
 def modern_ratio(text: str) -> float:
@@ -476,7 +488,7 @@ def detect_register(text: str) -> str:
     # 用的是现代文分类器，几乎全部漏检。扩充的文言常用字（尝、皆、亦、吾、汝、未、勿、卒、谓……）占 8% 以上、
     # 白话标志词不超过 3% 时按文言处理。用 NLPCC / HC3 等 1.7 万段现代文（含古文的现代译文）测定：现代文被改判为文言
     # 从 0.46% 升到 0.48%；AI 文言识别率 89% → 90%，gdwx 57% → 66%。
-    if cjk >= 30 and mr <= 0.03 and len(_CLASSICAL_EXT.findall(t)) / cjk >= 0.08:
+    if cjk >= 30 and mr <= 0.03 and len(_CLASSICAL_EXT.findall(_MODERN_COMPOUND.sub("", t))) / cjk >= 0.08:
         return "zh_classical"
     return "zh"
 
