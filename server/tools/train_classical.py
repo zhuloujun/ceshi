@@ -147,6 +147,10 @@ def main():
     ap.add_argument("--eval-model", default="", help="只评估这个已训练好的模型（同样的评估集），不训练")
     ap.add_argument("--user-docs", default="", help="用户提供的已标注文档段落（jsonl，见 load_user_docs）")
     ap.add_argument("--user-docs-reps", type=int, default=6, help="用户文档段落在训练集里重复几次")
+    ap.add_argument("--tagger", action="store_true", help="改为训练句级“作者标注”模型（人机混写定位，见 tools/tagger_train.py）")
+    ap.add_argument("--tagger-steps", type=int, default=6000)
+    ap.add_argument("--label-smoothing", type=float, default=0.1)
+    ap.add_argument("--grad-ckpt", action="store_true")
     args = ap.parse_args()
 
     import torch
@@ -187,6 +191,16 @@ def main():
     from memo_filter import drop_memorized, threshold_from_env
     ud = drop_memorized(ud, threshold_from_env())   # 去掉 AI 文档里照抄的古人原文（困惑度极低）
     print(f"用户已标注文档（文言）：AI {sum(r['y'] for r in ud)} / 人写 {sum(1 - r['y'] for r in ud)}，各重复 {args.user_docs_reps} 次", flush=True)
+    if args.tagger:
+        # 句级模型：用同一批真人古籍 / AI 文言按句子拼成“混写文言”训练（2026-11-06 cs1106：名篇原文与 AI 仿写逐句交替）
+        from tagger_train import train_tagger
+        rows = [dict(text=r["text"], y=0, split="train") for r in h_train] + \
+               [dict(text=r["text"], y=1, split="train") for r in ai_train] + \
+               [dict(text=r["text"], y=int(r["y"]), split="train") for r in ud] + \
+               [dict(text=r["text"], y=0, split="test") for r in h_test + lit_test] + \
+               [dict(text=r["text"], y=1, split="test") for r in ai_test]
+        train_tagger(rows, args, "zh", args.out)
+        return
     rnd.shuffle(h_train); rnd.shuffle(ai_train)
     dev_h, h_train = h_train[: len(h_train) // 8], h_train[len(h_train) // 8:]
     dev_a, ai_train = ai_train[: max(8, len(ai_train) // 8)], ai_train[max(8, len(ai_train) // 8):]
