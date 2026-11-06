@@ -285,9 +285,13 @@ SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
 # 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
 TAGGER_EN_MODEL = os.getenv("TAGGER_EN_MODEL", "")
 TAGGER_ZH_MODEL = os.getenv("TAGGER_ZH_MODEL", "")
+TAGGER_ZC_MODEL = os.getenv("TAGGER_ZC_MODEL", "")   # 文言句级标注模型
+TAGGER_ZP_MODEL = os.getenv("TAGGER_ZP_MODEL", "")   # 诗词句级标注模型
 # 部署 / 离线验收按这里的 Release 名下载句级标注模型（空 = 不用）
 TAGGER_ZH_ID = os.getenv("TAGGER_ZH_ID", "chinese-tagger-v1")
 TAGGER_EN_ID = os.getenv("TAGGER_EN_ID", "english-tagger-v1")
+TAGGER_ZC_ID = os.getenv("TAGGER_ZC_ID", "")
+TAGGER_ZP_ID = os.getenv("TAGGER_ZP_ID", "")
 HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "2.0") or 2.0)   # 每换一次作者的代价（对数似然）
 HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
 HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长
