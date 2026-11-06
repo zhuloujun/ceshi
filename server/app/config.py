@@ -273,6 +273,12 @@ HYBRID_SPLIT = _bool("HYBRID_SPLIT", True)
 # 只在该语言的句级标注模型可用时才切（2026-11-05：中文句级模型 chinese-tagger-v1 通过对照；英文没有句级模型时不切，
 # 因为只用整段分类器拼句子分数时，真人英文平均分会升高约 1 分）
 HYBRID_REQUIRE_TAGGER = _bool("HYBRID_REQUIRE_TAGGER", True)
+# 文言 / 诗词也做混写切分（用专用分类器打短句分数，语言模型能逐字复现的名篇原文按人写）；2026-11-06 试验，默认关闭
+HYBRID_CLASSICAL = _bool("HYBRID_CLASSICAL", False)
+HYBRID_FAMOUS_PPL = float(os.getenv("HYBRID_FAMOUS_PPL", "4.0") or 4.0)
+HYBRID_CL_AI_MEAN = float(os.getenv("HYBRID_CL_AI_MEAN", "0.6") or 0.6)
+# 一整段没有换行、现代汉语 / 文言 / 诗词首尾相接时，在文体切换处断开（segmenter.split_register_switches）；2026-11-06 试验
+SPLIT_REGISTER = _bool("SPLIT_REGISTER", False)
 # 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
 TAGGER_EN_MODEL = os.getenv("TAGGER_EN_MODEL", "")
 TAGGER_ZH_MODEL = os.getenv("TAGGER_ZH_MODEL", "")
