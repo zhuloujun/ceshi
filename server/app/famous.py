@@ -56,3 +56,59 @@ def matched_lines(text: str) -> tuple[int, int]:
 def is_famous_verse(text: str) -> bool:
     m, n = matched_lines(text)
     return m >= 2 and m >= 0.5 * n
+
+
+_CLAUSE = re.compile(r"[^，。！？；：、,.!?;:\s「」『』“”‘’（）()《》〈〉—…·]+")
+_SENT_END = re.compile(r"[。！？!?；;]")
+
+
+def famous_spans(line: str, min_hits: int = 2, max_gap: int = 1) -> list[tuple[int, int]]:
+    """一段（可能很长、没有换行）文字里，与古人原句完全相同的句子连成一片的区间 [(起, 止)]，起止扩到整句。
+    片内至少 min_hits 句命中、命中句占 4–12 字句子的一半以上；中间允许夹 max_gap 句没命中的（改了一两个字的）。"""
+    import numpy as np
+    H = _load()
+    if not len(H):
+        return []
+    cl = [(m.start(), m.end(), re.sub(r"[^一-鿿]", "", m.group())) for m in _CLAUSE.finditer(line)]
+    cl = [c for c in cl if c[2]]
+    if not cl:
+        return []
+    hs = np.array([zlib.crc32(f.encode("utf-8")) for _, _, f in cl], dtype=np.uint32)
+    i = np.searchsorted(H, hs)
+    i[i >= len(H)] = 0
+    hit = [bool(H[k] == h) and 4 <= len(c[2]) <= 12 for k, h, c in zip(i, hs, cl)]
+    spans, k = [], 0
+    while k < len(cl):
+        if not hit[k]:
+            k += 1
+            continue
+        a = b = k
+        gap = 0
+        j = k + 1
+        while j < len(cl):
+            if hit[j]:
+                b, gap = j, 0
+            else:
+                gap += 1
+                if gap > max_gap:
+                    break
+            j += 1
+        seg = range(a, b + 1)
+        hits = sum(hit[x] for x in seg)
+        elig = sum(4 <= len(cl[x][2]) <= 12 for x in seg)
+        if hits >= min_hits and hits >= 0.5 * max(elig, 1):
+            # 起点退到本句开头（上一个句末标点之后），终点扩到本句结尾
+            st = cl[a][0]
+            m = None
+            for m in _SENT_END.finditer(line, 0, st):
+                pass
+            st = m.end() if m else 0
+            en = cl[b][1]
+            m2 = _SENT_END.search(line, en)
+            en = m2.end() if m2 else len(line)
+            if spans and st <= spans[-1][1]:
+                spans[-1] = (spans[-1][0], max(en, spans[-1][1]))
+            else:
+                spans.append((st, en))
+        k = b + 1
+    return spans

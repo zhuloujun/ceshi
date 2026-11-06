@@ -18,7 +18,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_famous_spans, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -865,7 +865,9 @@ class Engine:
             text, n_lab = split_inline_labels(text)
             text, n_scr = split_script_switches(text)
             if config.SPLIT_REGISTER:
+                text, n_fam = split_famous_spans(text)
                 text, n_reg = split_register_switches(text)
+                n_reg += n_fam
                 n_scr += n_reg
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 参考文献核查要联网查询，和模型打分同时进行（见 app/refcheck.py）
