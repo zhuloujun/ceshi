@@ -539,6 +539,8 @@ class Engine:
         from .detectors.tagger import SentenceTagger
         self.tag_en = SentenceTagger(config.TAGGER_EN_MODEL) if config.TAGGER_EN_MODEL else None
         self.tag_zh = SentenceTagger(config.TAGGER_ZH_MODEL) if config.TAGGER_ZH_MODEL else None
+        self.tag_zc = SentenceTagger(config.TAGGER_ZC_MODEL) if config.TAGGER_ZC_MODEL else None
+        self.tag_zp = SentenceTagger(config.TAGGER_ZP_MODEL) if config.TAGGER_ZP_MODEL else None
         self.loading = True
         self.loaded_event = threading.Event()
         self.load_started = time.time()
@@ -631,7 +633,8 @@ class Engine:
             for name, det in (("语言模型", self.lm), ("中文分类器", self.cls), ("英文分类器", self.cls_en),
                               ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("英文整篇分类器", self.cls_en3), ("英文整篇分类器 2", self.cls_en4),
                               ("诗词分类器", self.cls_poetry), ("文言分类器", self.cls_classical),
-                              ("英文句级标注模型", self.tag_en), ("中文句级标注模型", self.tag_zh)):
+                              ("英文句级标注模型", self.tag_en), ("中文句级标注模型", self.tag_zh),
+                              ("文言句级标注模型", self.tag_zc), ("诗词句级标注模型", self.tag_zp)):
                 if det is None:
                     continue
                 try:
@@ -749,12 +752,13 @@ class Engine:
         from . import hybrid
         cfg = {"switch_cost": config.HYBRID_SWITCH_COST, "temp": config.HYBRID_TEMP,
                "min_en": config.HYBRID_MIN_EN_WORDS, "min_zh": config.HYBRID_MIN_ZH_CHARS,
-               "ai_mean": config.HYBRID_AI_MEAN, "human_mean": config.HYBRID_HUMAN_MEAN}
+               "ai_mean": config.HYBRID_AI_MEAN, "human_mean": config.HYBRID_HUMAN_MEAN,
+               "size_weight": config.HYBRID_SIZE_WEIGHT}
         out, n_split = [], 0
         next_block = max((x.block for x in segs), default=0) + 1
         for s in segs:
             classical = s.register in ("zh_classical", "zh_poetry")
-            if s.kind != "body" or not (s.register in ("zh", "en") or (classical and config.HYBRID_CLASSICAL)):
+            if s.kind != "body" or s.register not in ("zh", "en", "zh_classical", "zh_poetry"):
                 out.append(s)
                 continue
             head = s.title if (s.title and s.text.startswith(s.title)) else ""
@@ -766,7 +770,10 @@ class Engine:
             if len(spans) < 3:
                 out.append(s)
                 continue
-            tagger = None if classical else (self.tag_en if s.register == "en" else self.tag_zh)
+            tagger = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(s.register)
+            if classical and not (tagger and tagger.ready) and config.HYBRID_REQUIRE_TAGGER and not config.HYBRID_CLASSICAL:
+                out.append(s)
+                continue
             if not classical and config.HYBRID_REQUIRE_TAGGER and not (tagger and tagger.ready):
                 out.append(s)
                 continue
@@ -790,7 +797,7 @@ class Engine:
                             if k < len(pairs) and pairs[k] is not None:
                                 pairs[k] = min(pairs[k], 0.5)
             plan = hybrid.plan_split(text, s.register, single, pairs, spans,
-                                     dict(cfg, ai_mean=config.HYBRID_CL_AI_MEAN) if classical else cfg)
+                                     dict(cfg, ai_mean=config.HYBRID_CL_AI_MEAN, min_zh=config.HYBRID_MIN_ZC_CHARS) if classical else cfg)
             if not plan:
                 out.append(s)
                 continue

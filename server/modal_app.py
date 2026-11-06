@@ -38,6 +38,10 @@ TAGZH_LOCAL = Path(__file__).resolve().parent / "zh-tagger"
 TAGEN_LOCAL = Path(__file__).resolve().parent / "en-tagger"
 HAS_TAGZH = (TAGZH_LOCAL / "config.json").exists()
 HAS_TAGEN = (TAGEN_LOCAL / "config.json").exists()
+TAGZC_LOCAL = Path(__file__).resolve().parent / "zc-tagger"
+TAGZP_LOCAL = Path(__file__).resolve().parent / "zp-tagger"
+HAS_TAGZC = (TAGZC_LOCAL / "config.json").exists()
+HAS_TAGZP = (TAGZP_LOCAL / "config.json").exists()
 # 英文整篇分类器（config.EN3_CLASSIFIER_ID）：部署工作流下载到 server/english-doc-classifier
 EN3_LOCAL = Path(__file__).resolve().parent / "english-doc-classifier"
 EN3_DIR = "/models/english-doc-classifier"
@@ -81,6 +85,8 @@ image = (
         "ZH2_CLASSIFIER_MODEL": ZH2_DIR if HAS_ZH2 else "",
         "TAGGER_ZH_MODEL": "/models/zh-tagger" if HAS_TAGZH else "",
         "TAGGER_EN_MODEL": "/models/en-tagger" if HAS_TAGEN else "",
+        "TAGGER_ZC_MODEL": "/models/zc-tagger" if HAS_TAGZC else "",
+        "TAGGER_ZP_MODEL": "/models/zp-tagger" if HAS_TAGZP else "",
         "EN3_CLASSIFIER_MODEL": EN3_DIR if HAS_EN3 else "",
         "EN4_CLASSIFIER_MODEL": EN4_DIR if HAS_EN4 else "",
         "USER_CALIBRATION_FILE": "/data/user_calibration.json",
@@ -114,6 +120,10 @@ if HAS_TAGZH:
     image = image.add_local_dir(str(TAGZH_LOCAL), "/models/zh-tagger")
 if HAS_TAGEN:
     image = image.add_local_dir(str(TAGEN_LOCAL), "/models/en-tagger")
+if HAS_TAGZC:
+    image = image.add_local_dir(str(TAGZC_LOCAL), "/models/zc-tagger")
+if HAS_TAGZP:
+    image = image.add_local_dir(str(TAGZP_LOCAL), "/models/zp-tagger")
 if HAS_EN3:
     image = image.add_local_dir(str(EN3_LOCAL), EN3_DIR)
 if HAS_EN4:
