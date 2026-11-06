@@ -169,10 +169,11 @@ class DetectIn(BaseModel):
     flag_quotations: bool = True
     genre: str = Field("auto", description="auto = 自动识别；classical = 中国古典文学作品（诗、词、曲、赋、文言、古白话）")
     wait: bool | None = Field(None, description="是否等待结果；默认短文本等待、长文本返回任务编号")
+    watch: bool = Field(False, description="网页提交：超过 90 秒没有查询进度（页面关了）就自动取消，不占着队列")
 
 
 async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bool | None, key: dict,
-                         genre: str = "auto"):
+                         genre: str = "auto", watch: bool = False):
     ensure_ready()
     text = (text or "").replace("\r\n", "\n")
     if len(text.strip()) < 50:
@@ -190,7 +191,7 @@ async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bo
         if not ok:
             err(429, "quota_exceeded", f"今日额度不足：剩余 {left} 字。额度每天（UTC）零点重置。")
     job = jobs.submit("detect", key["i"], {"text": text, "mode": mode, "exclude_references": excl,
-                                          "flag_quotations": flagq, "genre": genre})
+                                          "flag_quotations": flagq, "genre": genre}, watch=watch)
     if wait is None:
         wait = len(text) <= config.SYNC_MAX_CHARS
     if wait:
@@ -207,7 +208,7 @@ async def _submit_detect(text: str, mode: str, excl: bool, flagq: bool, wait: bo
 async def detect(body: DetectIn, authorization: str | None = Header(None), x_api_key: str | None = Header(None)):
     key = require_key(authorization, x_api_key)
     return await _submit_detect(body.text, body.mode, body.exclude_references, body.flag_quotations, body.wait, key,
-                                body.genre)
+                                body.genre, body.watch)
 
 
 @app.post("/v1/report/pdf")
@@ -250,7 +251,19 @@ def job_status(job_id: str, authorization: str | None = Header(None), x_api_key:
     j = jobs.get(job_id)
     if not j or (j["kind"] != "detect") or (j["owner"] != key["i"]):
         err(404, "not_found", "任务不存在或已过期（结果保留 1 小时）。")
+    jobs.touch(job_id)
     return jobs.public(j)
+
+
+@app.delete("/v1/jobs/{job_id}")
+def job_cancel(job_id: str, authorization: str | None = Header(None), x_api_key: str | None = Header(None)):
+    """取消排队中或正在检测的任务：排队中的立即移出队列；正在检测的在当前这一段算完后停下。"""
+    key = require_key(authorization, x_api_key)
+    j = jobs.get(job_id)
+    if not j or (j["kind"] != "detect") or (j["owner"] != key["i"]):
+        err(404, "not_found", "任务不存在或已过期（结果保留 1 小时）。")
+    jobs.cancel(job_id, "已取消检测")
+    return jobs.public(jobs.get(job_id))
 
 
 @app.get("/v1/me")
