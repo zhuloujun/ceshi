@@ -816,6 +816,10 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             elif len(stripped) >= 30 and len(buf.strip()) >= 30 and detect_register(stripped) != reg:
                 # 文体切换（如现代文里插入一段文言引文、中文里夹一段英文）时另起一段
                 flush()
+            elif (config.SPLIT_REGISTER and pending_break and len(_CJK.findall(stripped)) >= 16 and len(_CJK.findall(buf)) >= 16
+                  and _famous(stripped) != _famous(buf)):
+                # 公开名篇原文与相邻的其他文字不合并（见 split_famous_spans）
+                flush()
             elif (pending_break or section) and len(buf) >= flush_chars(reg):
                 # 章节标题相当于一次段落分隔：窗口够长就另起一段，否则与下一节合并（仍属同一篇作品）
                 flush()
@@ -1345,4 +1349,43 @@ def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, g
         if len(merged) >= 2 and all(size(r) >= min_run for r in merged):
             lines[li] = "\n\n".join(r[1].strip() for r in merged)
             n_split += len(merged) - 1
+    return "\n".join(lines), n_split
+
+
+def _famous(t: str) -> bool:
+    from .famous import is_famous_verse
+    return is_famous_verse(t)
+
+
+def split_famous_spans(text: str, min_line: int = 80, min_rest: int = 16):
+    """一段里夹着与古人原句完全相同的名篇片段（2026-11-06 cs1106：韩愈、王勃、柳永的原文与 AI 仿写首尾相接、没有换行）时，
+    把名篇片段单独断成一段（随后按“疑似公开名篇原文”不计入），剩下的文字照常检测。返回 (文本, 断开的处数)。"""
+    from .famous import famous_spans
+    lines = (text or "").split("\n")
+    n_split = 0
+    for li, line in enumerate(lines):
+        if len(_CJK.findall(line)) < min_line:
+            continue
+        sp = famous_spans(line)
+        if not sp or (len(sp) == 1 and sp[0] == (0, len(line))):
+            continue
+        parts, pos = [], 0
+        for a, b in sp:
+            if len(_CJK.findall(line[pos:a])) >= min_rest:
+                parts.append(line[pos:a])
+            elif parts:
+                parts[-1] += line[pos:a]
+            else:
+                a = pos
+            parts.append(line[a:b])
+            pos = b
+        rest = line[pos:]
+        if len(_CJK.findall(rest)) >= min_rest or not parts:
+            parts.append(rest)
+        else:
+            parts[-1] += rest
+        parts = [p.strip() for p in parts if p.strip()]
+        if len(parts) >= 2:
+            lines[li] = "\n\n".join(parts)
+            n_split += len(parts) - 1
     return "\n".join(lines), n_split
