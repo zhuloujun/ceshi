@@ -18,7 +18,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_famous_spans, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -734,6 +734,11 @@ class Engine:
             b = self.cls_en4.predict(texts) if (self.cls_en4 and self.cls_en4.ready and texts) else [None] * len(texts)
             return [None if x is None and y is None else (x if y is None else y if x is None else (x + y) / 2)
                     for x, y in zip(a, b)]
+        if register in ("zh_classical", "zh_poetry"):
+            # 文言 / 诗词：专用分类器（文言、诗词）为主，通用中文分类器为辅（各占一半）
+            a, b = self.classify(texts, regs), self.classify_second(texts, regs)
+            return [None if x is None and y is None else (x if y is None else y if x is None else (x + y) / 2)
+                    for x, y in zip(a, b)]
         # 现代汉语：中文第二分类器（新一代国产大模型）与主分类器取平均——C-ReD 的新闻类 AI 文字第二分类器只给 5 分左右
         a, b = self.classify_zh2(texts, regs), self.classify(texts, regs)
         return [None if x is None and y is None else (x if y is None else y if x is None else (x + y) / 2)
@@ -748,7 +753,8 @@ class Engine:
         out, n_split = [], 0
         next_block = max((x.block for x in segs), default=0) + 1
         for s in segs:
-            if s.kind != "body" or s.register not in ("zh", "en"):
+            classical = s.register in ("zh_classical", "zh_poetry")
+            if s.kind != "body" or not (s.register in ("zh", "en") or (classical and config.HYBRID_CLASSICAL)):
                 out.append(s)
                 continue
             head = s.title if (s.title and s.text.startswith(s.title)) else ""
@@ -760,8 +766,8 @@ class Engine:
             if len(spans) < 3:
                 out.append(s)
                 continue
-            tagger = self.tag_en if s.register == "en" else self.tag_zh
-            if config.HYBRID_REQUIRE_TAGGER and not (tagger and tagger.ready):
+            tagger = None if classical else (self.tag_en if s.register == "en" else self.tag_zh)
+            if not classical and config.HYBRID_REQUIRE_TAGGER and not (tagger and tagger.ready):
                 out.append(s)
                 continue
             if tagger and tagger.ready:
@@ -771,7 +777,20 @@ class Engine:
             else:
                 single = self._hybrid_unit_scores([text[a:b] for a, b in spans], s.register)
                 pairs = self._hybrid_unit_scores([text[spans[k][0]:spans[k + 1][1]] for k in range(len(spans) - 1)], s.register)
-            plan = hybrid.plan_split(text, s.register, single, pairs, spans, cfg)
+            if classical:
+                # 文言 / 诗词里夹着公开名篇（2026-11-06 cs1106：韩愈、柳宗元、王勃、苏轼的原文与 AI 仿写首尾相接）：
+                # 语言模型几乎能逐字复现的句子（困惑度极低）就是名篇原文，按“人写”处理，与相邻的仿写分开
+                if self.lm and self.lm.ready:
+                    _, per = self.lm.score_with_spans(text, spans)
+                    for k, r in enumerate(per):
+                        if r and r.get("ppl") is not None and math.exp(r["ppl"]) < config.HYBRID_FAMOUS_PPL:
+                            single[k] = 0.02
+                            if k > 0 and pairs[k - 1] is not None:
+                                pairs[k - 1] = min(pairs[k - 1], 0.5)
+                            if k < len(pairs) and pairs[k] is not None:
+                                pairs[k] = min(pairs[k], 0.5)
+            plan = hybrid.plan_split(text, s.register, single, pairs, spans,
+                                     dict(cfg, ai_mean=config.HYBRID_CL_AI_MEAN) if classical else cfg)
             if not plan:
                 out.append(s)
                 continue
@@ -845,6 +864,11 @@ class Engine:
         if config.SPLIT_INLINE:
             text, n_lab = split_inline_labels(text)
             text, n_scr = split_script_switches(text)
+            if config.SPLIT_REGISTER:
+                text, n_fam = split_famous_spans(text)
+                text, n_reg = split_register_switches(text)
+                n_reg += n_fam
+                n_scr += n_reg
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 参考文献核查要联网查询，和模型打分同时进行（见 app/refcheck.py）
         _ref_texts = [s.text for s in segs if s.kind == "reference"]
@@ -1841,6 +1865,10 @@ class Engine:
 
 # ---------------- 后台任务 ----------------
 
+class JobCancelled(Exception):
+    pass
+
+
 class JobQueue:
     def __init__(self, engine: Engine):
         self.engine = engine
@@ -1853,14 +1881,37 @@ class JobQueue:
         with self.lock:
             return sum(1 for j in self.jobs.values() if j["status"] in ("queued", "running"))
 
-    def submit(self, kind: str, owner: str, payload: dict) -> dict:
+    def cancel(self, jid: str, reason: str = "已取消") -> bool:
+        """取消排队中或正在检测的任务（2026-11-06 用户反馈：取消后任务仍在队列里，后面的文档一直等）。
+        排队中的直接标为已取消，轮到它时跳过；正在检测的在下一次进度回调时停下。"""
+        with self.lock:
+            j = self.jobs.get(jid)
+            if not j or j["status"] not in ("queued", "running"):
+                return False
+            j["cancel"] = reason
+            if j["status"] == "queued":
+                j.update(status="cancelled", error=reason, finished=time.time(), payload={})
+            return True
+
+    def touch(self, jid: str):
+        """页面每隔几秒查询一次进度：记下最后一次查询的时间。很久没人查询的任务视为页面已关闭，自动取消。"""
+        with self.lock:
+            j = self.jobs.get(jid)
+            if j:
+                j["seen"] = time.time()
+
+    def _abandoned(self, job: dict) -> bool:
+        lim = config.JOB_ABANDON_SECONDS
+        return bool(lim and job.get("watch") and time.time() - job.get("seen", job["created"]) > lim)
+
+    def submit(self, kind: str, owner: str, payload: dict, watch: bool = False) -> dict:
         self._gc()
         jid = uuid.uuid4().hex[:16]
         job = {"id": jid, "kind": kind, "owner": owner, "status": "queued", "progress": 0.0,
                "done": 0, "total": 0, "created": time.time(), "started": None, "finished": None,
                "result": None, "error": None, "payload": payload,
                "eta_sec": self.engine.estimate_seconds(payload.get("text", ""), payload.get("mode", "full"))
-               if kind == "detect" else None}
+               if kind == "detect" else None, "watch": watch, "seen": time.time()}
         with self.lock:
             self.jobs[jid] = job
         self.q.put(jid)
@@ -1879,7 +1930,7 @@ class JobQueue:
         return 0
 
     def public(self, job: dict) -> dict:
-        out = {k: v for k, v in job.items() if k not in ("payload", "owner")}
+        out = {k: v for k, v in job.items() if k not in ("payload", "owner", "cancel", "seen", "watch")}
         if job["status"] == "queued":
             out["queue_position"] = self.position(job["id"])
         return out
@@ -1895,11 +1946,16 @@ class JobQueue:
         while True:
             jid = self.q.get()
             job = self.get(jid)
-            if not job:
+            if not job or job["status"] != "queued":
+                continue                      # 已取消
+            if self._abandoned(job):
+                job.update(status="cancelled", error="页面已关闭或很久没有查询进度，已自动取消", finished=time.time(), payload={})
                 continue
             job.update(status="running", started=time.time())
 
             def progress(done, total, job=job):
+                if job.get("cancel") or self._abandoned(job):
+                    raise JobCancelled(job.get("cancel") or "页面已关闭或很久没有查询进度，已自动取消")
                 job.update(done=done, total=total, progress=round(done / total, 4) if total else 1.0)
                 if done and job["started"]:
                     elapsed = time.time() - job["started"]
@@ -1934,6 +1990,8 @@ class JobQueue:
                         saved, _ = apply_user_calibration(self.engine, {**res["calibration"], "guard": AUTOCAL_GUARD})
                         job["result"] = {"report": rep, "saved": saved}
                 job["status"] = "done"
+            except JobCancelled as e:
+                job.update(status="cancelled", error=str(e))
             except Exception as e:  # noqa: BLE001
                 log.exception("job %s failed", jid)
                 job.update(status="error", error=f"{type(e).__name__}: {e}")
