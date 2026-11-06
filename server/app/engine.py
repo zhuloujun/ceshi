@@ -749,7 +749,8 @@ class Engine:
         from . import hybrid
         cfg = {"switch_cost": config.HYBRID_SWITCH_COST, "temp": config.HYBRID_TEMP,
                "min_en": config.HYBRID_MIN_EN_WORDS, "min_zh": config.HYBRID_MIN_ZH_CHARS,
-               "ai_mean": config.HYBRID_AI_MEAN, "human_mean": config.HYBRID_HUMAN_MEAN}
+               "ai_mean": config.HYBRID_AI_MEAN, "human_mean": config.HYBRID_HUMAN_MEAN,
+               "size_weight": config.HYBRID_SIZE_WEIGHT}
         out, n_split = [], 0
         next_block = max((x.block for x in segs), default=0) + 1
         for s in segs:

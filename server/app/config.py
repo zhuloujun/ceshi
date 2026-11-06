@@ -278,6 +278,7 @@ HYBRID_REQUIRE_TAGGER = _bool("HYBRID_REQUIRE_TAGGER", True)
 # 文言 / 诗词也做混写切分（用专用分类器打短句分数，语言模型能逐字复现的名篇原文按人写）；2026-11-06 试验，默认关闭
 HYBRID_CLASSICAL = _bool("HYBRID_CLASSICAL", False)
 HYBRID_FAMOUS_PPL = float(os.getenv("HYBRID_FAMOUS_PPL", "4.0") or 4.0)
+HYBRID_SIZE_WEIGHT = _bool("HYBRID_SIZE_WEIGHT", False)   # 句子单元按长度加权（2026-11-06 试验）
 HYBRID_CL_AI_MEAN = float(os.getenv("HYBRID_CL_AI_MEAN", "0.6") or 0.6)
 # 一整段没有换行、现代汉语 / 文言 / 诗词首尾相接时，在文体切换处断开（segmenter.split_register_switches）；2026-11-06 试验
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
