@@ -1587,6 +1587,7 @@ class Engine:
                 "prob": None if prob is None else round(prob, 4),
                 "ref_prob": (None if s.counted or comb["prob"] is None else round(comb["prob"], 4)),
                 "prob_unsmoothed": None if comb["prob"] is None else round(comb["prob"], 4),
+                "dbg_block": s.block, "dbg_hyb": (getattr(s, "hybrid", None) or {}).get("state"),
                 "level": level, "label": label, "near_threshold": near, "by_work": by_work,
                 "partial": partial, "ai_chars": ai_chars, "windows": wins_out,
                 "memorized": s.index in memo,
