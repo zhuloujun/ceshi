@@ -1083,7 +1083,7 @@ class Engine:
             run = []
             for i in idxs + [None]:
                 piece = i is not None and getattr(segs_by_idx[i], "hybrid", None) is not None
-                if run and i is not None and not piece and i != run[-1] + 1:
+                if run and i is not None and not piece and any(getattr(segs_by_idx.get(j), "hybrid", None) is not None for j in range(run[-1] + 1, i)):
                     smoothed.update(zip(run, scoring.smooth([combos[j]["prob"] for j in run], config.SMOOTHING)))
                     run = []
                 if i is None or piece:
