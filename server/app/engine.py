@@ -1073,7 +1073,27 @@ class Engine:
         for s in counted:
             groups.setdefault((s.block, s.register), []).append(s.index)
         for idxs in groups.values():
-            smoothed.update(zip(idxs, scoring.smooth([combos[i]["prob"] for i in idxs], config.SMOOTHING)))
+            if not config.HYBRID_SMOOTH_BARRIER:
+                smoothed.update(zip(idxs, scoring.smooth([combos[i]["prob"] for i in idxs], config.SMOOTHING)))
+                continue
+            # 人机混写切分出来的块已判定“作者换了”：不再与前后段落互相平滑（2026-11-07 cs1105：一段 1023 字的 AI
+            # 自身 93 分，被旁边切出来的 1 分真人块拉到 58 分、漏判）。切出来的块各自独立，也把前后段落隔开
+            # 切出来的块在另一篇“作品”编号里：原作品里被它隔开的前后段落并不相邻，也不互相平滑
+            # （2026-11-07 cs1105 调试：AI 段的邻居变成了隔着切分块的两段真人文字，被拉到 58 分）
+            run = []
+            for i in idxs + [None]:
+                piece = i is not None and getattr(segs_by_idx[i], "hybrid", None) is not None
+                if run and i is not None and not piece and any(getattr(segs_by_idx.get(j), "hybrid", None) is not None for j in range(run[-1] + 1, i)):
+                    smoothed.update(zip(run, scoring.smooth([combos[j]["prob"] for j in run], config.SMOOTHING)))
+                    run = []
+                if i is None or piece:
+                    if run:
+                        smoothed.update(zip(run, scoring.smooth([combos[j]["prob"] for j in run], config.SMOOTHING)))
+                    run = []
+                    if piece:
+                        smoothed[i] = combos[i]["prob"]
+                else:
+                    run.append(i)
 
         # 3) 整篇一致性（参考 Turnitin / 知网按“整篇作品”给结论的做法）：AI 文章通常整篇一次生成。
         #    同一篇作品（同一标题下、同一文体）里，已判为疑似 AI 的文字占多数时，
