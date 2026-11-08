@@ -285,6 +285,8 @@ HYBRID_SMOOTH_BARRIER = _bool("HYBRID_SMOOTH_BARRIER", True)   # 混写切分出
 HYBRID_RELAX = _bool("HYBRID_RELAX", True)
 HYBRID_NO_CARRY = _bool("HYBRID_NO_CARRY", True)   # 混写切分过的段落不再按整篇判断带上（2026-11-08 试验）   # 某块把握不足时把它并回邻居重算，而不是整段放弃切分（2026-11-08 试验）
 HYBRID_CL_AI_MEAN = float(os.getenv("HYBRID_CL_AI_MEAN", "0.6") or 0.6)
+# 文言 / 诗词的混写切分不放宽（2026-11-08：放宽后 4 篇纯 AI 拟古文被切出“人写”块，AI 率从 0.8–0.98 掉到 0.2–0.4）
+HYBRID_CL_SWITCH_COST = float(os.getenv("HYBRID_CL_SWITCH_COST", "2.0") or 2.0)
 # 一整段没有换行、现代汉语 / 文言 / 诗词首尾相接时，在文体切换处断开（segmenter.split_register_switches）；2026-11-06 试验
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
 # 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数

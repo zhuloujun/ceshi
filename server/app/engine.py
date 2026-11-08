@@ -797,7 +797,8 @@ class Engine:
                             if k < len(pairs) and pairs[k] is not None:
                                 pairs[k] = min(pairs[k], 0.5)
             plan = hybrid.plan_split(text, s.register, single, pairs, spans,
-                                     dict(cfg, ai_mean=config.HYBRID_CL_AI_MEAN, min_zh=config.HYBRID_MIN_ZC_CHARS) if classical else cfg)
+                                     dict(cfg, ai_mean=config.HYBRID_CL_AI_MEAN, min_zh=config.HYBRID_MIN_ZC_CHARS,
+                                          relax=False, switch_cost=config.HYBRID_CL_SWITCH_COST) if classical else cfg)
             if not plan:
                 out.append(s)
                 continue
