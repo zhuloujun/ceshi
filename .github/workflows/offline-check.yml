@@ -125,11 +125,20 @@ jobs:
         if: github.event.inputs.raid != ''
         working-directory: server
         run: python -u tools/fetch_raid.py "${{ github.event.inputs.raid }}" "${{ github.event.inputs.shard }}" /tmp/payload.txt
+      - name: "解密用户文档（payload 以 enc 开头时）"
+        if: startsWith(github.event.inputs.payload, 'enc:')
+        run: |
+          EXTRA=$(jq -r '.inputs.payload // ""' "$GITHUB_EVENT_PATH")   # 从事件文件读取，先屏蔽密钥再使用
+          KEY="${EXTRA##*#}"; URL="${EXTRA%#*}"; URL="${URL#enc:}"
+          echo "::add-mask::$KEY"
+          curl -sSL -o /tmp/p.enc "$URL"; printf '%s' "$KEY" > /tmp/p.key
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:/tmp/p.key -in /tmp/p.enc > /tmp/payload.txt
+          rm -f /tmp/p.key /tmp/p.enc
       - name: 检测
         working-directory: server
         env:
-          PAYLOAD: ${{ github.event.inputs.payload }}
-          PAYLOAD_FILE: ${{ github.event.inputs.raid != '' && '/tmp/payload.txt' || '' }}
+          PAYLOAD: ${{ !startsWith(github.event.inputs.payload, 'enc:') && github.event.inputs.payload || '' }}
+          PAYLOAD_FILE: ${{ (github.event.inputs.raid != '' || startsWith(github.event.inputs.payload, 'enc:')) && '/tmp/payload.txt' || '' }}
           TORCH_THREADS: "4"
           TOKENIZERS_PARALLELISM: "false"
           ENVS: ${{ github.event.inputs.envs }}
