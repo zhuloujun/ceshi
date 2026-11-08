@@ -134,19 +134,30 @@ def plan_split(text: str, register: str, single: list, pairs: list, spans: list,
         unit = 12 if register == "en" else 20
         ev = [e * min(3.0, max(1.0, n / unit)) for e, n in zip(ev, sizes)]
     path = viterbi(ev, cfg["switch_cost"], cfg["temp"])
-    path = merge_short_runs(path, sizes, cfg["min_en"] if register == "en" else cfg["min_zh"])
-    rs = runs_of(path)
-    if len(rs) < 2 or not any(s for s, _, _ in rs):
-        return None
-    out = []
-    for s, a, b in rs:
-        ps = [p for p in single[a:b] if p is not None]
-        mean = sum(ps) / len(ps) if ps else None
-        if mean is None:
+    min_size = cfg["min_en"] if register == "en" else cfg["min_zh"]
+    # cfg["relax"]：某一块不够把握时不再整段放弃，而是把最没把握的那块并回邻居后重算（2026-11-08，cs1108 去标注版）
+    for _ in range(len(spans) if cfg.get("relax") else 1):
+        path = merge_short_runs(path, sizes, min_size)
+        rs = runs_of(path)
+        if len(rs) < 2 or not any(s for s, _, _ in rs):
             return None
-        if s and mean < cfg["ai_mean"]:
+        out, bad = [], []
+        for k, (s, a, b) in enumerate(rs):
+            ps = [p for p in single[a:b] if p is not None]
+            mean = sum(ps) / len(ps) if ps else None
+            if mean is None:
+                return None
+            if s and mean < cfg["ai_mean"]:
+                bad.append((cfg["ai_mean"] - mean, k))
+            if not s and mean > cfg["human_mean"]:
+                bad.append((mean - cfg["human_mean"], k))
+            out.append((spans[a][0], spans[b - 1][1], s, round(mean, 4)))
+        if not bad:
+            return out
+        if not cfg.get("relax"):
             return None
-        if not s and mean > cfg["human_mean"]:
-            return None
-        out.append((spans[a][0], spans[b - 1][1], s, round(mean, 4)))
-    return out
+        _, k = max(bad)
+        s, a, b = rs[k]
+        for i in range(a, b):
+            path[i] = 1 - s
+    return None
