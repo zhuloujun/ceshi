@@ -4,8 +4,8 @@
 
 | 文件夹 | 是什么 | 部署到哪里 | 怎么自动部署 |
 |---|---|---|---|
-| 仓库根目录（`worker.js`、`pages-static/` 等） | **网站入口**：把你的域名转发到完整版；`/lite/` 下保留轻量版（浏览器本地统计检测 + 标点排版检查，可选 GPTZero） | Cloudflare Worker `ai-text-checker`（免费） | Cloudflare 自动构建：`main` 分支有新提交就重新部署 |
-| `server/` | **完整版检测服务**：按段落识别文体（现代汉语 / 文言 / 英文）后分别判断——F + B + 分类器（中文 M、英文 de）+ 扩展特征，三种文体各自校准；自签发 API Key | Modal（按实际运行时间计费，有免费额度） | GitHub Actions：`server/` 有改动时先测试，通过后部署到 Modal |
+| 仓库根目录（`worker.js`、`pages-static/` 等） | **网站入口**：把你的域名转发到完整版；`/lite/` 下保留轻量版（浏览器本地统计检测 + 标点排版检查，可选 GPTZero） | Cloudflare Worker `a-t-c`（免费） | Cloudflare 自动构建：`main` 分支有新提交就重新部署 |
+| `server/` | **完整版检测服务**：按段落识别文体（现代汉语 / 文言 / 英文）后分别判断——F + B + 分类器（中文 M、英文 de）+ 扩展特征，三种文体各自校准；自签发 API Key | M（按实际运行时间计费，有免费额度） | GitHub Actions：`server/` 有改动时先测试，通过后部署到 M |
 
 ```
 访客 ──→ 你的域名（Cloudflare Worker）──┬─ /lite/ ──→ 轻量版（Worker 自己提供）
@@ -25,26 +25,26 @@ Worker 转发的目标地址写在 `wrangler.toml` 的 `BACKEND_URL`。删掉那
 
 ### A. Cloudflare（轻量版）：已完成 ✓
 
-Worker `ai-text-checker` 已在 Cloudflare 后台连接本仓库（设置 → 构建 → Git 存储库），`main` 分支有新提交时自动构建并部署。
+Worker `a-t-c` 已在 Cloudflare 后台连接本仓库（设置 → 构建 → Git 存储库），`main` 分支有新提交时自动构建并部署。
 
 - 部署记录：Cloudflare 后台 → Workers 和 Pages → `a-t-c` → **部署** 标签。
 - 如果以后提示"已与 Git 帐户断开连接"：到 <https://github.com/settings/installations> → **Cloudflare Workers and Pages** → **Configure**，确认仓库权限包含 `A-t-c`；必要时在 Cloudflare 里点 **断开连接** 再 **连接**（构建命令留空，部署命令 `npx wrangler deploy`）。
 
 ### 绑定自己的域名（在 Cloudflare 后台操作一次）
 
-Cloudflare 后台 → **Workers 和 Pages** → `ai-text-checker` → **设置** → **域和路由** → **添加** → **自定义域** → 填入例如 `ai.wenjinge.dpdns.org`（域名需已托管在这个 Cloudflare 账户里）→ **添加域**。几分钟后即可用这个地址访问完整版，`/admin` 是管理页，`/lite/` 是轻量版。
+Cloudflare 后台 → **Workers 和 Pages** → `a-t-c` → **设置** → **域和路由** → **添加** → **自定义域** → 填入例如 `ai.wenjinge.dpdns.org`（域名需已托管在这个 Cloudflare 账户里）→ **添加域**。几分钟后即可用这个地址访问完整版，`/admin` 是管理页，`/lite/` 是轻量版。
 
 ### B. Modal（完整版）
 
-1. **注册 Modal**：打开 <https://modal.com/signup>，用 GitHub 账号登录即可。
+1. **注册 Modal**：打开 <https://mo.com/signup>，用 GitHub 账号登录即可。
 2. **生成令牌**：登录后点左下角或右上角的 **Settings**（设置）→ **API Tokens** → **New Token**，页面会显示两串字符：
    - `Token ID`（以 `ak-` 开头）
    - `Token Secret`（以 `as-` 开头，只显示一次）
-3. **存进 GitHub**：打开 <https://github.com/zhuloujun/ceshi/settings/secrets/actions> → **New repository secret**，添加两个：
+3. **存进 GitHub**：打开 <https://github.com/z/ceshi/settings/secrets/actions> → **New repository secret**，添加两个：
    - Name `MODAL_TOKEN_ID`，Secret 填 `ak-…`
    - Name `MODAL_TOKEN_SECRET`，Secret 填 `as-…`
    - 管理员密码沿用已添加的 `HF_ADMIN_TOKEN`，不用再加。
-4. **第一次部署**：打开 <https://github.com/zhuloujun/ceshi/actions> → 左侧 **部署检测服务到 Modal** → **Run workflow**。
+4. **第一次部署**：打开 <https://github.com/z/ceshi/actions> → 左侧 **部署检测服务到 Modal** → **Run workflow**。
    - 首次要构建镜像、下载约 2 GB 模型，约 10–20 分钟。
    - 完成后，在这次运行的页面顶部（Summary）能看到网站地址，形如 `https://<你的 Modal 用户名>--a-t-cr-web.modal.run`。
 5. 打开 `网站地址/admin`，输入 `HF_ADMIN_TOKEN` 的密码，生成 API Key。
@@ -55,8 +55,8 @@ Cloudflare 后台 → **Workers 和 Pages** → `ai-text-checker` → **设置**
 
 数据库（Cloudflare D1 `a_t_c_db`）和签发检测 Key 的密钥都已配好。只差发验证码邮件用的 Resend 密钥；添加后网站自动切换为"注册登录后才能使用"，没添加之前照旧公开访问。
 
-1. 登录 <https://resend.com/api-keys>（账户 orgxyz）→ **Create API Key** → Name 填 `a-t-c`，Permission 选 **Sending access**，Domain 选 `9369369.xyz`（需要在 <https://resend.com/domains> 显示 Verified）→ **Add**，复制 `re_…`（只显示一次）。
-2. 打开 <https://github.com/zhuloujun/ceshi/settings/secrets/actions> → **New repository secret** → Name 填 `RESEND_API_KEY`，Secret 粘贴 `re_…` → **Add secret**。
+1. 登录 <https://resend.com/api-keys>（账户 orgxyz）→ **Create API Key** → Name 填 `a-t-c`，Permission 选 **Sending access**，Domain 选 `936.xyz`（需要在 <https://resend.com/domains> 显示 Verified）→ **Add**，复制 `re_…`（只显示一次）。
+2. 打开 <https://github.com/z/ceshi/settings/secrets/actions> → **New repository secret** → Name 填 `RESEND_API_KEY`，Secret 粘贴 `re_…` → **Add secret**。
 3. 由维护者运行"写入网站密钥"工作流（需要一次性设置令牌），网站会给管理员邮箱发一封测试邮件。
 
 完成后：
@@ -84,7 +84,7 @@ Cloudflare 后台 → **Workers 和 Pages** → `ai-text-checker` → **设置**
 **在网页上改（不需要装任何软件）**：在 GitHub 打开要改的文件 → 点铅笔图标 ✏️ → 修改 → **Commit changes**。几分钟后网站会自动更新。
 
 **看部署结果**：
-- 完整版：<https://github.com/zhuloujun/ceshi/actions> 里的 **部署检测服务到 Modal**。绿色 ✓ 成功；红色 ✗ 点进去看 Summary 里的错误说明。
+- 完整版：<https://github.com/z/ceshi/actions> 里的 **部署检测服务到 Modal**。绿色 ✓ 成功；红色 ✗ 点进去看 Summary 里的错误说明。
 - 轻量版：Cloudflare 后台 Worker 页面的 **部署** 标签。
 
 **检测效果**：见 [`server/tools/EVAL_REPORT.md`](server/tools/EVAL_REPORT.md)（每种文体都在训练时没见过的数据上测过检出率和误判率）。修改 `server/tools/` 下的文件并推送后会自动重新评估。
@@ -179,7 +179,7 @@ server/                完整版检测服务（说明见 server/README.md）
 ### 已知局限
 
 - 本地"疑似度"是统计方法，准确率明显低于商用检测器，误判较多。
-- **史学、人文社科论文尤其容易被误判**：大量古籍引文、术语、固定学术表述本身就句式规整、用词集中。GPTZero 同样可能误判这类文本。
+- **史学、人文社科论文尤其容易被误判**：大量古籍引文、术语、固定学术表述本身就句式规整、用词集中。
 - 用 AI 辅助翻译或润色过（但内容原创）的文字，统计特征也会偏向"AI 风格"。
 - 所有分数只适合自查"哪些段落写得偏套路化"，**不能作为投稿、查重或学术诚信判定的依据**。
 
