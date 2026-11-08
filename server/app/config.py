@@ -279,7 +279,8 @@ HYBRID_REQUIRE_TAGGER = _bool("HYBRID_REQUIRE_TAGGER", True)
 HYBRID_CLASSICAL = _bool("HYBRID_CLASSICAL", False)
 HYBRID_FAMOUS_PPL = float(os.getenv("HYBRID_FAMOUS_PPL", "4.0") or 4.0)
 HYBRID_SIZE_WEIGHT = _bool("HYBRID_SIZE_WEIGHT", False)
-HYBRID_SMOOTH_BARRIER = _bool("HYBRID_SMOOTH_BARRIER", True)   # 混写切分出的块不参与相邻平滑，也不让被它隔开的段落互相平滑（2026-11-07）   # 句子单元按长度加权（2026-11-06 试验）
+HYBRID_SMOOTH_BARRIER = _bool("HYBRID_SMOOTH_BARRIER", True)   # 混写切分出的块不参与相邻平滑，也不让被它隔开的段落互相平滑（2026-11-07）
+HYBRID_RELAX = _bool("HYBRID_RELAX", False)   # 某块把握不足时把它并回邻居重算，而不是整段放弃切分（2026-11-08 试验）
 HYBRID_CL_AI_MEAN = float(os.getenv("HYBRID_CL_AI_MEAN", "0.6") or 0.6)
 # 一整段没有换行、现代汉语 / 文言 / 诗词首尾相接时，在文体切换处断开（segmenter.split_register_switches）；2026-11-06 试验
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
