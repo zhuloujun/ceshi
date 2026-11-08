@@ -976,6 +976,15 @@ def _flag_quotations(segments):
     cjk_all = sum(len(s.text) for b in blocks.values() for s in b if s.register != "en") or 1
     classical_all = sum(len(s.text) for b in blocks.values() for s in b if s.register in ("zh_classical", "zh_poetry"))
     classical_collection = classical_all >= 0.6 * cjk_all
+    # 现代文、文言、诗词一段接一段地交替（作品集 / 测试集把各种文体首尾相接，2026-11-08 cs1108 无编号版：
+    # 文言、诗词夹在现代文之间多达十几处，全被当成"现代文里引的古籍"不计入，AI 写的文言、诗词一律漏检）：
+    # 文体来回切换很多次、文言诗词又占相当比例时，按作品集处理。名篇原文另有名篇库 / 语言模型识别，不受影响
+    if config.ANTHOLOGY_SWITCHES and not classical_collection:
+        regs = [("c" if s.register in ("zh_classical", "zh_poetry") else "m") for b in blocks.values() for s in b
+                if s.register != "en"]
+        switches = sum(1 for a, b in zip(regs, regs[1:]) if a != b)
+        if switches >= config.ANTHOLOGY_SWITCHES and classical_all >= config.ANTHOLOGY_CL_SHARE * cjk_all:
+            classical_collection = True
     for body in blocks.values():
         total = sum(len(s.text) for s in body) or 1
         cjk_body = [s for s in body if s.register != "en"]
