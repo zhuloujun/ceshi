@@ -1484,6 +1484,14 @@ class Engine:
         paper_ai -= en_instr | en_abs
         zh_human_work |= en_instr | en_abs
         work_ai -= zh_human_work
+        if config.HYBRID_NO_CARRY:
+            # 人机混写切分在这一段里找到了换作者的地方：这段文字本来就是混写的，“整篇都是 AI”的推断不成立，
+            # 未过阈值的段落不再按整篇判断带上（2026-11-08 cs1108 去标注版：真人英文段被整篇判断带成“中度疑似”）
+            mixed = {getattr(x, "orig_block", x.block) for x in segs if getattr(x, "hybrid", None) is not None}
+            if mixed:
+                carry_off = {x.index for x in segs if getattr(x, "orig_block", x.block) in mixed}
+                for st_ in (work_ai, paper_ai, zh2_ai, zh_doc_ai):
+                    st_ -= carry_off
 
         def human_ref_of(i, pr):
             if pr is None or i not in prof_name:
