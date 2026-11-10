@@ -1275,6 +1275,23 @@ class Engine:
                             and len(segs_by_idx[i].text) >= config.ZH_AGREE_MIN_CHARS and i not in memo
                             and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
                         zh2_seg.add(i)
+        # 6.575) 第二分类器多段合议：同一文档里 ≥ ZH2_POOL_MIN_SEGS 段现代中文（各 ≥ ZH2_POOL_MIN_CHARS 字）的第二分类器得分
+        #        都达到 ZH2_POOL_THRESHOLD，但单看都没过阈值时，这几段一并按"中度疑似"计入。单段 0.945–0.95 的分数不够可靠，
+        #        多段同时出现就很难是巧合（与 ChangAn 2026 等研究"多篇合并判断显著提高准确率"一致）。
+        #        依据（2026-11-10，22 个测试集）：真人文档 0 篇触发；AI 文档 33 篇触发、找回 107 段漏检（题解、浅近文言、家书为主）。
+        if config.ZH2_POOL_MIN_SEGS > 0:
+            pool = []
+            for (blk, reg), idxs in groups.items():
+                if reg != "zh":
+                    continue
+                for i in idxs:
+                    p2 = results[i].get("classifier_zh2")
+                    if (p2 is not None and p2 >= config.ZH2_POOL_THRESHOLD and len(segs_by_idx[i].text) >= config.ZH2_POOL_MIN_CHARS
+                            and i not in memo and i not in zh2_seg and i not in zh2_ai
+                            and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
+                        pool.append(i)
+            if len(pool) >= config.ZH2_POOL_MIN_SEGS:
+                zh2_seg.update(pool)
         zh2_ai |= zh2_seg
         # 6.58) 古典作品合议：同一份文档里的文言 / 诗词 / 对联（不含引文、名篇）≥ 2 段时，按字数加权平均分达到 CL_POOL_MEAN，
         #       未过阈值的各段一并按"中度疑似（整组判断）"计入。单首诗、单副对联字数太少，模型逐首判断不稳定；
