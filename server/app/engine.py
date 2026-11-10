@@ -524,6 +524,17 @@ def is_en_verse(text: str) -> bool:
     return punct >= 0.5 or lower >= 0.3
 
 
+
+def _zh2_calib(p):
+    """按 config.ZH2_CALIB 把中文第二分类器的分数逐点线性换算（见 config 说明）。"""
+    if p is None or not config.ZH2_CALIB:
+        return p
+    pts = sorted((float(a), float(b)) for a, b in (kv.split(":") for kv in config.ZH2_CALIB.split(",")))
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if p <= x1:
+            return y0 if x1 == x0 else y0 + (y1 - y0) * (p - x0) / (x1 - x0)
+    return pts[-1][1]
+
 class Engine:
     def __init__(self):
         self.lm = LMScorer() if config.ENABLE_LM else None
@@ -829,7 +840,7 @@ class Engine:
         idx = [i for i, r in enumerate(registers) if r == "zh"]
         if idx:
             for i, p in zip(idx, self.cls_zh2.predict([texts[i] for i in idx])):
-                out[i] = p
+                out[i] = _zh2_calib(p)
         return out
 
     def raw_scores(self, texts: list[str], progress=None, registers: list[str] | None = None) -> list[dict]:

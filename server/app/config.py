@@ -105,6 +105,10 @@ ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
 # v3（2026-10-04）：加入 287 篇"去 AI 味"改写的中文（五家国产模型先写再按"降 AI 率"指令改写，或一步要求"写得不像 AI"）。
 # 没参与训练的 ChatGPT / Gemini"规避检测"中文文章 6 篇里 5 篇整篇 ≥ 0.92；没参与训练的真人文档整篇最高 0.05（v2 为 0.08）。
 ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v8")
+# 中文第二分类器分数换算（逐点线性插值 "原分:换算分,…"；留空 = 不换算）。v8 的分数整体偏高（同一批段落约一半 ≥0.951，
+# own1 只有约 20%），而下游各条规则的门槛（0.945 / 0.95 等）是按 own1 定的；按同一批 2696 段的分位数把 v8 换算到 own1 的尺度。
+ZH2_CALIB = os.getenv("ZH2_CALIB", "0:0,0.0565:0.05,0.1265:0.056,0.915:0.072,0.951:0.12,0.953:0.606,0.954:0.936,0.955:0.95,"
+                      "0.956:0.9515,0.957:0.953,0.958:0.954,0.959:0.955,0.96:0.956,1:1")
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
 def _calibrated_classifier(profile: str, prefix: str, default: str) -> str:
