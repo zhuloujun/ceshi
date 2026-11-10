@@ -1261,7 +1261,35 @@ class Engine:
                         and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
                         and i not in memo):
                     zh2_seg.add(i)
+        # 6.57) 两个中文分类器一致：MPU 分类器（cls）≥ ZH_AGREE_CLS、第二分类器（zh2）≥ ZH_AGREE_ZH2 时，这一段按"中度疑似"计入，
+        #       不再要求某一个模型单独越过 0.95 和字数门槛。依据（2026-11-10 全量诊断，12 个测试集）：漏检的现代文 AI 里
+        #       有 19 篇两个模型都 ≥ 0.9，却因第二分类器 0.945–0.949、或字数不到 250 被挡；真人中文段 668 段里只有 1 段两个都 ≥ 0.9。
+        #       与商用检测器（GPTZero、Originality）多模型合议的做法一致：单个模型的极端分数不如两个独立模型的一致意见可靠。
+        if config.ZH_AGREE_CLS < 1:
+            for (blk, reg), idxs in groups.items():
+                if reg != "zh":
+                    continue
+                for i in idxs:
+                    c, z = results[i].get("classifier"), results[i].get("classifier_zh2")
+                    if (c is not None and z is not None and c >= config.ZH_AGREE_CLS and z >= config.ZH_AGREE_ZH2
+                            and len(segs_by_idx[i].text) >= config.ZH_AGREE_MIN_CHARS and i not in memo
+                            and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
+                        zh2_seg.add(i)
         zh2_ai |= zh2_seg
+        # 6.58) 古典作品合议：同一份文档里的文言 / 诗词 / 对联（不含引文、名篇）≥ 2 段时，按字数加权平均分达到 CL_POOL_MEAN，
+        #       未过阈值的各段一并按"中度疑似（整组判断）"计入。单首诗、单副对联字数太少，模型逐首判断不稳定；
+        #       ChangAn（ACL 2026，arXiv 2604.10101）测得：同一来源的诗从 1 首合到 6 首一起判断，AUROC 从 75.7 升到 88.0。
+        #       本项目诊断（2026-11-10）：AI 文言 / 诗词有 23 篇是"一首被拆成几段、每段各差一点"或"分数中等被阈值挡"；
+        #       用 12 个测试集模拟，加权平均 ≥ 0.65、≥ 2 段时 AI 多检出约 22 篇，真人古典作品（集）新增误判 0。
+        cl_pool = set()
+        if config.CL_POOL_MEAN < 1:
+            cl_idx = [i for (blk, reg), idxs in groups.items() if reg in ("zh_classical", "zh_poetry") for i in idxs
+                      if i not in memo and smoothed.get(i) is not None]
+            if len(cl_idx) >= 2:
+                w = sum(len(segs_by_idx[i].text) for i in cl_idx) or 1
+                if sum(smoothed[i] * len(segs_by_idx[i].text) for i in cl_idx) / w >= config.CL_POOL_MEAN:
+                    cl_pool = {i for i in cl_idx if smoothed[i] < float(prof[i][0].get("threshold", 0.5))}
+        zh2_ai |= cl_pool
         # 6.6) 英文非论文作品（故事、散文、读后感、清单……）的整篇判断：英文整篇分类器各段得分的加权中位数（两段取较低）
         #      达到 EN3_DOC_THRESHOLD 时，本篇未过阈值的段落计为"中度疑似（整篇判断）"。英文论文另有论文整篇判断。
         if True:

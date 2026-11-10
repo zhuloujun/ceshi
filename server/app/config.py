@@ -213,7 +213,11 @@ ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.85") or 0.85)
 # AI（ChatGPT 文白夹杂保留集 148/150、1015.docx 5/5）≥ 0.95。阈值定为 0.95：这批真人 0 段达到。
 ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.95") or 0.95)
 ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
-ZH2_SEG_MIN_CHARS = _int("ZH2_SEG_MIN_CHARS", 150)   # 多段文章里单独一段按第二分类器计入的最短字数
+ZH2_SEG_MIN_CHARS = _int("ZH2_SEG_MIN_CHARS", 150)
+ZH_AGREE_CLS = float(os.getenv("ZH_AGREE_CLS", "0.96") or 0.96)    # MPU 分类器 ≥ 此值且第二分类器 ≥ ZH_AGREE_ZH2 时按"中度疑似"计入（≥ 1 关闭）
+ZH_AGREE_ZH2 = float(os.getenv("ZH_AGREE_ZH2", "0.9") or 0.9)
+ZH_AGREE_MIN_CHARS = _int("ZH_AGREE_MIN_CHARS", 40)
+CL_POOL_MEAN = float(os.getenv("CL_POOL_MEAN", "0.65") or 0.65)    # 文档内文言 / 诗词 ≥ 2 段的加权平均分达到此值时整组计入（≥ 1 关闭）   # 多段文章里单独一段按第二分类器计入的最短字数
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
 WORK_MAJORITY = float(os.getenv("WORK_MAJORITY", "0.6") or 0.6)   # 同篇已判 AI 的文字占比达到此值，接近阈值的段落按整篇计入
 # 文言虚词（之乎者也矣焉哉曰…）占汉字比例超过此值的段落，视为以古籍引文为主，不计入 AI 率
