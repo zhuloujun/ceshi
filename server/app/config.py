@@ -213,6 +213,10 @@ ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.85") or 0.85)
 # AI（ChatGPT 文白夹杂保留集 148/150、1015.docx 5/5）≥ 0.95。阈值定为 0.95：这批真人 0 段达到。
 ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.95") or 0.95)
 ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
+# 第二分类器多段合议（engine 6.575）：一篇里 ≥ ZH2_POOL_MIN_SEGS 段现代中文、各 ≥ ZH2_POOL_MIN_CHARS 字、得分都 ≥ ZH2_POOL_THRESHOLD 时一并计入。设为 0 关闭。
+ZH2_POOL_MIN_SEGS = _int("ZH2_POOL_MIN_SEGS", 2)
+ZH2_POOL_MIN_CHARS = _int("ZH2_POOL_MIN_CHARS", 80)
+ZH2_POOL_THRESHOLD = float(os.getenv("ZH2_POOL_THRESHOLD", "0.945") or 0.945)
 ZH2_SEG_MIN_CHARS = _int("ZH2_SEG_MIN_CHARS", 150)
 ZH_AGREE_CLS = float(os.getenv("ZH_AGREE_CLS", "0.96") or 0.96)    # MPU 分类器 ≥ 此值且第二分类器 ≥ ZH_AGREE_ZH2 时按"中度疑似"计入（≥ 1 关闭）
 ZH_AGREE_ZH2 = float(os.getenv("ZH_AGREE_ZH2", "0.9") or 0.9)
