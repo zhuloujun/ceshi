@@ -1068,6 +1068,22 @@ class Engine:
         combos = {s.index: (scoring.combine(for_combine(s.index), prof[s.index][0]) if s.index in scored_ids
                             else {"prob": None, "signals": {}})
                   for s in segs}
+        # 1.9) 高分"引文"合议：AI 拟古作品（骚体、乐府、题解里的原文、文言寓言）常被当成引文排除。同一文档里
+        #      ≥ QUOTE_POOL_MIN_SEGS 段引文（各 ≥ QUOTE_POOL_MIN_CHARS 字，非名篇）得分都 ≥ QUOTE_POOL_PROB，且这些高分引文
+        #      占全部引文字数 ≥ QUOTE_POOL_SHARE 时，改按正文计入。真人论文大量引用古籍时，真古文得 ≥0.95 的只约 1.4%，
+        #      占比条件保证引文再多也不会触发。依据（2026-11-10，25 个测试集）：真人文档 0 篇触发，AI 文档 67 篇触发。
+        if config.QUOTE_POOL_MIN_SEGS > 0:
+            fam_words = ("名篇", "逐字复现", "原句相同")
+            qs = [x for x in segs if x.kind == "quotation" and x.index not in memo
+                  and not any(w in n for n in x.notes for w in fam_words)]
+            qchars = sum(len(x.text) for x in qs) or 1
+            hi = [x for x in qs if len(x.text) >= config.QUOTE_POOL_MIN_CHARS and combos[x.index]["prob"] is not None
+                  and combos[x.index]["prob"] >= config.QUOTE_POOL_PROB]
+            if len(hi) >= config.QUOTE_POOL_MIN_SEGS and sum(len(x.text) for x in hi) / qchars >= config.QUOTE_POOL_SHARE:
+                for x in hi:
+                    x.kind = "body"
+                    x.notes = list(x.notes) + ["原按引文排除；但同篇多段“引文”都极像 AI 拟作，改为计入"]
+                counted = [x for x in segs if x.counted]
         # 2) 与相邻正文段落平滑：只在同一篇作品、同一文体的正文段落之间进行（标题行分开的作品互不影响）
         smoothed = {}
         segs_by_idx = {s.index: s for s in segs}
