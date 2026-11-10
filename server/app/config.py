@@ -100,9 +100,11 @@ DS_LEX_MIN = int(os.getenv("DS_LEX_MIN", "4") or 4)
 DS_THING_MIN = int(os.getenv("DS_THING_MIN", "8") or 8)  # 1000 词内 "is the thing that" 次数；真人书最高 4，BookCorpusOpen 23509 个窗口最高 5
 # 国产大模型中文分类器整篇中位数低于这个值（明确像人写）时，不用 MPU 中文分类器的整篇判断
 ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
+# v7（2026-11-08）：加入 8 家平台 11-08 上传的现代文 AI 样本 265 段，并加 280 段真人现代散文 / 译文对照
+#（v6 只加 AI 样本，把朱自清《背影》判到 0.93；v7 真人文学整篇最高 0.06，《背影》0.05）。
 # v3（2026-10-04）：加入 287 篇"去 AI 味"改写的中文（五家国产模型先写再按"降 AI 率"指令改写，或一步要求"写得不像 AI"）。
 # 没参与训练的 ChatGPT / Gemini"规避检测"中文文章 6 篇里 5 篇整篇 ≥ 0.92；没参与训练的真人文档整篇最高 0.05（v2 为 0.08）。
-ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v5")
+ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-v7")
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
 def _calibrated_classifier(profile: str, prefix: str, default: str) -> str:
@@ -211,7 +213,20 @@ ZH2_DOC_THRESHOLD = float(os.getenv("ZH2_DOC_THRESHOLD", "0.85") or 0.85)
 # AI（ChatGPT 文白夹杂保留集 148/150、1015.docx 5/5）≥ 0.95。阈值定为 0.95：这批真人 0 段达到。
 ZH2_SINGLE_THRESHOLD = float(os.getenv("ZH2_SINGLE_THRESHOLD", "0.95") or 0.95)
 ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
-ZH2_SEG_MIN_CHARS = _int("ZH2_SEG_MIN_CHARS", 150)   # 多段文章里单独一段按第二分类器计入的最短字数
+# 第二分类器多段合议（engine 6.575）：一篇里 ≥ ZH2_POOL_MIN_SEGS 段现代中文、各 ≥ ZH2_POOL_MIN_CHARS 字、得分都 ≥ ZH2_POOL_THRESHOLD 时一并计入。设为 0 关闭。
+ZH2_POOL_MIN_SEGS = _int("ZH2_POOL_MIN_SEGS", 2)
+ZH2_POOL_MIN_CHARS = _int("ZH2_POOL_MIN_CHARS", 80)
+ZH2_POOL_THRESHOLD = float(os.getenv("ZH2_POOL_THRESHOLD", "0.945") or 0.945)
+# 高分"引文"合议（engine 1.9）：同篇 ≥ QUOTE_POOL_MIN_SEGS 段引文得分 ≥ QUOTE_POOL_PROB、且占全部引文字数 ≥ QUOTE_POOL_SHARE 时改为计入。设为 0 关闭。
+QUOTE_POOL_MIN_SEGS = _int("QUOTE_POOL_MIN_SEGS", 2)
+QUOTE_POOL_MIN_CHARS = _int("QUOTE_POOL_MIN_CHARS", 40)
+QUOTE_POOL_PROB = float(os.getenv("QUOTE_POOL_PROB", "0.95") or 0.95)
+QUOTE_POOL_SHARE = float(os.getenv("QUOTE_POOL_SHARE", "0.5") or 0.5)
+ZH2_SEG_MIN_CHARS = _int("ZH2_SEG_MIN_CHARS", 150)
+ZH_AGREE_CLS = float(os.getenv("ZH_AGREE_CLS", "0.96") or 0.96)    # MPU 分类器 ≥ 此值且第二分类器 ≥ ZH_AGREE_ZH2 时按"中度疑似"计入（≥ 1 关闭）
+ZH_AGREE_ZH2 = float(os.getenv("ZH_AGREE_ZH2", "0.9") or 0.9)
+ZH_AGREE_MIN_CHARS = _int("ZH_AGREE_MIN_CHARS", 40)
+CL_POOL_MEAN = float(os.getenv("CL_POOL_MEAN", "0.65") or 0.65)    # 文档内文言 / 诗词 ≥ 2 段的加权平均分达到此值时整组计入（≥ 1 关闭）   # 多段文章里单独一段按第二分类器计入的最短字数
 EN_PAPER_DOC_THRESHOLD = float(os.getenv("EN_PAPER_DOC_THRESHOLD", "0.85") or 0.85)   # 英文论文整篇判断阈值（第二分类器中位数）
 WORK_MAJORITY = float(os.getenv("WORK_MAJORITY", "0.6") or 0.6)   # 同篇已判 AI 的文字占比达到此值，接近阈值的段落按整篇计入
 # 文言虚词（之乎者也矣焉哉曰…）占汉字比例超过此值的段落，视为以古籍引文为主，不计入 AI 率
@@ -279,8 +294,13 @@ HYBRID_REQUIRE_TAGGER = _bool("HYBRID_REQUIRE_TAGGER", True)
 HYBRID_CLASSICAL = _bool("HYBRID_CLASSICAL", False)
 HYBRID_FAMOUS_PPL = float(os.getenv("HYBRID_FAMOUS_PPL", "4.0") or 4.0)
 HYBRID_SIZE_WEIGHT = _bool("HYBRID_SIZE_WEIGHT", False)
-HYBRID_SMOOTH_BARRIER = _bool("HYBRID_SMOOTH_BARRIER", True)   # 混写切分出的块不参与相邻平滑，也不让被它隔开的段落互相平滑（2026-11-07）   # 句子单元按长度加权（2026-11-06 试验）
+HYBRID_SMOOTH_BARRIER = _bool("HYBRID_SMOOTH_BARRIER", True)   # 混写切分出的块不参与相邻平滑，也不让被它隔开的段落互相平滑（2026-11-07）
+HYBRID_RELAX = _bool("HYBRID_RELAX", True)
+HYBRID_NO_CARRY = _bool("HYBRID_NO_CARRY", True)   # 混写切分过的段落不再按整篇判断带上（2026-11-08 试验）   # 某块把握不足时把它并回邻居重算，而不是整段放弃切分（2026-11-08 试验）
 HYBRID_CL_AI_MEAN = float(os.getenv("HYBRID_CL_AI_MEAN", "0.6") or 0.6)
+# 文言 / 诗词的混写切分不放宽（2026-11-08：放宽后 4 篇纯 AI 拟古文被切出“人写”块，AI 率从 0.8–0.98 掉到 0.2–0.4）
+HYBRID_CL_SWITCH_COST = float(os.getenv("HYBRID_CL_SWITCH_COST", "2.0") or 2.0)
+HYBRID_CL_HUMAN_MEAN = float(os.getenv("HYBRID_CL_HUMAN_MEAN", "0.35") or 0.35)
 # 一整段没有换行、现代汉语 / 文言 / 诗词首尾相接时，在文体切换处断开（segmenter.split_register_switches）；2026-11-06 试验
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
 # 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
@@ -293,14 +313,14 @@ TAGGER_ZH_ID = os.getenv("TAGGER_ZH_ID", "chinese-tagger-v1")
 TAGGER_EN_ID = os.getenv("TAGGER_EN_ID", "english-tagger-v2")
 TAGGER_ZC_ID = os.getenv("TAGGER_ZC_ID", "classical-tagger-v2")
 TAGGER_ZP_ID = os.getenv("TAGGER_ZP_ID", "")
-HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "2.0") or 2.0)   # 每换一次作者的代价（对数似然）
+HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "1.0") or 1.0)   # 每换一次作者的代价（对数似然）
 HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
 HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长
 HYBRID_MIN_ZH_CHARS = _int("HYBRID_MIN_ZH_CHARS", 40)
 # 文言 / 诗词切分出的每一块至少多少字（2026-11-06，90 字：混写卷 AI 检出 50.5%→53.1%、真人误标 1.6%→1.2%；120 字则检出无提升。金史本传末尾 84 字被单独切出、判成 AI；文言句子短、证据少，单独切块要更长）
 HYBRID_MIN_ZC_CHARS = _int("HYBRID_MIN_ZC_CHARS", 90)
-HYBRID_AI_MEAN = float(os.getenv("HYBRID_AI_MEAN", "0.9") or 0.9)        # AI 块的单句分数平均至少这么高才切
-HYBRID_HUMAN_MEAN = float(os.getenv("HYBRID_HUMAN_MEAN", "0.35") or 0.35)  # 人写块的平均至多这么高才切
+HYBRID_AI_MEAN = float(os.getenv("HYBRID_AI_MEAN", "0.8") or 0.8)        # AI 块的单句分数平均至少这么高才切
+HYBRID_HUMAN_MEAN = float(os.getenv("HYBRID_HUMAN_MEAN", "0.45") or 0.45)  # 人写块的平均至多这么高才切
 HYBRID_AI_SURE = float(os.getenv("HYBRID_AI_SURE", "1.01") or 1.01)      # AI 块平均达到此值，综合分数没过阈值也计入（默认关闭：
 # 2026-11-05 测试中短句的分类器分数整体偏高，这条让 91 篇真人说明文多误判 1 篇，只按完整流程的分数判断）
 REF_CHECK_MAX = _int("REF_CHECK_MAX", 40)

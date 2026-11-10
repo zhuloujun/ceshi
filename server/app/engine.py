@@ -753,7 +753,7 @@ class Engine:
         cfg = {"switch_cost": config.HYBRID_SWITCH_COST, "temp": config.HYBRID_TEMP,
                "min_en": config.HYBRID_MIN_EN_WORDS, "min_zh": config.HYBRID_MIN_ZH_CHARS,
                "ai_mean": config.HYBRID_AI_MEAN, "human_mean": config.HYBRID_HUMAN_MEAN,
-               "size_weight": config.HYBRID_SIZE_WEIGHT}
+               "size_weight": config.HYBRID_SIZE_WEIGHT, "relax": config.HYBRID_RELAX}
         out, n_split = [], 0
         next_block = max((x.block for x in segs), default=0) + 1
         for s in segs:
@@ -797,7 +797,9 @@ class Engine:
                             if k < len(pairs) and pairs[k] is not None:
                                 pairs[k] = min(pairs[k], 0.5)
             plan = hybrid.plan_split(text, s.register, single, pairs, spans,
-                                     dict(cfg, ai_mean=config.HYBRID_CL_AI_MEAN, min_zh=config.HYBRID_MIN_ZC_CHARS) if classical else cfg)
+                                     dict(cfg, ai_mean=config.HYBRID_CL_AI_MEAN, min_zh=config.HYBRID_MIN_ZC_CHARS,
+                                          relax=False, switch_cost=config.HYBRID_CL_SWITCH_COST,
+                                          human_mean=config.HYBRID_CL_HUMAN_MEAN) if classical else cfg)
             if not plan:
                 out.append(s)
                 continue
@@ -1066,6 +1068,22 @@ class Engine:
         combos = {s.index: (scoring.combine(for_combine(s.index), prof[s.index][0]) if s.index in scored_ids
                             else {"prob": None, "signals": {}})
                   for s in segs}
+        # 1.9) 高分"引文"合议：AI 拟古作品（骚体、乐府、题解里的原文、文言寓言）常被当成引文排除。同一文档里
+        #      ≥ QUOTE_POOL_MIN_SEGS 段引文（各 ≥ QUOTE_POOL_MIN_CHARS 字，非名篇）得分都 ≥ QUOTE_POOL_PROB，且这些高分引文
+        #      占全部引文字数 ≥ QUOTE_POOL_SHARE 时，改按正文计入。真人论文大量引用古籍时，真古文得 ≥0.95 的只约 1.4%，
+        #      占比条件保证引文再多也不会触发。依据（2026-11-10，25 个测试集）：真人文档 0 篇触发，AI 文档 67 篇触发。
+        if config.QUOTE_POOL_MIN_SEGS > 0:
+            fam_words = ("名篇", "逐字复现", "原句相同")
+            qs = [x for x in segs if x.kind == "quotation" and x.index not in memo
+                  and not any(w in n for n in x.notes for w in fam_words)]
+            qchars = sum(len(x.text) for x in qs) or 1
+            hi = [x for x in qs if len(x.text) >= config.QUOTE_POOL_MIN_CHARS and combos[x.index]["prob"] is not None
+                  and combos[x.index]["prob"] >= config.QUOTE_POOL_PROB]
+            if len(hi) >= config.QUOTE_POOL_MIN_SEGS and sum(len(x.text) for x in hi) / qchars >= config.QUOTE_POOL_SHARE:
+                for x in hi:
+                    x.kind = "body"
+                    x.notes = list(x.notes) + ["原按引文排除；但同篇多段“引文”都极像 AI 拟作，改为计入"]
+                counted = [x for x in segs if x.counted]
         # 2) 与相邻正文段落平滑：只在同一篇作品、同一文体的正文段落之间进行（标题行分开的作品互不影响）
         smoothed = {}
         segs_by_idx = {s.index: s for s in segs}
@@ -1259,7 +1277,52 @@ class Engine:
                         and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))
                         and i not in memo):
                     zh2_seg.add(i)
+        # 6.57) 两个中文分类器一致：MPU 分类器（cls）≥ ZH_AGREE_CLS、第二分类器（zh2）≥ ZH_AGREE_ZH2 时，这一段按"中度疑似"计入，
+        #       不再要求某一个模型单独越过 0.95 和字数门槛。依据（2026-11-10 全量诊断，12 个测试集）：漏检的现代文 AI 里
+        #       有 19 篇两个模型都 ≥ 0.9，却因第二分类器 0.945–0.949、或字数不到 250 被挡；真人中文段 668 段里只有 1 段两个都 ≥ 0.9。
+        #       与商用检测器（GPTZero、Originality）多模型合议的做法一致：单个模型的极端分数不如两个独立模型的一致意见可靠。
+        if config.ZH_AGREE_CLS < 1:
+            for (blk, reg), idxs in groups.items():
+                if reg != "zh":
+                    continue
+                for i in idxs:
+                    c, z = results[i].get("classifier"), results[i].get("classifier_zh2")
+                    if (c is not None and z is not None and c >= config.ZH_AGREE_CLS and z >= config.ZH_AGREE_ZH2
+                            and len(segs_by_idx[i].text) >= config.ZH_AGREE_MIN_CHARS and i not in memo
+                            and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
+                        zh2_seg.add(i)
+        # 6.575) 第二分类器多段合议：同一文档里 ≥ ZH2_POOL_MIN_SEGS 段现代中文（各 ≥ ZH2_POOL_MIN_CHARS 字）的第二分类器得分
+        #        都达到 ZH2_POOL_THRESHOLD，但单看都没过阈值时，这几段一并按"中度疑似"计入。单段 0.945–0.95 的分数不够可靠，
+        #        多段同时出现就很难是巧合（与 ChangAn 2026 等研究"多篇合并判断显著提高准确率"一致）。
+        #        依据（2026-11-10，22 个测试集）：真人文档 0 篇触发；AI 文档 33 篇触发、找回 107 段漏检（题解、浅近文言、家书为主）。
+        if config.ZH2_POOL_MIN_SEGS > 0:
+            pool = []
+            for (blk, reg), idxs in groups.items():
+                if reg != "zh":
+                    continue
+                for i in idxs:
+                    p2 = results[i].get("classifier_zh2")
+                    if (p2 is not None and p2 >= config.ZH2_POOL_THRESHOLD and len(segs_by_idx[i].text) >= config.ZH2_POOL_MIN_CHARS
+                            and i not in memo and i not in zh2_seg and i not in zh2_ai
+                            and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
+                        pool.append(i)
+            if len(pool) >= config.ZH2_POOL_MIN_SEGS:
+                zh2_seg.update(pool)
         zh2_ai |= zh2_seg
+        # 6.58) 古典作品合议：同一份文档里的文言 / 诗词 / 对联（不含引文、名篇）≥ 2 段时，按字数加权平均分达到 CL_POOL_MEAN，
+        #       未过阈值的各段一并按"中度疑似（整组判断）"计入。单首诗、单副对联字数太少，模型逐首判断不稳定；
+        #       ChangAn（ACL 2026，arXiv 2604.10101）测得：同一来源的诗从 1 首合到 6 首一起判断，AUROC 从 75.7 升到 88.0。
+        #       本项目诊断（2026-11-10）：AI 文言 / 诗词有 23 篇是"一首被拆成几段、每段各差一点"或"分数中等被阈值挡"；
+        #       用 12 个测试集模拟，加权平均 ≥ 0.65、≥ 2 段时 AI 多检出约 22 篇，真人古典作品（集）新增误判 0。
+        cl_pool = set()
+        if config.CL_POOL_MEAN < 1:
+            cl_idx = [i for (blk, reg), idxs in groups.items() if reg in ("zh_classical", "zh_poetry") for i in idxs
+                      if i not in memo and smoothed.get(i) is not None]
+            if len(cl_idx) >= 2:
+                w = sum(len(segs_by_idx[i].text) for i in cl_idx) or 1
+                if sum(smoothed[i] * len(segs_by_idx[i].text) for i in cl_idx) / w >= config.CL_POOL_MEAN:
+                    cl_pool = {i for i in cl_idx if smoothed[i] < float(prof[i][0].get("threshold", 0.5))}
+        zh2_ai |= cl_pool
         # 6.6) 英文非论文作品（故事、散文、读后感、清单……）的整篇判断：英文整篇分类器各段得分的加权中位数（两段取较低）
         #      达到 EN3_DOC_THRESHOLD 时，本篇未过阈值的段落计为"中度疑似（整篇判断）"。英文论文另有论文整篇判断。
         if True:
@@ -1484,6 +1547,14 @@ class Engine:
         paper_ai -= en_instr | en_abs
         zh_human_work |= en_instr | en_abs
         work_ai -= zh_human_work
+        if config.HYBRID_NO_CARRY:
+            # 人机混写切分在这一段里找到了换作者的地方：这段文字本来就是混写的，“整篇都是 AI”的推断不成立，
+            # 未过阈值的段落不再按整篇判断带上（2026-11-08 cs1108 去标注版：真人英文段被整篇判断带成“中度疑似”）
+            mixed = {getattr(x, "orig_block", x.block) for x in segs if getattr(x, "hybrid", None) is not None}
+            if mixed:
+                carry_off = {x.index for x in segs if getattr(x, "orig_block", x.block) in mixed}
+                for st_ in (work_ai, paper_ai, zh2_ai, zh_doc_ai):
+                    st_ -= carry_off
 
         def human_ref_of(i, pr):
             if pr is None or i not in prof_name:

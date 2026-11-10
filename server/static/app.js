@@ -479,7 +479,8 @@ function renderResult(res){
       (seg.prob_unsmoothed!=null && seg.prob!=null && Math.abs(seg.prob_unsmoothed-seg.prob)>0.005) ? `平滑前 ${pct(seg.prob_unsmoothed)}` : '',
       seg.style ? `句长变异 ${seg.style.sentence_len_cv}` : '',
       humanRefText(seg),
-      seg.style && seg.style.template_phrases.length ? `套话：${seg.style.template_phrases.join('、')}` : ''
+      seg.style && seg.style.template_phrases.length ? `套话：${seg.style.template_phrases.join('、')}` : '',
+      seg.style && seg.style.contrast_phrases && seg.style.contrast_phrases.length ? `对比否定句式（仅参考）：${seg.style.contrast_phrases.map(escapeHtml).join('、')}` : ''
     ].filter(Boolean).join(' · ');
     const kindTag = seg.kind === 'reference' ? '<span class="para-tag">参考文献 · 不计入</span>'
       : seg.kind === 'frontmatter' ? '<span class="para-tag">题目 / 作者信息 · 不计入</span>'
