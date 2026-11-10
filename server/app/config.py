@@ -217,6 +217,11 @@ ZH2_SINGLE_MIN_CHARS = _int("ZH2_SINGLE_MIN_CHARS", 250)
 ZH2_POOL_MIN_SEGS = _int("ZH2_POOL_MIN_SEGS", 2)
 ZH2_POOL_MIN_CHARS = _int("ZH2_POOL_MIN_CHARS", 80)
 ZH2_POOL_THRESHOLD = float(os.getenv("ZH2_POOL_THRESHOLD", "0.945") or 0.945)
+# 高分"引文"合议（engine 1.9）：同篇 ≥ QUOTE_POOL_MIN_SEGS 段引文得分 ≥ QUOTE_POOL_PROB、且占全部引文字数 ≥ QUOTE_POOL_SHARE 时改为计入。设为 0 关闭。
+QUOTE_POOL_MIN_SEGS = _int("QUOTE_POOL_MIN_SEGS", 2)
+QUOTE_POOL_MIN_CHARS = _int("QUOTE_POOL_MIN_CHARS", 40)
+QUOTE_POOL_PROB = float(os.getenv("QUOTE_POOL_PROB", "0.95") or 0.95)
+QUOTE_POOL_SHARE = float(os.getenv("QUOTE_POOL_SHARE", "0.5") or 0.5)
 ZH2_SEG_MIN_CHARS = _int("ZH2_SEG_MIN_CHARS", 150)
 ZH_AGREE_CLS = float(os.getenv("ZH_AGREE_CLS", "0.96") or 0.96)    # MPU 分类器 ≥ 此值且第二分类器 ≥ ZH_AGREE_ZH2 时按"中度疑似"计入（≥ 1 关闭）
 ZH_AGREE_ZH2 = float(os.getenv("ZH_AGREE_ZH2", "0.9") or 0.9)
