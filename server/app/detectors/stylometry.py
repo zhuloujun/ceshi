@@ -24,6 +24,22 @@ AI_PHRASES = [
     "总体而言", "在很大程度上", "具有重要意义", "发挥着重要作用", "提供了有力支撑", "深远影响",
 ]
 
+# "防御性/对比否定"句式：先假想被质疑、再否认或纠正（"不是……而是……""并不意味着""rather than"）。
+# 2026-11 实测：AI 文本出现频率约为真人的 2–5 倍（英文 rather than 约 18 倍），但每千字不到 1 次，
+# 且真人学术论证同样常用"并非……而是……"，故只作展示参考，不参与 AI 概率计算。
+# 单纯的限定词（"可能""一定程度上""may"）实测真人用得不比 AI 少，不列入。
+_CONTRAST_ZH = re.compile(r"(?:不(?:是|在于)|并非)[^。！？；\n]{1,25}?[，,]\s*(?:而)?(?:是|在于|乃)"
+                          r"|并不意味着|不意味着|并不等于|不等同于|不能(?:被)?(?:简单地)?(?:看成|看作|视为|理解为)")
+_CONTRAST_EN = re.compile(r"\brather than\b|\b(?:does|do|did|should) not (?:necessarily )?mean\b|\bnot necessarily\b"
+                          r"|\bshould not be (?:seen|read|taken|understood) as\b|\bis not (?:simply|merely|just) [^.,;]{1,30}?, but\b", re.I)
+
+
+def contrast_phrases(text: str, english: bool | None = None) -> list:
+    if english is None:
+        english = len(_LATIN.findall(text)) >= max(30, 2 * len(_CJK.findall(text)))
+    pat = _CONTRAST_EN if english else _CONTRAST_ZH
+    return [m.group(0)[:30] for m in pat.finditer(text)][:8]
+
 
 def features(text: str) -> dict:
     english = len(_LATIN.findall(text)) >= max(30, 2 * len(_CJK.findall(text)))
@@ -53,6 +69,7 @@ def features(text: str) -> dict:
         "sentence_len_cv": round(cv, 3),
         "bigram_unique_ratio": round(uniq, 3),
         "template_phrases": hits,
+        "contrast_phrases": contrast_phrases(text, english),
         "mid_length_ratio": round(mid, 3),
         "heuristic_score": round(score, 1),
     }
