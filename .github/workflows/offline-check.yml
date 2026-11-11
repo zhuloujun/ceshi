@@ -42,7 +42,8 @@ jobs:
           cache-dependency-path: server/requirements.txt
       - name: 安装依赖
         run: |
-          sudo apt-get install -y -q fonts-wqy-zenhei >/dev/null
+          # 字体只用于报告渲染；软件源偶发解析失败（2026-11-11）时更新索引重试，仍失败也不中断检测
+          sudo apt-get install -y -q fonts-wqy-zenhei >/dev/null 2>&1 || { sudo apt-get update -q >/dev/null 2>&1; sudo apt-get install -y -q --fix-missing fonts-wqy-zenhei >/dev/null 2>&1; } || echo "::warning::字体安装失败，继续"
           pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
           pip install -r server/requirements.txt
       - name: 缓存模型
