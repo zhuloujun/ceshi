@@ -31,6 +31,31 @@ os.environ["USER_LABELS_FILE"] = "/tmp/none_user_labels.json"
 from app.engine import Engine  # noqa: E402
 
 
+def _coh_gain(eng, text, a, b, ctx_chars=160, n_tok=24):
+    """语意衔接度：这一句开头 n_tok 个词元，在“有前文”时比“没有前文”平均每词元少多少惊奇度（nats）。
+    数值大 = 与前文意思衔接紧密；接近 0 或为负 = 话题断开（多半换了来源）。"""
+    lm = getattr(eng, "lm", None)
+    if not (lm and lm.ready) or a <= 0:
+        return None
+    import torch
+    tok = lm.tok
+    unit = text[a:b]
+    u_ids = tok(unit, add_special_tokens=False)["input_ids"][:n_tok]
+    c_ids = tok(text[max(0, a - ctx_chars):a], add_special_tokens=False)["input_ids"][-64:]
+    if len(u_ids) < 4 or not c_ids:
+        return None
+    def nll(prefix, target):
+        ids = torch.tensor([prefix + target])
+        with torch.inference_mode():
+            lg = lm.performer(input_ids=ids).logits[0, :-1].float()
+        lp = torch.log_softmax(lg, -1)
+        lab = ids[0, 1:]
+        ll = lp.gather(-1, lab.unsqueeze(-1)).squeeze(-1)
+        return -ll[len(prefix) - 1:].mean().item() if prefix else -ll.mean().item()
+    bos = [tok.eos_token_id] if tok.eos_token_id is not None else []
+    return nll(bos, u_ids) - nll(c_ids, u_ids)
+
+
 def main():
     raw = Path(os.environ["PAYLOAD_FILE"]).read_text() if os.environ.get("PAYLOAD_FILE") else os.environ["PAYLOAD"]
     docs = json.loads(lzma.decompress(base64.b64decode(raw)).decode("utf-8"))
@@ -107,8 +132,10 @@ def main():
                 tg = {"en": eng.tag_en, "zh": eng.tag_zh, "zh_classical": eng.tag_zc, "zh_poetry": eng.tag_zp}.get(reg)
                 cols.append(tg.span_probs(gt, sp) if (tg and tg.ready) else [None] * len(tx))
                 q = lambda v: "-" if v is None else str(round(v * 1000))
+                gains = [_coh_gain(eng, d["text"], o + a, o + b) for a, b in sp]
                 for k, (a, b) in enumerate(sp):
-                    units.append(f"{o + a}+{b - a}{reg[3:4] or reg[0]}" + ":" + ":".join(q(c[k]) for c in cols))
+                    units.append(f"{o + a}+{b - a}{reg[3:4] or reg[0]}" + ":" + ":".join(q(c[k]) for c in cols)
+                                 + ":" + ("-" if gains[k] is None else str(round(gains[k] * 1000))))
             chunk = ""
             n_out = 0
             for u in units + [None]:
