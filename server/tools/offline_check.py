@@ -50,12 +50,17 @@ def main():
         if s.get("refcheck"):
             print(f"::notice title={d['name']} 文献核查::{json.dumps(s['refcheck'], ensure_ascii=False)[:1500]}", flush=True)
         segs = []
+        _cur = 0
         for g in res.get("segments", []):
+            _k = (g.get("text") or "").strip()[:15]
+            _o = d["text"].find(_k, max(0, _cur - 200)) if _k else -1
+            if _o >= 0:
+                _cur = _o + 1
             r = g.get("raw") or {}
             f = lambda k: "" if r.get(k) is None else f" {k.replace('classifier_', '').replace('classifier', 'cls')}{round(r[k] * 100)}"
             reg = {"zh_poetry": "po", "zh_classical": "cl", "en": "en"}.get(g.get("register"), "")
             segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}]@{g.get('start')}+{g.get('chars')} {g.get('label') or g.get('kind')} p{round((g.get('prob') or g.get('ref_prob') or 0) * 100)} u{round((g.get('prob_unsmoothed') or 0) * 100)} b{g.get('block')} t{round((g.get('threshold') or 0) * 100)}"
-                        f" {reg}{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}"
+                        f" o{_o} {reg}{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}"
                         + ("" if r.get("classifier_zh2") is None else f" z3{round(r['classifier_zh2'] * 1000)}")
                         + (f" P{g['partial'][0]}{g.get('ai_chars')}" if g.get("partial") else "")
                         + ("" if not g.get("partial") else " W" + ";".join(
