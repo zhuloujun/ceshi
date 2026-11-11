@@ -912,6 +912,8 @@ class Engine:
             return ("b", getattr(x, "orig_block", x.block))
         blocks: dict = {}
         for x in segs:
+            if x.register == "zh_poetry" and not (self.tag_zp and self.tag_zp.ready):
+                continue      # 诗词还没有句级模型：逐行打分不可靠（2026-11-11 回归：AI 诗被逐行拆成人写），仍按整段判断
             if x.register in th and x.kind in ("body", "quotation"):
                 blocks.setdefault(para_of(x), []).append(x)
         hmm_ai, hmm_units, promote = {}, {}, set()
@@ -922,9 +924,9 @@ class Engine:
             works, line_start = [], 0
             if config.UNIT_HMM_WORKS and raw and blk[0] == "p":
                 lo = min(rpos[x.index] for x in xs if x.index in rpos)
+                hi = max(rpos[x.index] + len(x.text) for x in xs if x.index in rpos)
                 line_start = raw.rfind("\n", 0, lo) + 1
-                line_end = raw.find("\n", lo)
-                line_end = len(raw) if line_end < 0 else line_end
+                line_end = max(hi, raw.find("\n", lo) if raw.find("\n", lo) >= 0 else len(raw))
                 works = [(a + line_start, b + line_start, k) for a, b, k in structure.work_spans(raw[line_start:line_end])]
             units = []   # (段, 段内起, 段内止, 证据, 原文起)
             for x in xs:
@@ -995,6 +997,12 @@ class Engine:
             for g, st in zip(groups, gpath):
                 for k in g:
                     path[k] = st
+            # 只在这一自然段里确实有“人写 + AI”两种成块的文字时才按逐句结果计入；整段都判为人写或都判为 AI 时，
+            # 沿用整段 / 整篇的判断（2026-11-11 回归：整篇 AI 的书信、对联被逐句判断整段降为“人写”，AI 检出 969→935）
+            ai_ch = sum(u[2] - u[1] for u, st in zip(units, path) if st)
+            hu_ch = sum(u[2] - u[1] for u, st in zip(units, path) if not st)
+            if min(ai_ch, hu_ch) < config.UNIT_HMM_MIN_MIX:
+                continue
             for (x, a, bnd, e, _), st in zip(units, path):
                 hmm_ai[x.index] = hmm_ai.get(x.index, 0) + (bnd - a if st else 0)
                 hmm_units.setdefault(x.index, []).append({"start": a, "chars": bnd - a, "text": x.text[a:bnd],
