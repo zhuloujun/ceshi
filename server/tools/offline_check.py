@@ -56,7 +56,10 @@ def main():
             reg = {"zh_poetry": "po", "zh_classical": "cl", "en": "en"}.get(g.get("register"), "")
             segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}]@{g.get('start')}+{g.get('chars')} {g.get('label') or g.get('kind')} p{round((g.get('prob') or g.get('ref_prob') or 0) * 100)} u{round((g.get('prob_unsmoothed') or 0) * 100)} b{g.get('block')} t{round((g.get('threshold') or 0) * 100)}"
                         f" {reg}{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}"
-                        + ("" if r.get("classifier_zh2") is None else f" z3{round(r['classifier_zh2'] * 1000)}"))
+                        + ("" if r.get("classifier_zh2") is None else f" z3{round(r['classifier_zh2'] * 1000)}")
+                        + (f" P{g['partial'][0]}{g.get('ai_chars')}" if g.get("partial") else "")
+                        + ("" if not g.get("partial") else " W" + ";".join(
+                            f"{w['start']}+{w['chars']}{(w.get('flag') or '-')[0]}" for w in g.get("windows") or [] if w.get("flag"))))
         # 注释条数有上限：每篇文档的分段明细合并成尽量少的几条
         chunk, out = "", []
         for x in segs:
