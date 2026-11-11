@@ -1029,7 +1029,7 @@ class Engine:
                         sw_cost.append(config.UNIT_HMM_SWITCH)
                         continue
                     gain = self._coh_gain(raw, u[4], u[4] + (u[2] - u[1])) if u[4] is not None else None
-                    f = 1.0 if gain is None else min(3.0, max(config.UNIT_HMM_COH_MIN, gain / config.UNIT_HMM_COH))
+                    f = 1.0 if gain is None else min(config.UNIT_HMM_COH_MAX, max(config.UNIT_HMM_COH_MIN, gain / config.UNIT_HMM_COH))
                     sw_cost.append(config.UNIT_HMM_SWITCH * f)
             gpath = hybrid.viterbi(gev, sw_cost, 1.0)
             path = [0] * len(units)
