@@ -76,6 +76,49 @@ def main():
             out.append(chunk)
         for i, c in enumerate(out):
             print(f"::notice title={d['name']} 分段 {i + 1}::{c}", flush=True)
+        if os.environ.get("DEBUG_UNITS"):
+            # 诊断：全文每个句子单元的分数（各文体分类器 + 句级标注模型），供离线模拟“作者切换”切分
+            from app import hybrid
+            units, cur2 = [], 0
+            for g in res.get("segments", []):
+                reg = g.get("register")
+                if reg not in ("zh", "en", "zh_classical", "zh_poetry"):
+                    continue
+                gt = g.get("text") or ""
+                o = d["text"].find(gt.strip()[:15], max(0, cur2 - 200))
+                if o < 0:
+                    continue
+                cur2 = o + 1
+                sp = hybrid.sentence_units(gt, reg, 12, 8)
+                if not sp:
+                    continue
+                tx = [gt[a:b] for a, b in sp]
+                regs = [reg] * len(tx)
+                cols = []
+                if reg == "en":
+                    cols.append(eng.classify_en2(tx, regs))
+                    cols.append(eng.cls_en4.predict(tx) if (eng.cls_en4 and eng.cls_en4.ready) else [None] * len(tx))
+                elif reg == "zh":
+                    cols.append(eng.classify_zh2(tx, regs))
+                    cols.append(eng.classify(tx, regs))
+                else:
+                    cols.append(eng.classify(tx, regs))
+                    cols.append(eng.classify_second(tx, regs))
+                tg = {"en": eng.tag_en, "zh": eng.tag_zh, "zh_classical": eng.tag_zc, "zh_poetry": eng.tag_zp}.get(reg)
+                cols.append(tg.span_probs(gt, sp) if (tg and tg.ready) else [None] * len(tx))
+                q = lambda v: "-" if v is None else str(round(v * 1000))
+                for k, (a, b) in enumerate(sp):
+                    units.append(f"{o + a}+{b - a}{reg[3:4] or reg[0]}" + ":" + ":".join(q(c[k]) for c in cols))
+            chunk = ""
+            n_out = 0
+            for u in units + [None]:
+                if u is None or len(chunk) + len(u) + 1 > 3800:
+                    if chunk:
+                        n_out += 1
+                        print(f"::notice title={d['name']} 单元 {n_out}::{chunk}", flush=True)
+                    chunk = ""
+                if u is not None:
+                    chunk += (" " if chunk else "") + u
         print(f"{d['name']}: {time.time() - t0:.0f} 秒", flush=True)
         Path("/tmp/offline_results").mkdir(exist_ok=True)
         (Path("/tmp/offline_results") / f"{d['name']}.json").write_text(json.dumps(res, ensure_ascii=False), "utf-8")
