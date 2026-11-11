@@ -31,6 +31,31 @@ os.environ["USER_LABELS_FILE"] = "/tmp/none_user_labels.json"
 from app.engine import Engine  # noqa: E402
 
 
+def _coh_gain(eng, text, a, b, ctx_chars=160, n_tok=24):
+    """语意衔接度：这一句开头 n_tok 个词元，在“有前文”时比“没有前文”平均每词元少多少惊奇度（nats）。
+    数值大 = 与前文意思衔接紧密；接近 0 或为负 = 话题断开（多半换了来源）。"""
+    lm = getattr(eng, "lm", None)
+    if not (lm and lm.ready) or a <= 0:
+        return None
+    import torch
+    tok = lm.tok
+    unit = text[a:b]
+    u_ids = tok(unit, add_special_tokens=False)["input_ids"][:n_tok]
+    c_ids = tok(text[max(0, a - ctx_chars):a], add_special_tokens=False)["input_ids"][-64:]
+    if len(u_ids) < 4 or not c_ids:
+        return None
+    def nll(prefix, target):
+        ids = torch.tensor([prefix + target])
+        with torch.inference_mode():
+            lg = lm.performer(input_ids=ids).logits[0, :-1].float()
+        lp = torch.log_softmax(lg, -1)
+        lab = ids[0, 1:]
+        ll = lp.gather(-1, lab.unsqueeze(-1)).squeeze(-1)
+        return -ll[len(prefix) - 1:].mean().item() if prefix else -ll.mean().item()
+    bos = [tok.eos_token_id] if tok.eos_token_id is not None else []
+    return nll(bos, u_ids) - nll(c_ids, u_ids)
+
+
 def main():
     raw = Path(os.environ["PAYLOAD_FILE"]).read_text() if os.environ.get("PAYLOAD_FILE") else os.environ["PAYLOAD"]
     docs = json.loads(lzma.decompress(base64.b64decode(raw)).decode("utf-8"))
@@ -50,13 +75,21 @@ def main():
         if s.get("refcheck"):
             print(f"::notice title={d['name']} 文献核查::{json.dumps(s['refcheck'], ensure_ascii=False)[:1500]}", flush=True)
         segs = []
+        _cur = 0
         for g in res.get("segments", []):
+            _k = (g.get("text") or "").strip()[:15]
+            _o = d["text"].find(_k, max(0, _cur - 200)) if _k else -1
+            if _o >= 0:
+                _cur = _o + 1
             r = g.get("raw") or {}
             f = lambda k: "" if r.get(k) is None else f" {k.replace('classifier_', '').replace('classifier', 'cls')}{round(r[k] * 100)}"
             reg = {"zh_poetry": "po", "zh_classical": "cl", "en": "en"}.get(g.get("register"), "")
             segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}]@{g.get('start')}+{g.get('chars')} {g.get('label') or g.get('kind')} p{round((g.get('prob') or g.get('ref_prob') or 0) * 100)} u{round((g.get('prob_unsmoothed') or 0) * 100)} b{g.get('block')} t{round((g.get('threshold') or 0) * 100)}"
-                        f" {reg}{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}"
-                        + ("" if r.get("classifier_zh2") is None else f" z3{round(r['classifier_zh2'] * 1000)}"))
+                        f" o{_o} {reg}{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}"
+                        + ("" if r.get("classifier_zh2") is None else f" z3{round(r['classifier_zh2'] * 1000)}")
+                        + (f" P{g['partial'][0]}{g.get('ai_chars')}" if g.get("partial") else "")
+                        + ("" if not g.get("partial") else " W" + ";".join(
+                            f"{w['start']}+{w['chars']}{(w.get('flag') or '-')[0]}" for w in g.get("windows") or [] if w.get("flag"))))
         # 注释条数有上限：每篇文档的分段明细合并成尽量少的几条
         chunk, out = "", []
         for x in segs:
@@ -68,6 +101,51 @@ def main():
             out.append(chunk)
         for i, c in enumerate(out):
             print(f"::notice title={d['name']} 分段 {i + 1}::{c}", flush=True)
+        if os.environ.get("DEBUG_UNITS"):
+            # 诊断：全文每个句子单元的分数（各文体分类器 + 句级标注模型），供离线模拟“作者切换”切分
+            from app import hybrid
+            units, cur2 = [], 0
+            for g in res.get("segments", []):
+                reg = g.get("register")
+                if reg not in ("zh", "en", "zh_classical", "zh_poetry"):
+                    continue
+                gt = g.get("text") or ""
+                o = d["text"].find(gt.strip()[:15], max(0, cur2 - 200))
+                if o < 0:
+                    continue
+                cur2 = o + 1
+                sp = hybrid.sentence_units(gt, reg, 12, 8)
+                if not sp:
+                    continue
+                tx = [gt[a:b] for a, b in sp]
+                regs = [reg] * len(tx)
+                cols = []
+                if reg == "en":
+                    cols.append(eng.classify_en2(tx, regs))
+                    cols.append(eng.cls_en4.predict(tx) if (eng.cls_en4 and eng.cls_en4.ready) else [None] * len(tx))
+                elif reg == "zh":
+                    cols.append(eng.classify_zh2(tx, regs))
+                    cols.append(eng.classify(tx, regs))
+                else:
+                    cols.append(eng.classify(tx, regs))
+                    cols.append(eng.classify_second(tx, regs))
+                tg = {"en": eng.tag_en, "zh": eng.tag_zh, "zh_classical": eng.tag_zc, "zh_poetry": eng.tag_zp}.get(reg)
+                cols.append(tg.span_probs(gt, sp) if (tg and tg.ready) else [None] * len(tx))
+                q = lambda v: "-" if v is None else str(round(v * 1000))
+                gains = [_coh_gain(eng, d["text"], o + a, o + b) for a, b in sp]
+                for k, (a, b) in enumerate(sp):
+                    units.append(f"{o + a}+{b - a}{reg[3:4] or reg[0]}" + ":" + ":".join(q(c[k]) for c in cols)
+                                 + ":" + ("-" if gains[k] is None else str(round(gains[k] * 1000))))
+            chunk = ""
+            n_out = 0
+            for u in units + [None]:
+                if u is None or len(chunk) + len(u) + 1 > 3800:
+                    if chunk:
+                        n_out += 1
+                        print(f"::notice title={d['name']} 单元 {n_out}::{chunk}", flush=True)
+                    chunk = ""
+                if u is not None:
+                    chunk += (" " if chunk else "") + u
         print(f"{d['name']}: {time.time() - t0:.0f} 秒", flush=True)
         Path("/tmp/offline_results").mkdir(exist_ok=True)
         (Path("/tmp/offline_results") / f"{d['name']}.json").write_text(json.dumps(res, ensure_ascii=False), "utf-8")
