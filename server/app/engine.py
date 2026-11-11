@@ -822,16 +822,21 @@ class Engine:
         return out, n_split
 
     @staticmethod
-    def _resegment(seg_out, hmm_ai, hmm_units):
-        """报告按“谁写的”重新分段（2026-11-11 用户 cs1111）：逐句判断为部分人写、部分 AI 的段落，在作者换了的句子处切开，
-        每一块单独标级别；相邻、同一原段落、同为人写或同为 AI 的块再合并显示。AI 率的计算不变（已按逐句字数计入）。"""
+    def _resegment(seg_out, hmm_ai, hmm_units, raw_text=""):
+        """报告按“谁写的”重新分段（2026-11-11 用户 cs1111）：逐句判断为部分人写、部分 AI 的段落，在作者换了的句子处切开；
+        原文里首尾相接（中间没有换行）、逐句判断为同一作者的相邻块再合并成一块显示——切文体、切长段只是为了打分，
+        不再把一首词、一封信在报告里拆成两段。AI 率的计算不变（已按逐句字数计入）。"""
         out = []
         for g in seg_out:
             i = g.get("index")
             units = hmm_units.get(i)
-            if (not units or g.get("kind") != "body" or g.get("prob") is None
-                    or g.get("partial") not in ("partial", "local")):
+            if not units or g.get("kind") != "body" or g.get("prob") is None:
                 out.append(g)
+                continue
+            if g.get("partial") not in ("partial", "local"):
+                h = dict(g)
+                h["hmm_state"] = "ai" if g["level"] in ("high", "mid", "light") else "human"
+                out.append(h)
                 continue
             ai_level = g["level"] if g["level"] in ("high", "mid", "light") else "light"
             pieces = []
@@ -841,9 +846,6 @@ class Engine:
                     pieces[-1][2] = u["start"] + u["chars"]
                 else:
                     pieces.append([st, u["start"], u["start"] + u["chars"]])
-            if len(pieces) < 2:
-                out.append(g)
-                continue
             pieces[0][1] = 0
             pieces[-1][2] = len(g["text"])
             for k in range(1, len(pieces)):
@@ -860,41 +862,85 @@ class Engine:
                           "label": ("疑似 AI（逐句判断：这几句与前后文明显不同，像 AI 写的）" if st
                                     else "未见 AI 特征（逐句判断：这几句像人写）")})
                 out.append(h)
-        merged = []
+        raw = raw_text or ""
+        merged, cur, prev_end = [], 0, None
         for h in out:
+            k = h["text"].strip()[:15]
+            o = raw.find(k, max(0, cur - 200)) if (raw and k) else -1
+            if o >= 0:
+                cur = o + 1
             p = merged[-1] if merged else None
+            contiguous = (o >= 0 and prev_end is not None and o >= prev_end and "\n" not in raw[prev_end:o]
+                          and len(raw[prev_end:o].strip()) <= 2)
             if (p is not None and h.get("hmm_state") and p.get("hmm_state") == h["hmm_state"]
-                    and p.get("block") == h.get("block") and p.get("register") == h.get("register")):
-                p["text"] = p["text"] + h["text"]
+                    and (contiguous or (p.get("block") == h.get("block") and p.get("register") == h.get("register")))):
+                sep = raw[prev_end:o] if contiguous else ""
+                p["text"] = p["text"] + sep + h["text"]
                 p["chars"] = len(p["text"])
+                if h.get("register") != p.get("register"):
+                    p["register_mixed"] = True
+                prev_end = (o + len(h["text"])) if o >= 0 else None
                 continue
-            merged.append(h)
+            merged.append(dict(h))
+            prev_end = (o + len(h["text"])) if o >= 0 else None
         for k, h in enumerate(merged):
             h["orig_index"] = h.get("index")
             h["index"] = k
         return merged
 
-    def _unit_hmm(self, segs, results, combos, smoothed, prof, memo, human_work, doc_ai):
-        """逐句作者判断：长段落（原段落）的全部句子单元一起做两状态维特比解码。
+    def _unit_hmm(self, segs, results, combos, smoothed, prof, memo, human_work, doc_ai, raw_text=""):
+        """逐句作者判断：同一个原始自然段（切文体、切长段之前）的全部句子单元一起做两状态维特比解码；
+        同一首词 / 诗（见 app/structure.py）里的句子绑在一起，只能整体判为人写或 AI。
         返回 ({段号: AI 字数}, {段号: [句子窗口]}, {应由引文改为计入的段号})。"""
-        from . import hybrid
+        from . import hybrid, structure
         if not config.UNIT_HMM:
             return {}, {}, set()
         th = {k: float(v) for k, v in (kv.split(":") for kv in config.UNIT_HMM_TH.split(","))}
         lg = lambda p: math.log(min(max(p, 0.01), 0.99) / (1 - min(max(p, 0.01), 0.99)))
+        # 每段在原文中的位置与所属原始自然段
+        raw = raw_text or ""
+        cur, rpos = 0, {}
+        for x in sorted(segs, key=lambda y: y.start):
+            k = x.text.strip()[:15]
+            o = raw.find(k, max(0, cur - 200)) if (raw and k) else -1
+            if o >= 0:
+                rpos[x.index] = o - max(0, x.text.find(k))
+                cur = o + 1
+        def para_of(x):
+            if x.index in rpos:
+                return ("p", raw.count("\n", 0, rpos[x.index]))
+            return ("b", getattr(x, "orig_block", x.block))
         blocks: dict = {}
         for x in segs:
             if x.register in th and x.kind in ("body", "quotation"):
-                blocks.setdefault(getattr(x, "orig_block", x.block), []).append(x)
+                blocks.setdefault(para_of(x), []).append(x)
         hmm_ai, hmm_units, promote = {}, {}, set()
         famous_words = ("名篇", "逐字复现", "原句相同")
         for blk, xs in blocks.items():
-            xs.sort(key=lambda x: x.start)
-            units = []   # (段, 起, 止, 证据)
+            xs.sort(key=lambda x: rpos.get(x.index, x.start))
+            # 本自然段里的词 / 诗（原文坐标）
+            works, line_start = [], 0
+            if config.UNIT_HMM_WORKS and raw and blk[0] == "p":
+                lo = min(rpos[x.index] for x in xs if x.index in rpos)
+                line_start = raw.rfind("\n", 0, lo) + 1
+                line_end = raw.find("\n", lo)
+                line_end = len(raw) if line_end < 0 else line_end
+                works = [(a + line_start, b + line_start, k) for a, b, k in structure.work_spans(raw[line_start:line_end])]
+            units = []   # (段, 段内起, 段内止, 证据, 原文起)
             for x in xs:
                 sp = hybrid.sentence_units(x.text, x.register, 12, 8)
                 if not sp:
                     continue
+                base0 = rpos.get(x.index)
+                if works and base0 is not None:
+                    # 句子单元不跨越一首词 / 诗的首尾（短句并入相邻句时可能跨过去）
+                    cuts = sorted({c - base0 for wa, wb, _ in works for c in (wa, wb) if 0 < c - base0 < len(x.text)})
+                    if cuts:
+                        sp2 = []
+                        for a, b in sp:
+                            pts = [a] + [c for c in cuts if a < c < b] + [b]
+                            sp2 += [(u, v) for u, v in zip(pts, pts[1:]) if x.text[u:v].strip()]
+                        sp = sp2
                 tx = [x.text[a:b] for a, b in sp]
                 regs = [x.register] * len(tx)
                 c1 = (self.classify_en2(tx, regs) if x.register == "en" else
@@ -906,6 +952,7 @@ class Engine:
                 pr = smoothed.get(x.index)
                 b = 1.0 if (x.counted and x.index not in human_work and
                             ((pr is not None and pr >= thr) or x.index in doc_ai)) else 0.0
+                base = rpos.get(x.index)
                 for (a, bnd), p1, p2 in zip(sp, c1, tgp):
                     if fam:
                         e = -6.0
@@ -917,11 +964,38 @@ class Engine:
                             xs_.append((lg(p1), config.UNIT_HMM_ALPHA if p2 is not None else 1.0))
                         e = (sum(v * w for v, w in xs_) / sum(w for _, w in xs_) - lg(th[x.register])) if xs_ else 0.0
                         e += config.UNIT_HMM_BETA * (2 * b - 1)
-                    units.append((x, a, bnd, e))
+                    units.append((x, a, bnd, e, None if base is None else base + a))
             if len(units) < config.UNIT_HMM_MIN_UNITS:
                 continue
-            path = hybrid.viterbi([u[3] for u in units], config.UNIT_HMM_SWITCH, 1.0)
-            for (x, a, bnd, e), st in zip(units, path):
+            # 同一首词 / 诗里的句子绑成一组（按原文位置判断）
+            groups = [[k] for k in range(len(units))]
+            if works:
+                wid = []
+                for u in units:
+                    w = None
+                    if u[4] is not None:
+                        mid = u[4] + (u[2] - u[1]) // 2
+                        for j, (wa, wb, _) in enumerate(works):
+                            if wa <= mid < wb:
+                                w = j
+                                break
+                    wid.append(w)
+                groups = []
+                for k, w in enumerate(wid):
+                    if groups and w is not None and wid[groups[-1][-1]] == w:
+                        groups[-1].append(k)
+                    else:
+                        groups.append([k])
+            gev = []
+            for g in groups:
+                ln = [units[k][2] - units[k][1] for k in g]
+                gev.append(sum(units[k][3] * l for k, l in zip(g, ln)) / max(1, sum(ln)))
+            gpath = hybrid.viterbi(gev, config.UNIT_HMM_SWITCH, 1.0)
+            path = [0] * len(units)
+            for g, st in zip(groups, gpath):
+                for k in g:
+                    path[k] = st
+            for (x, a, bnd, e, _), st in zip(units, path):
                 hmm_ai[x.index] = hmm_ai.get(x.index, 0) + (bnd - a if st else 0)
                 hmm_units.setdefault(x.index, []).append({"start": a, "chars": bnd - a, "text": x.text[a:bnd],
                                                           "prob": None, "second": None,
@@ -982,6 +1056,7 @@ class Engine:
         text, n_zw, n_hw = deobfuscate(text)
         text, unwrapped = unwrap_hard_wraps(text)
         n_lab = n_scr = 0
+        pre_split = text
         if config.SPLIT_INLINE:
             text, n_lab = split_inline_labels(text)
             text, n_scr = split_script_switches(text)
@@ -1693,7 +1768,7 @@ class Engine:
             return {"n": len(h), "share": round((n_ge + 1) / (len(h) + 1), 4)}
 
         hmm_ai, hmm_units, hmm_promote = self._unit_hmm(segs, results, combos, smoothed, prof, memo,
-                                                        zh_human_work, zh2_seg | paper_ai | zh2_ai | work_ai)
+                                                        zh_human_work, zh2_seg | paper_ai | zh2_ai | work_ai, pre_split)
         for i in hmm_promote:
             x = segs_by_idx[i]
             x.kind = "body"
@@ -1824,7 +1899,7 @@ class Engine:
             })
 
         if config.UNIT_HMM_RESEGMENT and hmm_units:
-            seg_out = self._resegment(seg_out, hmm_ai, hmm_units)
+            seg_out = self._resegment(seg_out, hmm_ai, hmm_units, pre_split)
         excluded = [s for s in segs if not s.counted]
         used_profiles = []
         for s_ in counted:
