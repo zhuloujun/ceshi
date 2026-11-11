@@ -821,6 +821,65 @@ class Engine:
             x.index = k
         return out, n_split
 
+    def _unit_hmm(self, segs, results, combos, smoothed, prof, memo, human_work, doc_ai):
+        """逐句作者判断：长段落（原段落）的全部句子单元一起做两状态维特比解码。
+        返回 ({段号: AI 字数}, {段号: [句子窗口]}, {应由引文改为计入的段号})。"""
+        from . import hybrid
+        if not config.UNIT_HMM:
+            return {}, {}, set()
+        th = {k: float(v) for k, v in (kv.split(":") for kv in config.UNIT_HMM_TH.split(","))}
+        lg = lambda p: math.log(min(max(p, 0.01), 0.99) / (1 - min(max(p, 0.01), 0.99)))
+        blocks: dict = {}
+        for x in segs:
+            if x.register in th and x.kind in ("body", "quotation"):
+                blocks.setdefault(getattr(x, "orig_block", x.block), []).append(x)
+        hmm_ai, hmm_units, promote = {}, {}, set()
+        famous_words = ("名篇", "逐字复现", "原句相同")
+        for blk, xs in blocks.items():
+            xs.sort(key=lambda x: x.start)
+            units = []   # (段, 起, 止, 证据)
+            for x in xs:
+                sp = hybrid.sentence_units(x.text, x.register, 12, 8)
+                if not sp:
+                    continue
+                tx = [x.text[a:b] for a, b in sp]
+                regs = [x.register] * len(tx)
+                c1 = (self.classify_en2(tx, regs) if x.register == "en" else
+                      self.classify_zh2(tx, regs) if x.register == "zh" else self.classify(tx, regs))
+                tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
+                tgp = tg.span_probs(x.text, sp) if (tg and tg.ready) else [None] * len(sp)
+                fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
+                thr = float(prof[x.index][0].get("threshold", 0.5)) if x.index in prof else 0.5
+                pr = smoothed.get(x.index)
+                b = 1.0 if (x.counted and x.index not in human_work and
+                            ((pr is not None and pr >= thr) or x.index in doc_ai)) else 0.0
+                for (a, bnd), p1, p2 in zip(sp, c1, tgp):
+                    if fam:
+                        e = -6.0
+                    else:
+                        xs_ = []
+                        if p2 is not None:
+                            xs_.append((lg(p2), 1 - config.UNIT_HMM_ALPHA))
+                        if p1 is not None:
+                            xs_.append((lg(p1), config.UNIT_HMM_ALPHA if p2 is not None else 1.0))
+                        e = (sum(v * w for v, w in xs_) / sum(w for _, w in xs_) - lg(th[x.register])) if xs_ else 0.0
+                        e += config.UNIT_HMM_BETA * (2 * b - 1)
+                    units.append((x, a, bnd, e))
+            if len(units) < config.UNIT_HMM_MIN_UNITS:
+                continue
+            path = hybrid.viterbi([u[3] for u in units], config.UNIT_HMM_SWITCH, 1.0)
+            for (x, a, bnd, e), st in zip(units, path):
+                hmm_ai[x.index] = hmm_ai.get(x.index, 0) + (bnd - a if st else 0)
+                hmm_units.setdefault(x.index, []).append({"start": a, "chars": bnd - a, "text": x.text[a:bnd],
+                                                          "prob": None, "second": None,
+                                                          "flag": "ai" if st else "human"})
+            for x in xs:
+                if x.kind == "quotation" and x.index in hmm_ai and hmm_ai[x.index] >= 0.5 * len(x.text) \
+                        and combos[x.index]["prob"] is not None and x.index not in memo \
+                        and not any(w in n for n in x.notes for w in famous_words):
+                    promote.add(x.index)
+        return hmm_ai, hmm_units, promote
+
     def classify_zh2(self, texts: list[str], registers: list[str]) -> list:
         """现代汉语段落再用中文第二分类器（见过新一代国产大模型的散文、游记、论文）打一次分。"""
         out = [None] * len(texts)
@@ -1568,6 +1627,12 @@ class Engine:
             n_ge = len(h) - bisect.bisect_left(h, pr)
             return {"n": len(h), "share": round((n_ge + 1) / (len(h) + 1), 4)}
 
+        hmm_ai, hmm_units, hmm_promote = self._unit_hmm(segs, results, combos, smoothed, prof, memo,
+                                                        zh_human_work, zh2_seg | paper_ai | zh2_ai | work_ai)
+        for i in hmm_promote:
+            x = segs_by_idx[i]
+            x.kind = "body"
+            x.notes = list(x.notes) + ["原按引文排除；逐句判断这几句与前后文明显不同、像 AI 写的，改为计入"]
         seg_out, counted_chars, prob_weighted = [], 0, 0.0
         chars_by_level = {"high": 0, "mid": 0, "light": 0, "low": 0}
         level_counts = {"high": 0, "mid": 0, "light": 0, "low": 0}
@@ -1579,7 +1644,7 @@ class Engine:
             comb = combos[s.index]
             pcal, has_cal = prof[s.index]
             thr = float(pcal.get("threshold", 0.5))
-            prob = smoothed.get(s.index) if s.counted else None
+            prob = (smoothed.get(s.index, comb["prob"] if s.index in hmm_promote else None) if s.counted else None)
             level, label = scoring.level_of(prob, thr) if s.counted else ("none", "")
             near = bool(s.counted and prob is not None and thr - scoring.NEAR_MARGIN <= prob < thr)
             by_work = s.index in work_ai or s.index in paper_ai or s.index in zh2_ai
@@ -1609,7 +1674,26 @@ class Engine:
             # 逐句窗口：整段判 AI 但有成片的句子明显像人写 → 只按 AI 部分计入（部分疑似）；
             # 整段未过阈值但有几句非常像 AI（综合分数和第二分类器都很肯定）→ 只把这几句计入（局部疑似）
             wins_out, ai_chars, partial = [], None, None
-            if (s.index in win_spans and s.counted and prob is not None and s.index not in memo
+            if s.index in hmm_ai and s.counted and prob is not None:
+                a_ch, n_ch = hmm_ai[s.index], len(s.text)
+                wins_out = hmm_units.get(s.index, [])
+                if a_ch == 0:
+                    if level in ("high", "mid", "light"):
+                        level, near = "low", True
+                        label = "接近阈值（逐句判断：这段的句子与前后文相比像人写，未计入）"
+                elif a_ch >= 0.85 * n_ch:
+                    if level in ("low", "none"):
+                        level, near = "mid", False
+                        label = "中度疑似（逐句判断：这几句与前后文明显不同，像 AI 写的）"
+                else:
+                    ai_chars = a_ch
+                    if level in ("high", "mid", "light"):
+                        partial = "partial"
+                        label = f"{label}（逐句判断：部分句子像人写，按约 {a_ch / n_ch:.0%} 计入）"
+                    else:
+                        partial, near = "local", False
+                        label = f"局部疑似（逐句判断：约 {a_ch} 字像 AI 写的）"
+            elif (s.index in win_spans and s.counted and prob is not None and s.index not in memo
                     and s.index not in zh_human_work):
                 wprof = scoring.profile_for(cal, "zh_short")[0] if (s.register == "zh" and has_short) else pcal
                 stext = score_text(s)
