@@ -1184,6 +1184,18 @@ class Engine:
         #      ≥ QUOTE_POOL_MIN_SEGS 段引文（各 ≥ QUOTE_POOL_MIN_CHARS 字，非名篇）得分都 ≥ QUOTE_POOL_PROB，且这些高分引文
         #      占全部引文字数 ≥ QUOTE_POOL_SHARE 时，改按正文计入。真人论文大量引用古籍时，真古文得 ≥0.95 的只约 1.4%，
         #      占比条件保证引文再多也不会触发。依据（2026-11-10，25 个测试集）：真人文档 0 篇触发，AI 文档 67 篇触发。
+        if config.QUOTE_UNCITED_PROB < 1:
+            # 没有任何引用痕迹的文言“引文”，文言模型又几乎肯定是 AI 写的 → 改为计入（2026-11-11 cs1111）。
+            # 依据：现有测试集里被当作引文排除的文言段，真人 365 段中 ≥ 0.97 的只有 4 段，AI 354 段中有 82 段
+            fam_words0 = ("名篇", "逐字复现", "原句相同")
+            for x in segs:
+                if (x.kind == "quotation" and getattr(x, "uncited", False) and x.index not in memo
+                        and len(x.text) >= 40 and combos[x.index]["prob"] is not None
+                        and combos[x.index]["prob"] >= config.QUOTE_UNCITED_PROB
+                        and not any(w in n for n in x.notes for w in fam_words0)):
+                    x.kind = "body"
+                    x.notes = list(x.notes) + ["没有引用痕迹，且文言模型判断几乎肯定是 AI 写的，改为计入"]
+            counted = [x for x in segs if x.counted]
         if config.QUOTE_POOL_MIN_SEGS > 0:
             fam_words = ("名篇", "逐字复现", "原句相同")
             qs = [x for x in segs if x.kind == "quotation" and x.index not in memo

@@ -1024,7 +1024,8 @@ def _flag_quotations(segments):
                 if config.QUOTE_NEED_EVIDENCE and not _cited(s, prev_of.get(id(s))):
                     # 2026-11-11 cs1111：现代文里的文言段落不再一律当“古籍引文”排除——没有任何引用痕迹（引号、
                     # “曰 / 云 / 载”之类引语、书名卷次）的文言段落按正文检测；公开名篇原文另有“逐字复现”规则保护
-                    s.notes = list(s.notes) + ["文言段落，但没有引号、引语或出处等引用痕迹，按正文检测"]
+                    s.kind, s.notes = "quotation", [f"文言段落（文言虚词 {classical_ratio(s.text):.0%}），没有引号、引语或出处等引用痕迹"]
+                    s.uncited = True
                 else:
                     s.kind, s.notes = "quotation", [f"文言段落（文言虚词 {classical_ratio(s.text):.0%}），有引用痕迹，疑为古籍引文"]
             elif s.register == "zh_poetry" and modern_doc and not s.title and not classical_collection:
