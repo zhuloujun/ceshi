@@ -221,6 +221,11 @@ ZH2_POOL_MIN_CHARS = _int("ZH2_POOL_MIN_CHARS", 80)
 ZH2_POOL_THRESHOLD = float(os.getenv("ZH2_POOL_THRESHOLD", "0.945") or 0.945)
 # 高分"引文"合议（engine 1.9）：同篇 ≥ QUOTE_POOL_MIN_SEGS 段引文得分 ≥ QUOTE_POOL_PROB、且占全部引文字数 ≥ QUOTE_POOL_SHARE 时改为计入。设为 0 关闭。
 QUOTE_POOL_MIN_SEGS = _int("QUOTE_POOL_MIN_SEGS", 2)
+# 现代文里的文言段落要有引用痕迹（引号、“曰 / 云”等引语、书名卷次）才按“古籍引文”不计入（2026-11-11 cs1111）
+QUOTE_NEED_EVIDENCE = _bool("QUOTE_NEED_EVIDENCE", True)
+# 同一段里文体切换：文言、诗词分开切；按约 REG_SPLIT_GROUP 个汉字一组判断文体（原为 36，切点偏差最多一组）
+REG_SPLIT_POETRY = _bool("REG_SPLIT_POETRY", True)
+REG_SPLIT_GROUP = _int("REG_SPLIT_GROUP", 24)
 QUOTE_POOL_MIN_CHARS = _int("QUOTE_POOL_MIN_CHARS", 40)
 QUOTE_POOL_PROB = float(os.getenv("QUOTE_POOL_PROB", "0.95") or 0.95)
 QUOTE_POOL_SHARE = float(os.getenv("QUOTE_POOL_SHARE", "0.25") or 0.25)
@@ -292,6 +297,7 @@ HYBRID_SPLIT = _bool("HYBRID_SPLIT", True)
 # 依据：55 篇合成混写文档逐字评估——AI 字检出 35.5% → 49.8%，真人字误标 7.6% → 3.0%；纯真人文档误标 0.8% → 0.6%。
 UNIT_HMM = _bool("UNIT_HMM", True)
 UNIT_HMM_MIN_UNITS = _int("UNIT_HMM_MIN_UNITS", 8)
+UNIT_HMM_RESEGMENT = _bool("UNIT_HMM_RESEGMENT", True)   # 报告按逐句判断的作者重新分段显示
 UNIT_HMM_TH = os.getenv("UNIT_HMM_TH", "zh:0.8,zh_classical:0.85,en:0.85,zh_poetry:0.9")
 UNIT_HMM_SWITCH = float(os.getenv("UNIT_HMM_SWITCH", "0.5") or 0.5)
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）

@@ -821,6 +821,59 @@ class Engine:
             x.index = k
         return out, n_split
 
+    @staticmethod
+    def _resegment(seg_out, hmm_ai, hmm_units):
+        """报告按“谁写的”重新分段（2026-11-11 用户 cs1111）：逐句判断为部分人写、部分 AI 的段落，在作者换了的句子处切开，
+        每一块单独标级别；相邻、同一原段落、同为人写或同为 AI 的块再合并显示。AI 率的计算不变（已按逐句字数计入）。"""
+        out = []
+        for g in seg_out:
+            i = g.get("index")
+            units = hmm_units.get(i)
+            if (not units or g.get("kind") != "body" or g.get("prob") is None
+                    or g.get("partial") not in ("partial", "local")):
+                out.append(g)
+                continue
+            ai_level = g["level"] if g["level"] in ("high", "mid", "light") else "light"
+            pieces = []
+            for u in units:
+                st = u["flag"] == "ai"
+                if pieces and pieces[-1][0] == st:
+                    pieces[-1][2] = u["start"] + u["chars"]
+                else:
+                    pieces.append([st, u["start"], u["start"] + u["chars"]])
+            if len(pieces) < 2:
+                out.append(g)
+                continue
+            pieces[0][1] = 0
+            pieces[-1][2] = len(g["text"])
+            for k in range(1, len(pieces)):
+                pieces[k][1] = pieces[k - 1][2]
+            for st, a, b in pieces:
+                txt = g["text"][a:b]
+                if not txt.strip():
+                    continue
+                lead = len(txt) - len(txt.lstrip())
+                h = dict(g)
+                h.update({"start": (g.get("start") or 0) + a + lead, "chars": len(txt.strip()), "text": txt.strip(),
+                          "partial": None, "ai_chars": None, "windows": [], "hmm_state": "ai" if st else "human",
+                          "level": ai_level if st else "low", "near_threshold": False,
+                          "label": ("疑似 AI（逐句判断：这几句与前后文明显不同，像 AI 写的）" if st
+                                    else "未见 AI 特征（逐句判断：这几句像人写）")})
+                out.append(h)
+        merged = []
+        for h in out:
+            p = merged[-1] if merged else None
+            if (p is not None and h.get("hmm_state") and p.get("hmm_state") == h["hmm_state"]
+                    and p.get("block") == h.get("block") and p.get("register") == h.get("register")):
+                p["text"] = p["text"] + h["text"]
+                p["chars"] = len(p["text"])
+                continue
+            merged.append(h)
+        for k, h in enumerate(merged):
+            h["orig_index"] = h.get("index")
+            h["index"] = k
+        return merged
+
     def _unit_hmm(self, segs, results, combos, smoothed, prof, memo, human_work, doc_ai):
         """逐句作者判断：长段落（原段落）的全部句子单元一起做两状态维特比解码。
         返回 ({段号: AI 字数}, {段号: [句子窗口]}, {应由引文改为计入的段号})。"""
@@ -1758,6 +1811,8 @@ class Engine:
                 "human_ref": human_ref_of(s.index, comb["prob"]),
             })
 
+        if config.UNIT_HMM_RESEGMENT and hmm_units:
+            seg_out = self._resegment(seg_out, hmm_ai, hmm_units)
         excluded = [s for s in segs if not s.counted]
         used_profiles = []
         for s_ in counted:

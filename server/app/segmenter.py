@@ -980,6 +980,19 @@ def _merge_short(segments):
     return out
 
 
+_CITE_TAIL = re.compile(r"(曰|云|载|称|谓|有言|有云|言|记|述|写道|指出|所谓|如下|略云|原文)[:：，,]?\s*[“「『\"]?\s*$")
+_CITE_IN = re.compile(r"《[^》]{1,30}》\s*(卷|第|载|云|曰|记)|^[“「『\"]|[”」』\"]\s*[（(]")
+
+
+def _cited(s, prev) -> bool:
+    """文言段落是否有“引用”的痕迹：引号占比、前文以引语收尾、书名卷次或引号开头 / 引号后接出处括注。"""
+    if quotation_ratio(s.text) >= 0.2:
+        return True
+    if prev is not None and _CITE_TAIL.search(prev.text.strip()[-12:]):
+        return True
+    return bool(_CITE_IN.search(s.text.strip()[:40]) or _CITE_IN.search(s.text))
+
+
 def _flag_quotations(segments):
     """标出"以引文为主"的段落（不计入 AI 率）。按"作品"（标题行分开的每一块）判断，避免把作者自己的文字误当引文：
     - 现代汉语论文里夹的大段文言 → 视为古籍引文；但如果这篇作品以文言为主（如文言小说、仿古文），文言就是正文。
@@ -1001,13 +1014,19 @@ def _flag_quotations(segments):
         classical_doc = classical_chars >= 0.5 * cjk_total or classical_collection
         modern_doc = sum(len(s.text) for s in cjk_body if s.register == "zh") >= 0.5 * cjk_total
         quoted = [(s, quotation_ratio(s.text)) for s in cjk_body]
+        prev_of = {id(b): a for a, b in zip(body, body[1:])}
         quote_heavy = [s for s, q in quoted if q >= 0.5]
         dialogue_doc = classical_doc or sum(len(s.text) for s in quote_heavy) >= 0.3 * total
         for s, q in quoted:
             if q >= 0.5 and not dialogue_doc:
                 s.kind, s.notes = "quotation", [f"引号内文字约占 {q:.0%}"]
             elif s.register == "zh_classical" and not classical_doc and len(s.text) >= 40:
-                s.kind, s.notes = "quotation", [f"文言段落（文言虚词 {classical_ratio(s.text):.0%}），疑为古籍引文"]
+                if config.QUOTE_NEED_EVIDENCE and not _cited(s, prev_of.get(id(s))):
+                    # 2026-11-11 cs1111：现代文里的文言段落不再一律当“古籍引文”排除——没有任何引用痕迹（引号、
+                    # “曰 / 云 / 载”之类引语、书名卷次）的文言段落按正文检测；公开名篇原文另有“逐字复现”规则保护
+                    s.notes = list(s.notes) + ["文言段落，但没有引号、引语或出处等引用痕迹，按正文检测"]
+                else:
+                    s.kind, s.notes = "quotation", [f"文言段落（文言虚词 {classical_ratio(s.text):.0%}），有引用痕迹，疑为古籍引文"]
             elif s.register == "zh_poetry" and modern_doc and not s.title and not classical_collection:
                 s.kind, s.notes = "quotation", ["正文中引用的诗词（无标题）"]
 
@@ -1332,11 +1351,12 @@ def split_script_switches(text: str):
 _ZH_SENT = re.compile(r"(?<=[。！？!?；;])")
 
 
-def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, group: int = 36):
+def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, group: int | None = None):
     """同一段（没有换行）里现代汉语、文言、诗词成块交替时，在文体切换处断开（2026-11-06 cs1106：整篇 1.1 万字
     只有一个段落，文言、宋词、元曲、对联和现代散文首尾相接，切成 400 字的窗口后，文言和现代文混在一起，按“现代汉语”
     的模型判断，等于没有检测）。逐句（凑够约 24 字一组）判断文体，相邻同文体的合并；每一块都 ≥ min_run 字才断开，
     现代文里引的一两句古文不受影响。返回 (文本, 断开的处数)。"""
+    group = group or config.REG_SPLIT_GROUP
     lines = (text or "").split("\n")
     n_split = 0
     for li, line in enumerate(lines):
@@ -1360,7 +1380,8 @@ def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, g
             r = detect_register(g)
             if r == "en":
                 r = "?"
-            reg = "zh_cl" if r in ("zh_classical", "zh_poetry") else r
+            # 文言和诗词分开（2026-11-11 cs1111：AI 宋词、真人五律、AI 小令、真人文言被并成一块 487 字的“文言”）
+            reg = r if config.REG_SPLIT_POETRY else ("zh_cl" if r in ("zh_classical", "zh_poetry") else r)
             if runs and (reg == runs[-1][0] or reg == "?"):
                 runs[-1][1] += g
             else:
