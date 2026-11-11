@@ -223,7 +223,7 @@ ZH2_POOL_THRESHOLD = float(os.getenv("ZH2_POOL_THRESHOLD", "0.945") or 0.945)
 QUOTE_POOL_MIN_SEGS = _int("QUOTE_POOL_MIN_SEGS", 2)
 QUOTE_POOL_MIN_CHARS = _int("QUOTE_POOL_MIN_CHARS", 40)
 QUOTE_POOL_PROB = float(os.getenv("QUOTE_POOL_PROB", "0.95") or 0.95)
-QUOTE_POOL_SHARE = float(os.getenv("QUOTE_POOL_SHARE", "0.5") or 0.5)
+QUOTE_POOL_SHARE = float(os.getenv("QUOTE_POOL_SHARE", "0.25") or 0.25)
 ZH2_SEG_MIN_CHARS = _int("ZH2_SEG_MIN_CHARS", 150)
 ZH_AGREE_CLS = float(os.getenv("ZH_AGREE_CLS", "0.96") or 0.96)    # MPU 分类器 ≥ 此值且第二分类器 ≥ ZH_AGREE_ZH2 时按"中度疑似"计入（≥ 1 关闭）
 ZH_AGREE_ZH2 = float(os.getenv("ZH_AGREE_ZH2", "0.9") or 0.9)
@@ -287,6 +287,15 @@ SPLIT_INLINE = _bool("SPLIT_INLINE", True)
 # 中文几乎没有作用；200 + 91 篇真人文字被判 AI 的篇数不变，但平均 AI 率升了约 1 个百分点（零星句子被单独切出后过线）。
 # 需要专门的句级模型后再开启。HYBRID_SPLIT=1 可做对照。
 HYBRID_SPLIT = _bool("HYBRID_SPLIT", True)
+# 逐句作者判断（2026-11-11 用户 cs1111：一整段里人写 / AI 写交替 47 次，不分段、不加标记）：长段落的每个句子单元用
+# 句级标注模型 + 分类器打分，全段一起做两状态维特比解码（换作者有代价），按句子计入 AI 字数，代替整段一刀切。
+# 依据：55 篇合成混写文档逐字评估——AI 字检出 35.5% → 49.8%，真人字误标 7.6% → 3.0%；纯真人文档误标 0.8% → 0.6%。
+UNIT_HMM = _bool("UNIT_HMM", True)
+UNIT_HMM_MIN_UNITS = _int("UNIT_HMM_MIN_UNITS", 8)
+UNIT_HMM_TH = os.getenv("UNIT_HMM_TH", "zh:0.8,zh_classical:0.85,en:0.85,zh_poetry:0.9")
+UNIT_HMM_SWITCH = float(os.getenv("UNIT_HMM_SWITCH", "0.5") or 0.5)
+UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
+UNIT_HMM_BETA = float(os.getenv("UNIT_HMM_BETA", "0.5") or 0.5)     # 整段原判断作为先验的权重
 # 网页提交的检测任务超过这么多秒没人查询进度（页面关了 / 取消了），自动取消，不再占着队列（0 = 不自动取消）
 JOB_ABANDON_SECONDS = _int("JOB_ABANDON_SECONDS", 90)
 # 只在该语言的句级标注模型可用时才切（2026-11-05：中文句级模型 chinese-tagger-v1 通过对照；英文没有句级模型时不切，
