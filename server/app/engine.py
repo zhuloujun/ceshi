@@ -821,6 +821,30 @@ class Engine:
             x.index = k
         return out, n_split
 
+    def _coh_gain(self, text, a, b, ctx_chars=160, n_tok=24):
+        """这一句开头 n_tok 个词元：有前文时比没有前文时平均每词元少多少惊奇度（nats）。大 = 与前文衔接紧密。"""
+        if a is None or a <= 0:
+            return None
+        try:
+            import torch
+            lm = self.lm
+            tok = lm.tok
+            u_ids = tok(text[a:b], add_special_tokens=False)["input_ids"][:n_tok]
+            c_ids = tok(text[max(0, a - ctx_chars):a], add_special_tokens=False)["input_ids"][-64:]
+            if len(u_ids) < 4 or not c_ids:
+                return None
+            def nll(prefix, target):
+                ids = torch.tensor([prefix + target])
+                with lm._lock, torch.inference_mode():
+                    lgt = lm.performer(input_ids=ids).logits[0, :-1].float()
+                lp = torch.log_softmax(lgt, -1)
+                ll = lp.gather(-1, ids[0, 1:].unsqueeze(-1)).squeeze(-1)
+                return -ll[len(prefix) - 1:].mean().item()
+            bos = [tok.eos_token_id] if tok.eos_token_id is not None else [c_ids[-1]]
+            return nll(bos, u_ids) - nll(c_ids, u_ids)
+        except Exception:  # noqa: BLE001
+            return None
+
     @staticmethod
     def _resegment(seg_out, hmm_ai, hmm_units, raw_text=""):
         """报告按“谁写的”重新分段（2026-11-11 用户 cs1111）：逐句判断为部分人写、部分 AI 的段落，在作者换了的句子处切开；
@@ -992,7 +1016,17 @@ class Engine:
             for g in groups:
                 ln = [units[k][2] - units[k][1] for k in g]
                 gev.append(sum(units[k][3] * l for k, l in zip(g, ln)) / max(1, sum(ln)))
-            gpath = hybrid.viterbi(gev, config.UNIT_HMM_SWITCH, 1.0)
+            sw_cost = config.UNIT_HMM_SWITCH
+            if config.UNIT_HMM_COH > 0 and raw and self.lm and self.lm.ready and len(groups) >= 2:
+                # 语意衔接度（2026-11-11 用户 cs1111）：每组开头一句“有前文”比“没有前文”好预测多少（nats / 词元）。
+                # 意思一气呵成处（衔接度高）换作者的代价加大；话题断开处（≈0 或负）代价减小，便于在那里切开
+                sw_cost = []
+                for g in groups[1:]:
+                    u = units[g[0]]
+                    gain = self._coh_gain(raw, u[4], u[4] + (u[2] - u[1])) if u[4] is not None else None
+                    f = 1.0 if gain is None else min(3.0, max(0.25, gain / config.UNIT_HMM_COH))
+                    sw_cost.append(config.UNIT_HMM_SWITCH * f)
+            gpath = hybrid.viterbi(gev, sw_cost, 1.0)
             path = [0] * len(units)
             for g, st in zip(groups, gpath):
                 for k in g:

@@ -298,7 +298,9 @@ HYBRID_SPLIT = _bool("HYBRID_SPLIT", True)
 # 依据：55 篇合成混写文档逐字评估——AI 字检出 35.5% → 49.8%，真人字误标 7.6% → 3.0%；纯真人文档误标 0.8% → 0.6%。
 UNIT_HMM = _bool("UNIT_HMM", True)
 UNIT_HMM_MIN_UNITS = _int("UNIT_HMM_MIN_UNITS", 8)
-UNIT_HMM_MIN_MIX = _int("UNIT_HMM_MIN_MIX", 60)   # 段内人写、AI 都至少这么多字，才按逐句结果
+UNIT_HMM_MIN_MIX = _int("UNIT_HMM_MIN_MIX", 60)
+# 语意衔接度调节换作者代价：> 0 时启用，数值为“正常衔接”的参考值（nats / 词元）；0 = 关闭（待诊断数据定参数）
+UNIT_HMM_COH = float(os.getenv("UNIT_HMM_COH", "0") or 0)   # 段内人写、AI 都至少这么多字，才按逐句结果
 UNIT_HMM_RESEGMENT = _bool("UNIT_HMM_RESEGMENT", True)
 UNIT_HMM_WORKS = _bool("UNIT_HMM_WORKS", True)   # 同一首词 / 诗的句子绑在一起判断（app/structure.py）   # 报告按逐句判断的作者重新分段显示
 UNIT_HMM_TH = os.getenv("UNIT_HMM_TH", "zh:0.8,zh_classical:0.85,en:0.85,zh_poetry:0.9")
