@@ -82,8 +82,9 @@ def viterbi(ev: list, switch_cost: float = 2.0, temp: float = 1.5) -> list:
     back = []
     for e in ev[1:]:
         new, bk = [], []
+        sc_ = switch_cost[len(back)] if isinstance(switch_cost, (list, tuple)) else switch_cost
         for s in (0, 1):
-            stay, move = score[s], score[1 - s] - switch_cost
+            stay, move = score[s], score[1 - s] - sc_
             bk.append(s if stay >= move else 1 - s)
             new.append(max(stay, move) + ll(e, s))
         score, back = new, back + [bk]

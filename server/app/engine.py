@@ -821,6 +821,234 @@ class Engine:
             x.index = k
         return out, n_split
 
+    def _coh_gain(self, text, a, b, ctx_chars=160, n_tok=24):
+        """这一句开头 n_tok 个词元：有前文时比没有前文时平均每词元少多少惊奇度（nats）。大 = 与前文衔接紧密。"""
+        if a is None or a <= 0:
+            return None
+        try:
+            import torch
+            lm = self.lm
+            tok = lm.tok
+            u_ids = tok(text[a:b], add_special_tokens=False)["input_ids"][:n_tok]
+            c_ids = tok(text[max(0, a - ctx_chars):a], add_special_tokens=False)["input_ids"][-64:]
+            if len(u_ids) < 4 or not c_ids:
+                return None
+            def nll(prefix, target):
+                ids = torch.tensor([prefix + target])
+                with lm._lock, torch.inference_mode():
+                    lgt = lm.performer(input_ids=ids).logits[0, :-1].float()
+                lp = torch.log_softmax(lgt, -1)
+                ll = lp.gather(-1, ids[0, 1:].unsqueeze(-1)).squeeze(-1)
+                return -ll[len(prefix) - 1:].mean().item()
+            bos = [tok.eos_token_id] if tok.eos_token_id is not None else [c_ids[-1]]
+            return nll(bos, u_ids) - nll(c_ids, u_ids)
+        except Exception:  # noqa: BLE001
+            return None
+
+    @staticmethod
+    def _resegment(seg_out, hmm_ai, hmm_units, raw_text=""):
+        """报告按“谁写的”重新分段（2026-11-11 用户 cs1111）：逐句判断为部分人写、部分 AI 的段落，在作者换了的句子处切开；
+        原文里首尾相接（中间没有换行）、逐句判断为同一作者的相邻块再合并成一块显示——切文体、切长段只是为了打分，
+        不再把一首词、一封信在报告里拆成两段。AI 率的计算不变（已按逐句字数计入）。"""
+        out = []
+        for g in seg_out:
+            i = g.get("index")
+            units = hmm_units.get(i)
+            if not units or g.get("kind") != "body" or g.get("prob") is None:
+                out.append(g)
+                continue
+            if g.get("partial") not in ("partial", "local"):
+                h = dict(g)
+                h["hmm_state"] = "ai" if g["level"] in ("high", "mid", "light") else "human"
+                out.append(h)
+                continue
+            ai_level = g["level"] if g["level"] in ("high", "mid", "light") else "light"
+            pieces = []
+            for u in units:
+                st = u["flag"] == "ai"
+                if pieces and pieces[-1][0] == st:
+                    pieces[-1][2] = u["start"] + u["chars"]
+                else:
+                    pieces.append([st, u["start"], u["start"] + u["chars"]])
+            pieces[0][1] = 0
+            pieces[-1][2] = len(g["text"])
+            for k in range(1, len(pieces)):
+                pieces[k][1] = pieces[k - 1][2]
+            for st, a, b in pieces:
+                txt = g["text"][a:b]
+                if not txt.strip():
+                    continue
+                lead = len(txt) - len(txt.lstrip())
+                h = dict(g)
+                h.update({"start": (g.get("start") or 0) + a + lead, "chars": len(txt.strip()), "text": txt.strip(),
+                          "partial": None, "ai_chars": None, "windows": [], "hmm_state": "ai" if st else "human",
+                          "level": ai_level if st else "low", "near_threshold": False,
+                          "label": ("疑似 AI（逐句判断：这几句与前后文明显不同，像 AI 写的）" if st
+                                    else "未见 AI 特征（逐句判断：这几句像人写）")})
+                out.append(h)
+        raw = raw_text or ""
+        merged, cur, prev_end = [], 0, None
+        for h in out:
+            k = h["text"].strip()[:15]
+            o = raw.find(k, max(0, cur - 200)) if (raw and k) else -1
+            if o >= 0:
+                cur = o + 1
+            p = merged[-1] if merged else None
+            contiguous = (o >= 0 and prev_end is not None and o >= prev_end and "\n" not in raw[prev_end:o]
+                          and len(raw[prev_end:o].strip()) <= 2)
+            if (p is not None and h.get("hmm_state") and p.get("hmm_state") == h["hmm_state"]
+                    and (contiguous or (p.get("block") == h.get("block") and p.get("register") == h.get("register")))):
+                sep = raw[prev_end:o] if contiguous else ""
+                p["text"] = p["text"] + sep + h["text"]
+                p["chars"] = len(p["text"])
+                if h.get("register") != p.get("register"):
+                    p["register_mixed"] = True
+                prev_end = (o + len(h["text"])) if o >= 0 else None
+                continue
+            merged.append(dict(h))
+            prev_end = (o + len(h["text"])) if o >= 0 else None
+        for k, h in enumerate(merged):
+            h["orig_index"] = h.get("index")
+            h["index"] = k
+        return merged
+
+    def _unit_hmm(self, segs, results, combos, smoothed, prof, memo, human_work, doc_ai, raw_text=""):
+        """逐句作者判断：同一个原始自然段（切文体、切长段之前）的全部句子单元一起做两状态维特比解码；
+        同一首词 / 诗（见 app/structure.py）里的句子绑在一起，只能整体判为人写或 AI。
+        返回 ({段号: AI 字数}, {段号: [句子窗口]}, {应由引文改为计入的段号})。"""
+        from . import hybrid, structure
+        if not config.UNIT_HMM:
+            return {}, {}, set()
+        th = {k: float(v) for k, v in (kv.split(":") for kv in config.UNIT_HMM_TH.split(","))}
+        lg = lambda p: math.log(min(max(p, 0.01), 0.99) / (1 - min(max(p, 0.01), 0.99)))
+        # 每段在原文中的位置与所属原始自然段
+        raw = raw_text or ""
+        cur, rpos = 0, {}
+        for x in sorted(segs, key=lambda y: y.start):
+            k = x.text.strip()[:15]
+            o = raw.find(k, max(0, cur - 200)) if (raw and k) else -1
+            if o >= 0:
+                rpos[x.index] = o - max(0, x.text.find(k))
+                cur = o + 1
+        def para_of(x):
+            if x.index in rpos:
+                return ("p", raw.count("\n", 0, rpos[x.index]))
+            return ("b", getattr(x, "orig_block", x.block))
+        blocks: dict = {}
+        for x in segs:
+            if x.register == "zh_poetry" and not (self.tag_zp and self.tag_zp.ready):
+                continue      # 诗词还没有句级模型：逐行打分不可靠（2026-11-11 回归：AI 诗被逐行拆成人写），仍按整段判断
+            if x.register in th and x.kind in ("body", "quotation"):
+                blocks.setdefault(para_of(x), []).append(x)
+        hmm_ai, hmm_units, promote = {}, {}, set()
+        famous_words = ("名篇", "逐字复现", "原句相同")
+        for blk, xs in blocks.items():
+            xs.sort(key=lambda x: rpos.get(x.index, x.start))
+            # 本自然段里的词 / 诗（原文坐标）
+            works, line_start = [], 0
+            if config.UNIT_HMM_WORKS and raw and blk[0] == "p":
+                lo = min(rpos[x.index] for x in xs if x.index in rpos)
+                hi = max(rpos[x.index] + len(x.text) for x in xs if x.index in rpos)
+                line_start = raw.rfind("\n", 0, lo) + 1
+                line_end = max(hi, raw.find("\n", lo) if raw.find("\n", lo) >= 0 else len(raw))
+                works = [(a + line_start, b + line_start, k) for a, b, k in structure.work_spans(raw[line_start:line_end])]
+            units = []   # (段, 段内起, 段内止, 证据, 原文起)
+            for x in xs:
+                sp = hybrid.sentence_units(x.text, x.register, 12, 8)
+                if not sp:
+                    continue
+                base0 = rpos.get(x.index)
+                if works and base0 is not None:
+                    # 句子单元不跨越一首词 / 诗的首尾（短句并入相邻句时可能跨过去）
+                    cuts = sorted({c - base0 for wa, wb, _ in works for c in (wa, wb) if 0 < c - base0 < len(x.text)})
+                    if cuts:
+                        sp2 = []
+                        for a, b in sp:
+                            pts = [a] + [c for c in cuts if a < c < b] + [b]
+                            sp2 += [(u, v) for u, v in zip(pts, pts[1:]) if x.text[u:v].strip()]
+                        sp = sp2
+                tx = [x.text[a:b] for a, b in sp]
+                regs = [x.register] * len(tx)
+                c1 = (self.classify_en2(tx, regs) if x.register == "en" else
+                      self.classify_zh2(tx, regs) if x.register == "zh" else self.classify(tx, regs))
+                tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
+                tgp = tg.span_probs(x.text, sp) if (tg and tg.ready) else [None] * len(sp)
+                fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
+                thr = float(prof[x.index][0].get("threshold", 0.5)) if x.index in prof else 0.5
+                pr = smoothed.get(x.index)
+                b = 1.0 if (x.counted and x.index not in human_work and
+                            ((pr is not None and pr >= thr) or x.index in doc_ai)) else 0.0
+                base = rpos.get(x.index)
+                for (a, bnd), p1, p2 in zip(sp, c1, tgp):
+                    if fam:
+                        e = -6.0
+                    else:
+                        xs_ = []
+                        if p2 is not None:
+                            xs_.append((lg(p2), 1 - config.UNIT_HMM_ALPHA))
+                        if p1 is not None:
+                            xs_.append((lg(p1), config.UNIT_HMM_ALPHA if p2 is not None else 1.0))
+                        e = (sum(v * w for v, w in xs_) / sum(w for _, w in xs_) - lg(th[x.register])) if xs_ else 0.0
+                        e += config.UNIT_HMM_BETA * (2 * b - 1)
+                    units.append((x, a, bnd, e, None if base is None else base + a))
+            if len(units) < config.UNIT_HMM_MIN_UNITS:
+                continue
+            # 同一首词 / 诗里的句子绑成一组（按原文位置判断）
+            groups = [[k] for k in range(len(units))]
+            if works:
+                wid = []
+                for u in units:
+                    w = None
+                    if u[4] is not None:
+                        mid = u[4] + (u[2] - u[1]) // 2
+                        for j, (wa, wb, _) in enumerate(works):
+                            if wa <= mid < wb:
+                                w = j
+                                break
+                    wid.append(w)
+                groups = []
+                for k, w in enumerate(wid):
+                    if groups and w is not None and wid[groups[-1][-1]] == w:
+                        groups[-1].append(k)
+                    else:
+                        groups.append([k])
+            gev = []
+            for g in groups:
+                ln = [units[k][2] - units[k][1] for k in g]
+                gev.append(sum(units[k][3] * l for k, l in zip(g, ln)) / max(1, sum(ln)))
+            sw_cost = config.UNIT_HMM_SWITCH
+            if config.UNIT_HMM_COH > 0 and raw and self.lm and self.lm.ready and len(groups) >= 2:
+                # 语意衔接度（2026-11-11 用户 cs1111）：每组开头一句“有前文”比“没有前文”好预测多少（nats / 词元）。
+                # 意思一气呵成处（衔接度高）换作者的代价加大；话题断开处（≈0 或负）代价减小，便于在那里切开
+                sw_cost = []
+                for g in groups[1:]:
+                    u = units[g[0]]
+                    gain = self._coh_gain(raw, u[4], u[4] + (u[2] - u[1])) if u[4] is not None else None
+                    f = 1.0 if gain is None else min(3.0, max(0.25, gain / config.UNIT_HMM_COH))
+                    sw_cost.append(config.UNIT_HMM_SWITCH * f)
+            gpath = hybrid.viterbi(gev, sw_cost, 1.0)
+            path = [0] * len(units)
+            for g, st in zip(groups, gpath):
+                for k in g:
+                    path[k] = st
+            # 只在这一自然段里确实有“人写 + AI”两种成块的文字时才按逐句结果计入；整段都判为人写或都判为 AI 时，
+            # 沿用整段 / 整篇的判断（2026-11-11 回归：整篇 AI 的书信、对联被逐句判断整段降为“人写”，AI 检出 969→935）
+            ai_ch = sum(u[2] - u[1] for u, st in zip(units, path) if st)
+            hu_ch = sum(u[2] - u[1] for u, st in zip(units, path) if not st)
+            if min(ai_ch, hu_ch) < config.UNIT_HMM_MIN_MIX:
+                continue
+            for (x, a, bnd, e, _), st in zip(units, path):
+                hmm_ai[x.index] = hmm_ai.get(x.index, 0) + (bnd - a if st else 0)
+                hmm_units.setdefault(x.index, []).append({"start": a, "chars": bnd - a, "text": x.text[a:bnd],
+                                                          "prob": None, "second": None,
+                                                          "flag": "ai" if st else "human"})
+            for x in xs:
+                if x.kind == "quotation" and x.index in hmm_ai and hmm_ai[x.index] >= 0.5 * len(x.text) \
+                        and combos[x.index]["prob"] is not None and x.index not in memo \
+                        and not any(w in n for n in x.notes for w in famous_words):
+                    promote.add(x.index)
+        return hmm_ai, hmm_units, promote
+
     def classify_zh2(self, texts: list[str], registers: list[str]) -> list:
         """现代汉语段落再用中文第二分类器（见过新一代国产大模型的散文、游记、论文）打一次分。"""
         out = [None] * len(texts)
@@ -870,6 +1098,7 @@ class Engine:
         text, n_zw, n_hw = deobfuscate(text)
         text, unwrapped = unwrap_hard_wraps(text)
         n_lab = n_scr = 0
+        pre_split = text
         if config.SPLIT_INLINE:
             text, n_lab = split_inline_labels(text)
             text, n_scr = split_script_switches(text)
@@ -1072,6 +1301,18 @@ class Engine:
         #      ≥ QUOTE_POOL_MIN_SEGS 段引文（各 ≥ QUOTE_POOL_MIN_CHARS 字，非名篇）得分都 ≥ QUOTE_POOL_PROB，且这些高分引文
         #      占全部引文字数 ≥ QUOTE_POOL_SHARE 时，改按正文计入。真人论文大量引用古籍时，真古文得 ≥0.95 的只约 1.4%，
         #      占比条件保证引文再多也不会触发。依据（2026-11-10，25 个测试集）：真人文档 0 篇触发，AI 文档 67 篇触发。
+        if config.QUOTE_UNCITED_PROB < 1:
+            # 没有任何引用痕迹的文言“引文”，文言模型又几乎肯定是 AI 写的 → 改为计入（2026-11-11 cs1111）。
+            # 依据：现有测试集里被当作引文排除的文言段，真人 365 段中 ≥ 0.97 的只有 4 段，AI 354 段中有 82 段
+            fam_words0 = ("名篇", "逐字复现", "原句相同")
+            for x in segs:
+                if (x.kind == "quotation" and getattr(x, "uncited", False) and x.index not in memo
+                        and len(x.text) >= 40 and combos[x.index]["prob"] is not None
+                        and combos[x.index]["prob"] >= config.QUOTE_UNCITED_PROB
+                        and not any(w in n for n in x.notes for w in fam_words0)):
+                    x.kind = "body"
+                    x.notes = list(x.notes) + ["没有引用痕迹，且文言模型判断几乎肯定是 AI 写的，改为计入"]
+            counted = [x for x in segs if x.counted]
         if config.QUOTE_POOL_MIN_SEGS > 0:
             fam_words = ("名篇", "逐字复现", "原句相同")
             qs = [x for x in segs if x.kind == "quotation" and x.index not in memo
@@ -1568,6 +1809,12 @@ class Engine:
             n_ge = len(h) - bisect.bisect_left(h, pr)
             return {"n": len(h), "share": round((n_ge + 1) / (len(h) + 1), 4)}
 
+        hmm_ai, hmm_units, hmm_promote = self._unit_hmm(segs, results, combos, smoothed, prof, memo,
+                                                        zh_human_work, zh2_seg | paper_ai | zh2_ai | work_ai, pre_split)
+        for i in hmm_promote:
+            x = segs_by_idx[i]
+            x.kind = "body"
+            x.notes = list(x.notes) + ["原按引文排除；逐句判断这几句与前后文明显不同、像 AI 写的，改为计入"]
         seg_out, counted_chars, prob_weighted = [], 0, 0.0
         chars_by_level = {"high": 0, "mid": 0, "light": 0, "low": 0}
         level_counts = {"high": 0, "mid": 0, "light": 0, "low": 0}
@@ -1579,7 +1826,7 @@ class Engine:
             comb = combos[s.index]
             pcal, has_cal = prof[s.index]
             thr = float(pcal.get("threshold", 0.5))
-            prob = smoothed.get(s.index) if s.counted else None
+            prob = (smoothed.get(s.index, comb["prob"] if s.index in hmm_promote else None) if s.counted else None)
             level, label = scoring.level_of(prob, thr) if s.counted else ("none", "")
             near = bool(s.counted and prob is not None and thr - scoring.NEAR_MARGIN <= prob < thr)
             by_work = s.index in work_ai or s.index in paper_ai or s.index in zh2_ai
@@ -1609,7 +1856,26 @@ class Engine:
             # 逐句窗口：整段判 AI 但有成片的句子明显像人写 → 只按 AI 部分计入（部分疑似）；
             # 整段未过阈值但有几句非常像 AI（综合分数和第二分类器都很肯定）→ 只把这几句计入（局部疑似）
             wins_out, ai_chars, partial = [], None, None
-            if (s.index in win_spans and s.counted and prob is not None and s.index not in memo
+            if s.index in hmm_ai and s.counted and prob is not None:
+                a_ch, n_ch = hmm_ai[s.index], len(s.text)
+                wins_out = hmm_units.get(s.index, [])
+                if a_ch == 0:
+                    if level in ("high", "mid", "light"):
+                        level, near = "low", True
+                        label = "接近阈值（逐句判断：这段的句子与前后文相比像人写，未计入）"
+                elif a_ch >= 0.85 * n_ch:
+                    if level in ("low", "none"):
+                        level, near = "mid", False
+                        label = "中度疑似（逐句判断：这几句与前后文明显不同，像 AI 写的）"
+                else:
+                    ai_chars = a_ch
+                    if level in ("high", "mid", "light"):
+                        partial = "partial"
+                        label = f"{label}（逐句判断：部分句子像人写，按约 {a_ch / n_ch:.0%} 计入）"
+                    else:
+                        partial, near = "local", False
+                        label = f"局部疑似（逐句判断：约 {a_ch} 字像 AI 写的）"
+            elif (s.index in win_spans and s.counted and prob is not None and s.index not in memo
                     and s.index not in zh_human_work):
                 wprof = scoring.profile_for(cal, "zh_short")[0] if (s.register == "zh" and has_short) else pcal
                 stext = score_text(s)
@@ -1674,6 +1940,8 @@ class Engine:
                 "human_ref": human_ref_of(s.index, comb["prob"]),
             })
 
+        if config.UNIT_HMM_RESEGMENT and hmm_units:
+            seg_out = self._resegment(seg_out, hmm_ai, hmm_units, pre_split)
         excluded = [s for s in segs if not s.counted]
         used_profiles = []
         for s_ in counted:
