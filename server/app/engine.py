@@ -989,7 +989,9 @@ class Engine:
                         if p1 is not None:
                             xs_.append((lg(p1), config.UNIT_HMM_ALPHA if p2 is not None else 1.0))
                         e = (sum(v * w for v, w in xs_) / sum(w for _, w in xs_) - lg(th[x.register])) if xs_ else 0.0
-                        e += config.UNIT_HMM_BETA * (2 * b - 1)
+                        # 整篇判断 / 作品判断为 AI 的段落先验更强：逐句模型须有很强的证据才能把其中句子改判为人写
+                        # （2026-11-11 回归：整篇判断为 AI 的文章被逐句判断大半改为人写，文档 AI 比例 1.0→0.22）
+                        e += (config.UNIT_HMM_BETA_DOC if (b and x.index in doc_ai) else config.UNIT_HMM_BETA) * (2 * b - 1)
                     units.append((x, a, bnd, e, None if base is None else base + a))
             if len(units) < config.UNIT_HMM_MIN_UNITS:
                 continue
@@ -1810,7 +1812,7 @@ class Engine:
             return {"n": len(h), "share": round((n_ge + 1) / (len(h) + 1), 4)}
 
         hmm_ai, hmm_units, hmm_promote = self._unit_hmm(segs, results, combos, smoothed, prof, memo,
-                                                        zh_human_work, zh2_seg | paper_ai | zh2_ai | work_ai, pre_split)
+                                                        zh_human_work, zh2_seg | paper_ai | zh2_ai | work_ai | zh_doc_ai, pre_split)
         for i in hmm_promote:
             x = segs_by_idx[i]
             x.kind = "body"

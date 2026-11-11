@@ -306,6 +306,7 @@ UNIT_HMM_WORKS = _bool("UNIT_HMM_WORKS", True)   # 同一首词 / 诗的句子�
 UNIT_HMM_TH = os.getenv("UNIT_HMM_TH", "zh:0.8,zh_classical:0.85,en:0.85,zh_poetry:0.9")
 UNIT_HMM_SWITCH = float(os.getenv("UNIT_HMM_SWITCH", "0.5") or 0.5)
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
+UNIT_HMM_BETA_DOC = float(os.getenv("UNIT_HMM_BETA_DOC", "1.5"))
 UNIT_HMM_BETA = float(os.getenv("UNIT_HMM_BETA", "0.5") or 0.5)     # 整段原判断作为先验的权重
 # 网页提交的检测任务超过这么多秒没人查询进度（页面关了 / 取消了），自动取消，不再占着队列（0 = 不自动取消）
 JOB_ABANDON_SECONDS = _int("JOB_ABANDON_SECONDS", 90)
