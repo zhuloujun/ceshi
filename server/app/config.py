@@ -300,7 +300,7 @@ UNIT_HMM = _bool("UNIT_HMM", True)
 UNIT_HMM_MIN_UNITS = _int("UNIT_HMM_MIN_UNITS", 8)
 UNIT_HMM_MIN_MIX = _int("UNIT_HMM_MIN_MIX", 60)
 # 语意衔接度调节换作者代价：> 0 时启用，数值为“正常衔接”的参考值（nats / 词元）；0 = 关闭（待诊断数据定参数）
-UNIT_HMM_COH_MAX = float(os.getenv("UNIT_HMM_COH_MAX", "3.0"))   # 衔接度把换作者代价最多升到原来的几倍
+UNIT_HMM_COH_MAX = float(os.getenv("UNIT_HMM_COH_MAX", "1.0"))   # 衔接度把换作者代价最多升到原来的几倍
 UNIT_HMM_COH_MIN = float(os.getenv("UNIT_HMM_COH_MIN", "0.25"))   # 衔接度把换作者代价最多降到原来的几分之几（1 = 只升不降）
 UNIT_HMM_COH_REGS = set(os.getenv("UNIT_HMM_COH_REGS", "zh,zh_classical,zh_poetry").replace(",", " ").split())   # 哪些文体用衔接度
 UNIT_HMM_COH = float(os.getenv("UNIT_HMM_COH", "0.8") or 0)   # 段内人写、AI 都至少这么多字，才按逐句结果
