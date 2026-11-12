@@ -849,6 +849,10 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                   and _famous(stripped) != _famous(buf)):
                 # 公开名篇原文与相邻的其他文字不合并（见 split_famous_spans）
                 flush()
+            elif (config.SPLIT_WORKS and pending_break and reg == "zh_poetry" and _complete_work(stripped)
+                  and _complete_work(buf)):
+                # 空行隔开的两首完整作品（各自是一首完整的词 / 诗）是两篇作品，不并成一段（2026-11-12 cs1111）
+                flush()
             elif (pending_break or section) and len(buf) >= flush_chars(reg):
                 # 章节标题相当于一次段落分隔：窗口够长就另起一段，否则与下一节合并（仍属同一篇作品）
                 flush()
@@ -1352,6 +1356,33 @@ def split_script_switches(text: str):
 _ZH_SENT = re.compile(r"(?<=[。！？!?；;])")
 
 
+def _refine_reg_cuts(merged, min_run):
+    """现代文与文言 / 诗词交界处的切点按“句”细调（2026-11-12 cs1111：按 24 字一组判断文体，切点最多偏一组——
+    浅近文言“余因是知，世间万物，各有其性。松生山巅……”的头两句被并进前面的现代文议论）。交界前后各取 3 句，
+    每句的倾向 = 文言虚词比例 − 白话标志词比例；切点移到使“前面更像现代文、后面更像文言”（或反过来）的句间。"""
+    for i in range(len(merged) - 1):
+        ra, rb = merged[i][0], merged[i + 1][0]
+        if (ra == "zh") == (rb == "zh") or "?" in (ra, rb):
+            continue
+        sd = 1 if rb != "zh" else -1           # +1：后面是文言 / 诗词
+        ta = [x for x in _ZH_SENT.split(merged[i][1]) if x]
+        tb = [x for x in _ZH_SENT.split(merged[i + 1][1]) if x]
+        ka, kb = min(3, len(ta) - 1), min(3, len(tb) - 1)
+        if ka < 0 or kb < 0:
+            continue
+        win = ta[len(ta) - ka:] + tb[:kb]
+        v = [(classical_ratio(x) - modern_ratio(x)) * sd for x in win]
+        score = lambda c: sum(v[c:]) - sum(v[:c])
+        c0 = ka
+        best = max(range(len(win) + 1), key=lambda c: (round(score(c), 4), -abs(c - c0)))
+        if best == c0 or score(best) - score(c0) < 0.05:
+            continue
+        new_a = "".join(ta[:len(ta) - ka] + win[:best])
+        new_b = "".join(win[best:] + tb[kb:])
+        if len(_CJK.findall(new_a)) >= min_run // 2 and len(_CJK.findall(new_b)) >= min_run // 2:
+            merged[i][1], merged[i + 1][1] = new_a, new_b
+
+
 def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, group: int | None = None):
     """同一段（没有换行）里现代汉语、文言、诗词成块交替时，在文体切换处断开（2026-11-06 cs1106：整篇 1.1 万字
     只有一个段落，文言、宋词、元曲、对联和现代散文首尾相接，切成 400 字的窗口后，文言和现代文混在一起，按“现代汉语”
@@ -1397,9 +1428,96 @@ def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, g
         if len(merged) >= 2 and size(merged[0]) < min_run:
             merged[1][1] = merged[0][1] + merged[1][1]
             merged.pop(0)
+        if config.REG_SPLIT_REFINE:
+            _refine_reg_cuts(merged, min_run)
         if len(merged) >= 2 and all(size(r) >= min_run for r in merged):
             lines[li] = "\n\n".join(r[1].strip() for r in merged)
             n_split += len(merged) - 1
+    return "\n".join(lines), n_split
+
+
+def _complete_work(t: str) -> bool:
+    """这段文字本身就是一首（或几首相连的）完整的词 / 近体诗：作品句式覆盖其中 ≥ 85% 的汉字。"""
+    from .structure import work_spans
+    n = len(_CJK.findall(t))
+    if n < 20:
+        return False
+    return sum(len(_CJK.findall(t[a:b])) for a, b, _ in work_spans(t)) >= 0.85 * n
+
+
+_VERSE_SENT = re.compile(r"\s*(?:[\u4e00-\u9fff]{4,7}[，,]){0,2}[\u4e00-\u9fff]{4,7}[。]")
+_SENT_END_CH = "。！？!?；;”」』\""
+
+
+def split_work_spans(text: str, min_line: int = 80, min_work: int = 20, min_rest: int = 8):
+    """一段（没有换行）里夹着完整的词 / 近体诗时，把每首作品单独断成一段，前后的文字各自成段（2026-11-12 用户 cs1111：
+    “小院东风吹落絮……”一首《蝶恋花》前两句被切进前面的文言段、后半首又和下一首真人五律并成一段；按 24 字一组判断文体，
+    切点总落在作品中间）。作品由 structure.work_spans 按词谱句式 / 近体诗句式认出，且必须在句子边界上起止，避免把散文里
+    碰巧字数整齐的几句当成诗词。相邻、同一词牌（或同为近体诗）的作品合成一块（一首律诗常被认成两三首小令）。返回 (文本, 断开的处数)。"""
+    if not config.SPLIT_WORKS:
+        return text, 0
+    from .structure import work_spans
+    lines = (text or "").split("\n")
+    n_split = 0
+    cjk = lambda t: len(_CJK.findall(t))
+
+    def at_start(line, a):
+        k = a - 1
+        while k >= 0 and (line[k].isspace() or line[k].isascii() and line[k].isalpha()):
+            k -= 1
+        return k < 0 or line[k] in _SENT_END_CH
+
+    for li, line in enumerate(lines):
+        if cjk(line) < min_line:
+            continue
+        raw_sp = []
+        for a, b, kind in work_spans(line):
+            while a < b and (line[a].isspace() or line[a].isascii() and line[a].isalpha()):
+                a += 1
+            if cjk(line[a:b]) < min_work or not at_start(line, a) or line[b - 1] not in "。！？!?":
+                continue
+            # 骈文、奏议里字数整齐的对句（“学校之成期有定，必累年而后成材；科举之诡弊相仍，可侥幸而期获售。”）不是诗：
+            # 诗词句间几乎不用分号，也很少用“之、而、其、者、也”这类文言虚词
+            if re.search(r"[；;]", line[a:b - 1]) or classical_ratio(line[a:b]) >= 0.08:
+                continue
+            raw_sp.append((a, b, kind))
+        sp = []
+        for k, (a, b, kind) in enumerate(raw_sp):
+            if sp and sp[-1][2] == kind and not line[sp[-1][1]:a].strip():
+                sp[-1] = (sp[-1][0], b, kind)
+            else:
+                sp.append((a, b, kind))
+            # 作品后面紧跟的诗句（杂言诗、古风里 4–7 字一句、每句 ≤ 3 个分句）也属于这首作品，最多再并两句
+            nxt = raw_sp[k + 1][0] if k + 1 < len(raw_sp) else len(line)
+            a0, b0, kd = sp[-1]
+            for _ in range(2):
+                m = _VERSE_SENT.match(line, b0)
+                if not m or m.end() > nxt:
+                    break
+                b0 = m.end()
+            sp[-1] = (a0, b0, kd)
+        if not sp:
+            continue
+        parts, pos = [], 0
+        for a, b, _ in sp:
+            pre = line[pos:a]
+            if cjk(pre) >= min_rest:
+                parts.append(pre)
+            elif parts:
+                parts[-1] += pre
+            else:
+                a = pos
+            parts.append(line[a:b])
+            pos = b
+        rest = line[pos:]
+        if cjk(rest) >= min_rest or not parts:
+            parts.append(rest)
+        else:
+            parts[-1] += rest
+        parts = [p.strip() for p in parts if p.strip()]
+        if len(parts) >= 2:
+            lines[li] = "\n\n".join(parts)
+            n_split += len(parts) - 1
     return "\n".join(lines), n_split
 
 
