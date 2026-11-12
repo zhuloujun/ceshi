@@ -773,6 +773,8 @@ class Engine:
                 out.append(s)
                 continue
             tagger = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(s.register)
+            if s.register == "zh_poetry" and config.TAGGER_ZP_COUPLET_ONLY and not is_couplet_run(text):
+                tagger = None
             if classical and not (tagger and tagger.ready) and config.HYBRID_REQUIRE_TAGGER and not config.HYBRID_CLASSICAL:
                 out.append(s)
                 continue
