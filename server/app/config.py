@@ -223,7 +223,7 @@ ZH2_POOL_THRESHOLD = float(os.getenv("ZH2_POOL_THRESHOLD", "0.945") or 0.945)
 QUOTE_POOL_MIN_SEGS = _int("QUOTE_POOL_MIN_SEGS", 2)
 # 现代文里的文言段落要有引用痕迹（引号、“曰 / 云”等引语、书名卷次）才按“古籍引文”不计入（2026-11-11 cs1111）
 QUOTE_NEED_EVIDENCE = _bool("QUOTE_NEED_EVIDENCE", True)
-QUOTE_UNCITED_PROB = float(os.getenv("QUOTE_UNCITED_PROB", "0.97") or 0.97)   # 无引用痕迹的文言引文，分数达到此值改为计入
+QUOTE_UNCITED_PROB = float(os.getenv("QUOTE_UNCITED_PROB", "0.93") or 0.93)   # 无引用痕迹的文言引文，分数达到此值改为计入
 # 同一段里文体切换：文言、诗词分开切；按约 REG_SPLIT_GROUP 个汉字一组判断文体（原为 36，切点偏差最多一组）
 REG_SPLIT_POETRY = _bool("REG_SPLIT_POETRY", True)
 REG_SPLIT_GROUP = _int("REG_SPLIT_GROUP", 24)

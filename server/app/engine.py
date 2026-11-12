@@ -1362,6 +1362,8 @@ class Engine:
         if config.QUOTE_UNCITED_PROB < 1:
             # 没有任何引用痕迹的文言“引文”，文言模型又几乎肯定是 AI 写的 → 改为计入（2026-11-11 cs1111）。
             # 依据：现有测试集里被当作引文排除的文言段，真人 365 段中 ≥ 0.97 的只有 4 段，AI 354 段中有 82 段
+            # 2026-11-12 降到 0.93：X9 回归里仍被当作引文的文言段（≥40 字），真人 137 段 ≥0.93 的 0 段（≥0.90 的 2 段），
+            # AI 99 段 ≥0.93 的 43 段（≥0.97 的 14 段，多为有引用痕迹、不受此规则影响）
             fam_words0 = ("名篇", "逐字复现", "原句相同")
             for x in segs:
                 if (x.kind == "quotation" and getattr(x, "uncited", False) and x.index not in memo
