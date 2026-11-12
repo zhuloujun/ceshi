@@ -230,6 +230,8 @@ QUOTE_UNCITED_PROB_PO = float(os.getenv("QUOTE_UNCITED_PROB_PO", "0.93") or 0)
 QUOTE_UNCITED_MIN_CHARS = int(os.getenv("QUOTE_UNCITED_MIN_CHARS", "40") or 40)
 # 无引用痕迹的文言 / 诗词“引文”也做人机混写切分：名篇原文与 AI 仿作首尾相接时，整段当引文会把 AI 部分一起排除
 HYBRID_SPLIT_UNCITED = _bool("HYBRID_SPLIT_UNCITED", True)
+# 几副对联首尾相接按对联（诗词）处理（segmenter.is_couplet_run）
+COUPLET_RUN = _bool("COUPLET_RUN", True)
 # 同一段里文体切换：文言、诗词分开切；按约 REG_SPLIT_GROUP 个汉字一组判断文体（原为 36，切点偏差最多一组）
 REG_SPLIT_POETRY = _bool("REG_SPLIT_POETRY", True)
 REG_SPLIT_GROUP = _int("REG_SPLIT_GROUP", 24)

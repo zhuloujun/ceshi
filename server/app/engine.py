@@ -18,7 +18,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_work_spans, split_famous_spans, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_work_spans, split_famous_spans, detect_register, is_couplet_run, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -1352,7 +1352,7 @@ class Engine:
                 reg = "en_poetry"
             prof[s.index] = scoring.profile_for(cal, reg)
             prof_name[s.index] = reg
-            if reg == "zh_poetry" and is_couplet(score_text(s)):
+            if reg == "zh_poetry" and (is_couplet(score_text(s)) or is_couplet_run(score_text(s))):
                 # 对联单独的阈值：诗词阈值按当代诗词"人写误判约 5%"定，对联只有十几二十个字，同样的阈值几乎认不出 AI 对联。
                 # 用没参与训练的 500 副真人对联（couplet-dataset）测定：分类器 0.975 时真人对联误判约 4%、AI 对联检出约 69%。
                 pc, ok = prof[s.index]

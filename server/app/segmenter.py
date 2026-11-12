@@ -284,6 +284,20 @@ def is_couplet(text: str) -> bool:
     return modern_ratio(t) <= 0.08
 
 
+def is_couplet_run(text: str) -> bool:
+    """几副对联首尾相接（"莫道人生尽是功名事，且看花开花落；须知天地原无富贵心，只教云卷云舒。金界庄严，……"）：
+    整段不是一副对联，is_couplet 认不出，以前按现代汉语判断（2026-11-13 cs1112：5 副对联全部按现代文打分、AI 对联 0% 检出）。
+    按句号切开，至少两句、且 70% 以上的字数各自是一副对联时，按诗词（对联）处理。"""
+    if not config.COUPLET_RUN:
+        return False
+    t = re.sub(r"\s+", "", text)
+    sents = [x for x in re.split(r"(?<=[。！？!?])", t) if _CJK.search(x)]
+    if len(sents) < 2:
+        return False
+    cj = len(_CJK.findall(t)) or 1
+    return sum(len(_CJK.findall(x)) for x in sents if is_couplet(x)) >= 0.7 * cj
+
+
 def is_ci(text: str) -> bool:
     """词、曲（长短句）：小句长短不一（1–9 字）、几乎不用文言虚词和白话标志词、句末押韵。
     is_poetry 要求句长整齐，只认得出约 85% 的宋词；加上这条后宋词约 96%，古文误认约 1%，现代文约 0.1%。"""
@@ -507,6 +521,8 @@ def detect_register(text: str) -> str:
     # 从 0.46% 升到 0.48%；AI 文言识别率 89% → 90%，gdwx 57% → 66%。
     if cjk >= 30 and mr <= 0.03 and len(_CLASSICAL_EXT.findall(_MODERN_COMPOUND.sub("", t))) / cjk >= 0.08:
         return "zh_classical"
+    if cjk >= 30 and is_couplet_run(t):
+        return "zh_poetry"
     return "zh"
 
 
