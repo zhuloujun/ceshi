@@ -583,6 +583,39 @@ def quotation_ratio(text: str) -> float:
     return min(1.0, quoted / cjk)
 
 
+def _free_verse_lines(lines):
+    """分行的现代诗（新诗）：多数诗行不带句末标点、短而不齐，以前每一行都像“无标点短标题”，一首诗被切成几十字的碎片、
+    各自当成新作品（2026-11-13 用户上传：ChatGPT《把清晨留给自己》、智谱《归人》整首 0% 检出）。
+    连续 ≥ 8 行（中间允许单个空行分节）、每行 ≤ 40 字、以汉字为主、六成以上不以句末标点结尾的一段，除第一行（可能是诗题）外
+    都标为诗行：不当标题、空行不断段，整首按一段判断。返回这些行号（含诗节之间的空行）。"""
+    out, run = set(), []
+
+    def close():
+        nz = [i for i in run if lines[i]]
+        if len(nz) >= 8:
+            bare = sum(1 for i in nz if not re.search(r"[。！？!?；;…]$", lines[i]))
+            if bare >= 0.6 * len(nz):
+                out.update(i for i in run if i > nz[0])
+    blank = 0
+    for i, l in enumerate(lines):
+        if not l:
+            blank += 1
+            if blank > 1:
+                close(); run = []
+            elif run:
+                run.append(i)
+            continue
+        blank = 0
+        cj = len(_CJK.findall(l))
+        if len(l) <= 40 and cj >= 2 and cj >= 0.6 * len(re.sub(r"\s", "", l)) and not _SECTION_NUM.match(l) \
+                and not re.fullmatch(r".{1,12}[：:].*", l):
+            run.append(i)
+        else:
+            close(); run = []
+    close()
+    return out
+
+
 GENRES = ("auto", "classical")
 
 
@@ -709,6 +742,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                                     detect_register(p) if len(pieces) > 1 else reg, block, title if i == 0 else ""))
             off += len(p)
 
+    verse = _free_verse_lines(lines_all) if config.FREE_VERSE_JOIN else set()
     line_no = -1
     in_table = False
     for line in text.splitlines(keepends=True):
@@ -754,7 +788,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                 flush("reference")
             continue
         if not stripped or _RULE_LINE.match(stripped) or is_drawing_line(stripped):
-            if buf.strip():
+            if buf.strip() and line_no not in verse:
                 pending_break = True
             continue
         # 表格：Turnitin 等平台只检测"连贯的正文"（qualifying prose），表格、列表不计入。表格行单独成段，标为 table
@@ -770,6 +804,8 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             continue
         section = is_section_heading(stripped)
         title = stripped in paper_titles or (is_title(stripped) and not section)
+        if line_no in verse:
+            title = section = False
         item = list_mode and (is_list_item(stripped) or is_list_head(stripped))
         if labeled_mode:
             # 用户编号的作品集：只有带字母编号的行开始新作品；作品内部的小标题、"1. Preheat …"步骤都是正文
