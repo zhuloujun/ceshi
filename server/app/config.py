@@ -223,10 +223,11 @@ ZH2_POOL_THRESHOLD = float(os.getenv("ZH2_POOL_THRESHOLD", "0.945") or 0.945)
 QUOTE_POOL_MIN_SEGS = _int("QUOTE_POOL_MIN_SEGS", 2)
 # 现代文里的文言段落要有引用痕迹（引号、“曰 / 云”等引语、书名卷次）才按“古籍引文”不计入（2026-11-11 cs1111）
 QUOTE_NEED_EVIDENCE = _bool("QUOTE_NEED_EVIDENCE", True)
-QUOTE_UNCITED_PROB = float(os.getenv("QUOTE_UNCITED_PROB", "0.97") or 0.97)   # 无引用痕迹的文言引文，分数达到此值改为计入
+QUOTE_UNCITED_PROB = float(os.getenv("QUOTE_UNCITED_PROB", "0.93") or 0.93)   # 无引用痕迹的文言引文，分数达到此值改为计入
 # 同一段里文体切换：文言、诗词分开切；按约 REG_SPLIT_GROUP 个汉字一组判断文体（原为 36，切点偏差最多一组）
 REG_SPLIT_POETRY = _bool("REG_SPLIT_POETRY", True)
 REG_SPLIT_GROUP = _int("REG_SPLIT_GROUP", 24)
+REG_SPLIT_REFINE = _bool("REG_SPLIT_REFINE", True)   # 现代文 / 文言交界处按句细调切点（见 segmenter._refine_reg_cuts）
 QUOTE_POOL_MIN_CHARS = _int("QUOTE_POOL_MIN_CHARS", 40)
 QUOTE_POOL_PROB = float(os.getenv("QUOTE_POOL_PROB", "0.95") or 0.95)
 QUOTE_POOL_SHARE = float(os.getenv("QUOTE_POOL_SHARE", "0.25") or 0.25)
@@ -307,6 +308,10 @@ UNIT_HMM_COH = float(os.getenv("UNIT_HMM_COH", "0.8") or 0)   # 段内人写、A
 UNIT_HMM_RESEGMENT = _bool("UNIT_HMM_RESEGMENT", True)
 UNIT_HMM_WORKS = _bool("UNIT_HMM_WORKS", True)   # 同一首词 / 诗的句子绑在一起判断（app/structure.py）   # 报告按逐句判断的作者重新分段显示
 UNIT_HMM_TH = os.getenv("UNIT_HMM_TH", "zh:0.8,zh_classical:0.85,en:0.85,zh_poetry:0.9")
+UNIT_HMM_SURE_EN = float(os.getenv("UNIT_HMM_SURE_EN", "0.95") or 1)   # 英文句级标注模型 ≥ 此值的句子只按标注模型判断
+# 换作者的位置对齐到现代文 / 文言切换处：一段 AI 句子开头或结尾不超过这么多字、与相邻人写部分同一文体的几句改回人写（0 关闭）
+UNIT_HMM_REG_SNAP = int(os.getenv("UNIT_HMM_REG_SNAP", "150") or 0)
+UNIT_HMM_REG_SNAP_COH = float(os.getenv("UNIT_HMM_REG_SNAP_COH", "0.5") or 0)   # 且接缝处语意衔接度（nats / 词元）≥ 此值
 UNIT_HMM_SWITCH = float(os.getenv("UNIT_HMM_SWITCH", "0.5") or 0.5)
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
 UNIT_HMM_BETA_DOC = float(os.getenv("UNIT_HMM_BETA_DOC", "1.5"))
@@ -329,6 +334,8 @@ HYBRID_CL_SWITCH_COST = float(os.getenv("HYBRID_CL_SWITCH_COST", "2.0") or 2.0)
 HYBRID_CL_HUMAN_MEAN = float(os.getenv("HYBRID_CL_HUMAN_MEAN", "0.35") or 0.35)
 # 一整段没有换行、现代汉语 / 文言 / 诗词首尾相接时，在文体切换处断开（segmenter.split_register_switches）；2026-11-06 试验
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
+# 同一段里夹着完整的词 / 近体诗：整首单独成段，不从作品中间切开（见 segmenter.split_work_spans）
+SPLIT_WORKS = _bool("SPLIT_WORKS", True)
 # 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
 TAGGER_EN_MODEL = os.getenv("TAGGER_EN_MODEL", "")
 TAGGER_ZH_MODEL = os.getenv("TAGGER_ZH_MODEL", "")
