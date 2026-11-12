@@ -992,6 +992,12 @@ class Engine:
                         # 整篇判断 / 作品判断为 AI 的段落先验更强：逐句模型须有很强的证据才能把其中句子改判为人写
                         # （2026-11-11 回归：整篇判断为 AI 的文章被逐句判断大半改为人写，文档 AI 比例 1.0→0.22）
                         e += (config.UNIT_HMM_BETA_DOC if (b and x.index in doc_ai) else config.UNIT_HMM_BETA) * (2 * b - 1)
+                        # 英文句级标注模型非常肯定（≥ UNIT_HMM_SURE_EN）的句子：只看标注模型，不再被整段分类器 / 整段先验拉低
+                        # （2026-11-12 cs1111：真人文章中间插入的 AI 菜谱 542 字、天气说明 111 字，标注模型 0.94–0.96，
+                        # 但英文分类器只给 0.07–0.16，逐句判断仍判为人写）。依据（mx 混合文本 1027 个英文句子单元）：
+                        # 标注模型 ≥ 0.95 的真人句子 1/649，AI 句子 178/378。
+                        if x.register == "en" and p2 is not None and p2 >= config.UNIT_HMM_SURE_EN:
+                            e = max(e, lg(p2) - lg(th["en"]))
                     units.append((x, a, bnd, e, None if base is None else base + a))
             if len(units) < config.UNIT_HMM_MIN_UNITS:
                 continue
