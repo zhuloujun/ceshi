@@ -18,7 +18,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_famous_spans, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_work_spans, split_famous_spans, detect_register, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -912,6 +912,55 @@ class Engine:
             h["index"] = k
         return merged
 
+    @staticmethod
+    def _snap_reg(units, path, max_chars, gain=None, min_gain=0.0):
+        """换作者的位置对齐到文体切换处（2026-11-12 用户 cs1111）：现代文里接着一段 AI 写的浅文言时，
+        逐句判断常把切换点提前一两句（“黑洞不是空洞无物……”这类说明性句子三个模型都给高分）。
+        一段判为 AI 的句子，若开头（或结尾）几句和相邻人写部分同一文体、其余部分是另一文体，
+        且这几句不超过 max_chars 字、也不比另一文体部分长，就把这几句改回人写——作者切换和文体切换重合的可能远大于提前两句。
+        只往“人写”方向改，不会增加误判。gain 给出时还要求接缝处语意衔接度 ≥ min_gain（这几句确实接着人写部分的话头说下去）：
+        mx 基准上不加此条件时 AI 检出少了 197 字（AI 自己的现代文过渡句被改成人写）。"""
+        pair = {"zh", "zh_classical"}
+        n = len(units)
+        ln = [u[2] - u[1] for u in units]
+        reg = [u[0].register for u in units]
+        path = list(path)
+        k = 0
+        while k < n:
+            if not path[k]:
+                k += 1
+                continue
+            s = k
+            while k < n and path[k]:
+                k += 1
+            e = k
+            for side in ("L", "R"):
+                if side == "L":
+                    if s == 0 or path[s - 1] or reg[s - 1] not in pair:
+                        continue
+                    r0, j = reg[s - 1], s
+                    while j < e and reg[j] == r0:
+                        j += 1
+                    pre, rest = range(s, j), range(j, e)
+                else:
+                    if e >= n or path[e] or reg[e] not in pair:
+                        continue
+                    r0, j = reg[e], e
+                    while j > s and reg[j - 1] == r0:
+                        j -= 1
+                    pre, rest = range(j, e), range(s, j)
+                if not len(pre) or not len(rest) or not all(reg[i] in pair and reg[i] != r0 for i in rest):
+                    continue
+                cp, cr = sum(ln[i] for i in pre), sum(ln[i] for i in rest)
+                if gain is not None:
+                    g = gain(s if side == "L" else e)
+                    if g is None or g < min_gain:
+                        continue
+                if cp <= max_chars and cp <= cr:
+                    for i in pre:
+                        path[i] = 0
+        return path
+
     def _unit_hmm(self, segs, results, combos, smoothed, prof, memo, human_work, doc_ai, raw_text=""):
         """逐句作者判断：同一个原始自然段（切文体、切长段之前）的全部句子单元一起做两状态维特比解码；
         同一首词 / 诗（见 app/structure.py）里的句子绑在一起，只能整体判为人写或 AI。
@@ -952,7 +1001,8 @@ class Engine:
                 line_start = raw.rfind("\n", 0, lo) + 1
                 line_end = max(hi, raw.find("\n", lo) if raw.find("\n", lo) >= 0 else len(raw))
                 works = [(a + line_start, b + line_start, k) for a, b, k in structure.work_spans(raw[line_start:line_end])]
-            units = []   # (段, 段内起, 段内止, 证据, 原文起)
+            units = []   # (段, 段内起, 段内止, 证据, 原文起, 未经英文标注模型加强的证据)
+            n_boost = 0
             for x in xs:
                 sp = hybrid.sentence_units(x.text, x.register, 12, 8)
                 if not sp:
@@ -992,7 +1042,17 @@ class Engine:
                         # 整篇判断 / 作品判断为 AI 的段落先验更强：逐句模型须有很强的证据才能把其中句子改判为人写
                         # （2026-11-11 回归：整篇判断为 AI 的文章被逐句判断大半改为人写，文档 AI 比例 1.0→0.22）
                         e += (config.UNIT_HMM_BETA_DOC if (b and x.index in doc_ai) else config.UNIT_HMM_BETA) * (2 * b - 1)
-                    units.append((x, a, bnd, e, None if base is None else base + a))
+                        # 英文句级标注模型非常肯定（≥ UNIT_HMM_SURE_EN）的句子：只看标注模型，不再被整段分类器 / 整段先验拉低
+                        # （2026-11-12 cs1111：真人文章中间插入的 AI 菜谱 542 字、天气说明 111 字，标注模型 0.94–0.96，
+                        # 但英文分类器只给 0.07–0.16，逐句判断仍判为人写）。依据（mx 混合文本 1027 个英文句子单元）：
+                        # 标注模型 ≥ 0.95 的真人句子 1/649，AI 句子 178/378。
+                        boosted = (x.register == "en" and p2 is not None and p2 >= config.UNIT_HMM_SURE_EN
+                                   and lg(p2) - lg(th["en"]) > e)
+                        if boosted:
+                            n_boost += 1
+                            e0 = e
+                            e = lg(p2) - lg(th["en"])
+                    units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
             if len(units) < config.UNIT_HMM_MIN_UNITS:
                 continue
             # 同一首词 / 诗里的句子绑成一组（按原文位置判断）
@@ -1036,13 +1096,33 @@ class Engine:
             for g, st in zip(groups, gpath):
                 for k in g:
                     path[k] = st
+            if config.UNIT_HMM_REG_SNAP > 0:
+                gf = None
+                if config.UNIT_HMM_REG_SNAP_COH > 0 and raw and self.lm and self.lm.ready:
+                    gf = lambda k: (self._coh_gain(raw, units[k][4], units[k][4] + (units[k][2] - units[k][1]))
+                                    if units[k][4] is not None else None)
+                path = self._snap_reg(units, path, config.UNIT_HMM_REG_SNAP, gf, config.UNIT_HMM_REG_SNAP_COH)
             # 只在这一自然段里确实有“人写 + AI”两种成块的文字时才按逐句结果计入；整段都判为人写或都判为 AI 时，
             # 沿用整段 / 整篇的判断（2026-11-11 回归：整篇 AI 的书信、对联被逐句判断整段降为“人写”，AI 检出 969→935）
             ai_ch = sum(u[2] - u[1] for u, st in zip(units, path) if st)
             hu_ch = sum(u[2] - u[1] for u, st in zip(units, path) if not st)
             if min(ai_ch, hu_ch) < config.UNIT_HMM_MIN_MIX:
-                continue
-            for (x, a, bnd, e, _), st in zip(units, path):
+                # 英文标注模型加强后整段都成了 AI，而不加强时本是“人写 + AI”混合：仍按逐句结果（全部 AI）计入，
+                # 不退回整段判断（2026-11-12 XN 回归：AI 菜谱、书信因此从逐句计入退回“说明类文字更严门槛”，4+5 篇漏检）
+                mixed0 = False
+                if n_boost:
+                    gev0 = [sum(units[k][5] * (units[k][2] - units[k][1]) for k in g) /
+                            max(1, sum(units[k][2] - units[k][1] for k in g)) for g in groups]
+                    p0 = [0] * len(units)
+                    for g, st in zip(groups, hybrid.viterbi(gev0, sw_cost, 1.0)):
+                        for k in g:
+                            p0[k] = st
+                    a0 = sum(u[2] - u[1] for u, st in zip(units, p0) if st)
+                    h0 = sum(u[2] - u[1] for u, st in zip(units, p0) if not st)
+                    mixed0 = min(a0, h0) >= config.UNIT_HMM_MIN_MIX
+                if not (mixed0 and hu_ch < config.UNIT_HMM_MIN_MIX):
+                    continue
+            for (x, a, bnd, e, _, _), st in zip(units, path):
                 hmm_ai[x.index] = hmm_ai.get(x.index, 0) + (bnd - a if st else 0)
                 hmm_units.setdefault(x.index, []).append({"start": a, "chars": bnd - a, "text": x.text[a:bnd],
                                                           "prob": None, "second": None,
@@ -1109,8 +1189,9 @@ class Engine:
             text, n_scr = split_script_switches(text)
             if config.SPLIT_REGISTER:
                 text, n_fam = split_famous_spans(text)
+                text, n_wk = split_work_spans(text)
                 text, n_reg = split_register_switches(text)
-                n_reg += n_fam
+                n_reg += n_fam + n_wk
                 n_scr += n_reg
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 参考文献核查要联网查询，和模型打分同时进行（见 app/refcheck.py）
@@ -1309,6 +1390,8 @@ class Engine:
         if config.QUOTE_UNCITED_PROB < 1:
             # 没有任何引用痕迹的文言“引文”，文言模型又几乎肯定是 AI 写的 → 改为计入（2026-11-11 cs1111）。
             # 依据：现有测试集里被当作引文排除的文言段，真人 365 段中 ≥ 0.97 的只有 4 段，AI 354 段中有 82 段
+            # 2026-11-12 降到 0.93：X9 回归里仍被当作引文的文言段（≥40 字），真人 137 段 ≥0.93 的 0 段（≥0.90 的 2 段），
+            # AI 99 段 ≥0.93 的 43 段（≥0.97 的 14 段，多为有引用痕迹、不受此规则影响）
             fam_words0 = ("名篇", "逐字复现", "原句相同")
             for x in segs:
                 if (x.kind == "quotation" and getattr(x, "uncited", False) and x.index not in memo
