@@ -912,6 +912,50 @@ class Engine:
             h["index"] = k
         return merged
 
+    @staticmethod
+    def _snap_reg(units, path, max_chars):
+        """换作者的位置对齐到文体切换处（2026-11-12 用户 cs1111）：现代文里接着一段 AI 写的浅文言时，
+        逐句判断常把切换点提前一两句（“黑洞不是空洞无物……”这类说明性句子三个模型都给高分）。
+        一段判为 AI 的句子，若开头（或结尾）几句和相邻人写部分同一文体、其余部分是另一文体，
+        且这几句不超过 max_chars 字、也不比另一文体部分长，就把这几句改回人写——作者切换和文体切换重合的可能远大于提前两句。
+        只往“人写”方向改，不会增加误判。"""
+        pair = {"zh", "zh_classical"}
+        n = len(units)
+        ln = [u[2] - u[1] for u in units]
+        reg = [u[0].register for u in units]
+        path = list(path)
+        k = 0
+        while k < n:
+            if not path[k]:
+                k += 1
+                continue
+            s = k
+            while k < n and path[k]:
+                k += 1
+            e = k
+            for side in ("L", "R"):
+                if side == "L":
+                    if s == 0 or path[s - 1] or reg[s - 1] not in pair:
+                        continue
+                    r0, j = reg[s - 1], s
+                    while j < e and reg[j] == r0:
+                        j += 1
+                    pre, rest = range(s, j), range(j, e)
+                else:
+                    if e >= n or path[e] or reg[e] not in pair:
+                        continue
+                    r0, j = reg[e], e
+                    while j > s and reg[j - 1] == r0:
+                        j -= 1
+                    pre, rest = range(j, e), range(s, j)
+                if not len(pre) or not len(rest) or not all(reg[i] in pair and reg[i] != r0 for i in rest):
+                    continue
+                cp, cr = sum(ln[i] for i in pre), sum(ln[i] for i in rest)
+                if cp <= max_chars and cp <= cr:
+                    for i in pre:
+                        path[i] = 0
+        return path
+
     def _unit_hmm(self, segs, results, combos, smoothed, prof, memo, human_work, doc_ai, raw_text=""):
         """逐句作者判断：同一个原始自然段（切文体、切长段之前）的全部句子单元一起做两状态维特比解码；
         同一首词 / 诗（见 app/structure.py）里的句子绑在一起，只能整体判为人写或 AI。
@@ -1042,6 +1086,8 @@ class Engine:
             for g, st in zip(groups, gpath):
                 for k in g:
                     path[k] = st
+            if config.UNIT_HMM_REG_SNAP > 0:
+                path = self._snap_reg(units, path, config.UNIT_HMM_REG_SNAP)
             # 只在这一自然段里确实有“人写 + AI”两种成块的文字时才按逐句结果计入；整段都判为人写或都判为 AI 时，
             # 沿用整段 / 整篇的判断（2026-11-11 回归：整篇 AI 的书信、对联被逐句判断整段降为“人写”，AI 检出 969→935）
             ai_ch = sum(u[2] - u[1] for u, st in zip(units, path) if st)

@@ -309,6 +309,8 @@ UNIT_HMM_RESEGMENT = _bool("UNIT_HMM_RESEGMENT", True)
 UNIT_HMM_WORKS = _bool("UNIT_HMM_WORKS", True)   # 同一首词 / 诗的句子绑在一起判断（app/structure.py）   # 报告按逐句判断的作者重新分段显示
 UNIT_HMM_TH = os.getenv("UNIT_HMM_TH", "zh:0.8,zh_classical:0.85,en:0.85,zh_poetry:0.9")
 UNIT_HMM_SURE_EN = float(os.getenv("UNIT_HMM_SURE_EN", "0.95") or 1)   # 英文句级标注模型 ≥ 此值的句子只按标注模型判断
+# 换作者的位置对齐到现代文 / 文言切换处：一段 AI 句子开头或结尾不超过这么多字、与相邻人写部分同一文体的几句改回人写（0 关闭）
+UNIT_HMM_REG_SNAP = int(os.getenv("UNIT_HMM_REG_SNAP", "150") or 0)
 UNIT_HMM_SWITCH = float(os.getenv("UNIT_HMM_SWITCH", "0.5") or 0.5)
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
 UNIT_HMM_BETA_DOC = float(os.getenv("UNIT_HMM_BETA_DOC", "1.5"))
