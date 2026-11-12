@@ -913,12 +913,13 @@ class Engine:
         return merged
 
     @staticmethod
-    def _snap_reg(units, path, max_chars):
+    def _snap_reg(units, path, max_chars, gain=None, min_gain=0.0):
         """换作者的位置对齐到文体切换处（2026-11-12 用户 cs1111）：现代文里接着一段 AI 写的浅文言时，
         逐句判断常把切换点提前一两句（“黑洞不是空洞无物……”这类说明性句子三个模型都给高分）。
         一段判为 AI 的句子，若开头（或结尾）几句和相邻人写部分同一文体、其余部分是另一文体，
         且这几句不超过 max_chars 字、也不比另一文体部分长，就把这几句改回人写——作者切换和文体切换重合的可能远大于提前两句。
-        只往“人写”方向改，不会增加误判。"""
+        只往“人写”方向改，不会增加误判。gain 给出时还要求接缝处语意衔接度 ≥ min_gain（这几句确实接着人写部分的话头说下去）：
+        mx 基准上不加此条件时 AI 检出少了 197 字（AI 自己的现代文过渡句被改成人写）。"""
         pair = {"zh", "zh_classical"}
         n = len(units)
         ln = [u[2] - u[1] for u in units]
@@ -951,6 +952,10 @@ class Engine:
                 if not len(pre) or not len(rest) or not all(reg[i] in pair and reg[i] != r0 for i in rest):
                     continue
                 cp, cr = sum(ln[i] for i in pre), sum(ln[i] for i in rest)
+                if gain is not None:
+                    g = gain(s if side == "L" else e)
+                    if g is None or g < min_gain:
+                        continue
                 if cp <= max_chars and cp <= cr:
                     for i in pre:
                         path[i] = 0
@@ -1087,7 +1092,11 @@ class Engine:
                 for k in g:
                     path[k] = st
             if config.UNIT_HMM_REG_SNAP > 0:
-                path = self._snap_reg(units, path, config.UNIT_HMM_REG_SNAP)
+                gf = None
+                if config.UNIT_HMM_REG_SNAP_COH > 0 and raw and self.lm and self.lm.ready:
+                    gf = lambda k: (self._coh_gain(raw, units[k][4], units[k][4] + (units[k][2] - units[k][1]))
+                                    if units[k][4] is not None else None)
+                path = self._snap_reg(units, path, config.UNIT_HMM_REG_SNAP, gf, config.UNIT_HMM_REG_SNAP_COH)
             # 只在这一自然段里确实有“人写 + AI”两种成块的文字时才按逐句结果计入；整段都判为人写或都判为 AI 时，
             # 沿用整段 / 整篇的判断（2026-11-11 回归：整篇 AI 的书信、对联被逐句判断整段降为“人写”，AI 检出 969→935）
             ai_ch = sum(u[2] - u[1] for u, st in zip(units, path) if st)
