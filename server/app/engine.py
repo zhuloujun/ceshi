@@ -991,8 +991,11 @@ class Engine:
             return ("b", getattr(x, "orig_block", x.block))
         blocks: dict = {}
         for x in segs:
-            if x.register == "zh_poetry" and not (self.tag_zp and self.tag_zp.ready):
+            if x.register == "zh_poetry" and not (self.tag_zp and self.tag_zp.ready and
+                                                  (not config.TAGGER_ZP_COUPLET_ONLY or is_couplet_run(x.text))):
                 continue      # 诗词还没有句级模型：逐行打分不可靠（2026-11-11 回归：AI 诗被逐行拆成人写），仍按整段判断
+                # 诗词句级模型只管“几副对联首尾相接”；律诗、宋词、歌谣仍按整首判断（2026-11-13 cs1111：
+                # 句级模型一载入，AI 词 / 歌谣 3 首被逐句拆成人写，AI 检出 90.1% → 85.3%）
             if x.register in th and x.kind in ("body", "quotation"):
                 blocks.setdefault(para_of(x), []).append(x)
         hmm_ai, hmm_units, promote = {}, {}, set()
