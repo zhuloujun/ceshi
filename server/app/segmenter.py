@@ -294,6 +294,16 @@ def is_couplet_run(text: str) -> bool:
     sents = [x for x in re.split(r"(?<=[。！？!?])", t) if _CJK.search(x)]
     if len(sents) < 2:
         return False
+    # 绝句、律诗（4 或 8 个小句、句长都是 5 或 7、偶数句押同一韵）每句也像一副对联，不算对联串
+    # （2026-11-13 cs1111：AI 七律"年轻时节爱奔忙……"被当成对联串逐句判断，判成人写）
+    cls = [c for c in re.split(r"[，。！？；,!?;]", t) if _CJK.search(c)]
+    lens = {len(_CJK.findall(c)) for c in cls}
+    if len(cls) in (4, 8) and len(lens) == 1 and lens <= {5, 7}:
+        from .structure import _rhyme
+        rh = [_rhyme(_CJK.findall(c)[-1]) for c in cls[1::2]]
+        top = max((rh.count(r) for r in set(rh) if r), default=0)
+        if top >= len(rh) - 1:
+            return False
     cj = len(_CJK.findall(t)) or 1
     return sum(len(_CJK.findall(x)) for x in sents if is_couplet(x)) >= 0.7 * cj
 
