@@ -1034,6 +1034,8 @@ def _flag_quotations(segments):
                     s.kind, s.notes = "quotation", [f"文言段落（文言虚词 {classical_ratio(s.text):.0%}），有引用痕迹，疑为古籍引文"]
             elif s.register == "zh_poetry" and modern_doc and not s.title and not classical_collection:
                 s.kind, s.notes = "quotation", ["正文中引用的诗词（无标题）"]
+                if config.QUOTE_NEED_EVIDENCE and not _cited(s, prev_of.get(id(s))):
+                    s.uncited = True
 
 
 # 古籍语料（NiuTrans）排印时不用引号，而 AI 写的文言几乎都带引号：如果把引号送进模型，
