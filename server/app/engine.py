@@ -1001,7 +1001,8 @@ class Engine:
                 line_start = raw.rfind("\n", 0, lo) + 1
                 line_end = max(hi, raw.find("\n", lo) if raw.find("\n", lo) >= 0 else len(raw))
                 works = [(a + line_start, b + line_start, k) for a, b, k in structure.work_spans(raw[line_start:line_end])]
-            units = []   # (段, 段内起, 段内止, 证据, 原文起)
+            units = []   # (段, 段内起, 段内止, 证据, 原文起, 未经英文标注模型加强的证据)
+            n_boost = 0
             for x in xs:
                 sp = hybrid.sentence_units(x.text, x.register, 12, 8)
                 if not sp:
@@ -1045,9 +1046,13 @@ class Engine:
                         # （2026-11-12 cs1111：真人文章中间插入的 AI 菜谱 542 字、天气说明 111 字，标注模型 0.94–0.96，
                         # 但英文分类器只给 0.07–0.16，逐句判断仍判为人写）。依据（mx 混合文本 1027 个英文句子单元）：
                         # 标注模型 ≥ 0.95 的真人句子 1/649，AI 句子 178/378。
-                        if x.register == "en" and p2 is not None and p2 >= config.UNIT_HMM_SURE_EN:
-                            e = max(e, lg(p2) - lg(th["en"]))
-                    units.append((x, a, bnd, e, None if base is None else base + a))
+                        boosted = (x.register == "en" and p2 is not None and p2 >= config.UNIT_HMM_SURE_EN
+                                   and lg(p2) - lg(th["en"]) > e)
+                        if boosted:
+                            n_boost += 1
+                            e0 = e
+                            e = lg(p2) - lg(th["en"])
+                    units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
             if len(units) < config.UNIT_HMM_MIN_UNITS:
                 continue
             # 同一首词 / 诗里的句子绑成一组（按原文位置判断）
@@ -1102,8 +1107,22 @@ class Engine:
             ai_ch = sum(u[2] - u[1] for u, st in zip(units, path) if st)
             hu_ch = sum(u[2] - u[1] for u, st in zip(units, path) if not st)
             if min(ai_ch, hu_ch) < config.UNIT_HMM_MIN_MIX:
-                continue
-            for (x, a, bnd, e, _), st in zip(units, path):
+                # 英文标注模型加强后整段都成了 AI，而不加强时本是“人写 + AI”混合：仍按逐句结果（全部 AI）计入，
+                # 不退回整段判断（2026-11-12 XN 回归：AI 菜谱、书信因此从逐句计入退回“说明类文字更严门槛”，4+5 篇漏检）
+                mixed0 = False
+                if n_boost:
+                    gev0 = [sum(units[k][5] * (units[k][2] - units[k][1]) for k in g) /
+                            max(1, sum(units[k][2] - units[k][1] for k in g)) for g in groups]
+                    p0 = [0] * len(units)
+                    for g, st in zip(groups, hybrid.viterbi(gev0, sw_cost, 1.0)):
+                        for k in g:
+                            p0[k] = st
+                    a0 = sum(u[2] - u[1] for u, st in zip(units, p0) if st)
+                    h0 = sum(u[2] - u[1] for u, st in zip(units, p0) if not st)
+                    mixed0 = min(a0, h0) >= config.UNIT_HMM_MIN_MIX
+                if not (mixed0 and hu_ch < config.UNIT_HMM_MIN_MIX):
+                    continue
+            for (x, a, bnd, e, _, _), st in zip(units, path):
                 hmm_ai[x.index] = hmm_ai.get(x.index, 0) + (bnd - a if st else 0)
                 hmm_units.setdefault(x.index, []).append({"start": a, "chars": bnd - a, "text": x.text[a:bnd],
                                                           "prob": None, "second": None,
