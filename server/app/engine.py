@@ -758,7 +758,9 @@ class Engine:
         next_block = max((x.block for x in segs), default=0) + 1
         for s in segs:
             classical = s.register in ("zh_classical", "zh_poetry")
-            if s.kind != "body" or s.register not in ("zh", "en", "zh_classical", "zh_poetry"):
+            loose_quote = (config.HYBRID_SPLIT_UNCITED and classical and s.kind == "quotation"
+                           and getattr(s, "uncited", False))
+            if (s.kind != "body" and not loose_quote) or s.register not in ("zh", "en", "zh_classical", "zh_poetry"):
                 out.append(s)
                 continue
             head = s.title if (s.title and s.text.startswith(s.title)) else ""
@@ -809,12 +811,14 @@ class Engine:
                 lead = len(piece) - len(piece.lstrip())
                 if k == 0 and head:
                     piece, lead = head + piece, 0
-                sub = Segment(index=0, text=piece.strip(), start=s.start + len(head) * (k > 0) + a + lead, kind="body",
+                sub = Segment(index=0, text=piece.strip(), start=s.start + len(head) * (k > 0) + a + lead, kind=s.kind,
                               notes=list(s.notes) + [("人机混写切分：这几句与前后文明显不同，单独判断" if st else
                                                       "人机混写切分：与相邻的疑似 AI 部分分开判断")],
                               register=s.register, block=next_block, title=head if k == 0 else "")
                 sub.orig_block = s.block
                 sub.hybrid = {"state": st, "mean": mean}
+                if loose_quote:
+                    sub.uncited = True
                 next_block += 1
                 out.append(sub)
         for k, x in enumerate(out):
@@ -1394,12 +1398,13 @@ class Engine:
             # AI 99 段 ≥0.93 的 43 段（≥0.97 的 14 段，多为有引用痕迹、不受此规则影响）
             fam_words0 = ("名篇", "逐字复现", "原句相同")
             for x in segs:
-                if (x.kind == "quotation" and getattr(x, "uncited", False) and x.index not in memo
-                        and len(x.text) >= 40 and combos[x.index]["prob"] is not None
-                        and combos[x.index]["prob"] >= config.QUOTE_UNCITED_PROB
+                thr = config.QUOTE_UNCITED_PROB_PO if x.register == "zh_poetry" else config.QUOTE_UNCITED_PROB
+                if (thr > 0 and x.kind == "quotation" and getattr(x, "uncited", False) and x.index not in memo
+                        and len(x.text) >= config.QUOTE_UNCITED_MIN_CHARS and combos[x.index]["prob"] is not None
+                        and combos[x.index]["prob"] >= thr
                         and not any(w in n for n in x.notes for w in fam_words0)):
                     x.kind = "body"
-                    x.notes = list(x.notes) + ["没有引用痕迹，且文言模型判断几乎肯定是 AI 写的，改为计入"]
+                    x.notes = list(x.notes) + ["没有引用痕迹，且" + ("诗词" if x.register == "zh_poetry" else "文言") + "模型判断几乎肯定是 AI 写的，改为计入"]
             counted = [x for x in segs if x.counted]
         if config.QUOTE_POOL_MIN_SEGS > 0:
             fam_words = ("名篇", "逐字复现", "原句相同")
