@@ -224,6 +224,16 @@ QUOTE_POOL_MIN_SEGS = _int("QUOTE_POOL_MIN_SEGS", 2)
 # 现代文里的文言段落要有引用痕迹（引号、“曰 / 云”等引语、书名卷次）才按“古籍引文”不计入（2026-11-11 cs1111）
 QUOTE_NEED_EVIDENCE = _bool("QUOTE_NEED_EVIDENCE", True)
 QUOTE_UNCITED_PROB = float(os.getenv("QUOTE_UNCITED_PROB", "0.93") or 0.93)   # 无引用痕迹的文言引文，分数达到此值改为计入
+# 现代文里夹的无标题诗词：同样先看有没有引用痕迹（引号、“诗云 / 有诗曰”、出处），没有痕迹且诗词模型几乎肯定是 AI 的改为计入
+# （2026-11-13 cs1112：AI 七律、AI 宋词夹在现代文里，被当成“正文中引用的诗词”整段排除）。
+QUOTE_UNCITED_PROB_PO = float(os.getenv("QUOTE_UNCITED_PROB_PO", "0.93") or 0)
+QUOTE_UNCITED_MIN_CHARS = int(os.getenv("QUOTE_UNCITED_MIN_CHARS", "40") or 40)
+# 无引用痕迹的文言 / 诗词“引文”也做人机混写切分：名篇原文与 AI 仿作首尾相接时，整段当引文会把 AI 部分一起排除
+HYBRID_SPLIT_UNCITED = _bool("HYBRID_SPLIT_UNCITED", True)
+# 几副对联首尾相接按对联（诗词）处理（segmenter.is_couplet_run）
+COUPLET_RUN = _bool("COUPLET_RUN", True)
+# 分行的现代诗整首按一段判断（segmenter._free_verse_lines）
+FREE_VERSE_JOIN = _bool("FREE_VERSE_JOIN", True)
 # 同一段里文体切换：文言、诗词分开切；按约 REG_SPLIT_GROUP 个汉字一组判断文体（原为 36，切点偏差最多一组）
 REG_SPLIT_POETRY = _bool("REG_SPLIT_POETRY", True)
 REG_SPLIT_GROUP = _int("REG_SPLIT_GROUP", 24)
@@ -345,7 +355,9 @@ TAGGER_ZP_MODEL = os.getenv("TAGGER_ZP_MODEL", "")   # 诗词句级标注模型
 TAGGER_ZH_ID = os.getenv("TAGGER_ZH_ID", "chinese-tagger-v1")
 TAGGER_EN_ID = os.getenv("TAGGER_EN_ID", "english-tagger-v3")
 TAGGER_ZC_ID = os.getenv("TAGGER_ZC_ID", "classical-tagger-v2")
-TAGGER_ZP_ID = os.getenv("TAGGER_ZP_ID", "")
+TAGGER_ZP_ID = os.getenv("TAGGER_ZP_ID", "poetry-tagger-v3")
+# 诗词句级模型只用于“几副对联首尾相接”的段落（2026-11-13 mx：全面启用时对联切得准，但律诗、宋词切错，cs1111 AI 检出 90.1% → 85.3%）
+TAGGER_ZP_COUPLET_ONLY = _bool("TAGGER_ZP_COUPLET_ONLY", True)
 HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "1.0") or 1.0)   # 每换一次作者的代价（对数似然）
 HYBRID_TEMP = float(os.getenv("HYBRID_TEMP", "1.5") or 1.5)
 HYBRID_MIN_EN_WORDS = _int("HYBRID_MIN_EN_WORDS", 25)     # 切出来的一块至少这么长

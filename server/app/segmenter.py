@@ -284,6 +284,40 @@ def is_couplet(text: str) -> bool:
     return modern_ratio(t) <= 0.08
 
 
+def is_couplet_run(text: str, strict: bool = False) -> bool:
+    """几副对联首尾相接（"莫道人生尽是功名事，且看花开花落；须知天地原无富贵心，只教云卷云舒。金界庄严，……"）：
+    整段不是一副对联，is_couplet 认不出，以前按现代汉语判断（2026-11-13 cs1112：5 副对联全部按现代文打分、AI 对联 0% 检出）。
+    按句号切开，至少两句、且 70% 以上的字数各自是一副对联时，按诗词（对联）处理。"""
+    if not config.COUPLET_RUN:
+        return False
+    t = re.sub(r"\s+", "", text)
+    sents = [x for x in re.split(r"(?<=[。！？!?])", t) if _CJK.search(x)]
+    if len(sents) < 2:
+        return False
+    # 绝句、律诗（4 或 8 个小句、句长都是 5 或 7、偶数句押同一韵）每句也像一副对联，不算对联串
+    # （2026-11-13 cs1111：AI 七律"年轻时节爱奔忙……"被当成对联串逐句判断，判成人写）
+    cls = [c for c in re.split(r"[，。！？；,!?;]", t) if _CJK.search(c)]
+    lens = {len(_CJK.findall(c)) for c in cls}
+    if len(cls) in (4, 8) and len(lens) == 1 and lens <= {5, 7}:
+        from .structure import _rhyme
+        rh = [_rhyme(_CJK.findall(c)[-1]) for c in cls[1::2]]
+        top = max((rh.count(r) for r in set(rh) if r), default=0)
+        if top >= len(rh) - 1:
+            return False
+    # strict：给诗词句级模型（逐句拆开判断）用的更严格的认定。组诗、古体、乐府（8 个小句以上、85% 以上小句是 5 字或 7 字）、
+    # 骚体（带“兮”）、四言铭文 / 骈文（六成以上小句 4 字）虽然每句也像一副对联，实际是整首诗文，逐句拆开会把 AI 作品拆成人写
+    # （2026-11-13 回归 t1106b：AI 七绝组诗、五言乐府、七律组诗 6 篇逐句判断，从 1.0 掉到 0.1–0.4）。
+    # 不 strict 时仍按对联串定文体、用对联阈值（t1108n、tca 因此多检出 8 篇 AI 诗词，真人误判不变）。
+    if strict:
+        ls = [len(_CJK.findall(c)) for c in cls]
+        if "兮" in t or sum(1 for n in ls if n == 4) >= 0.6 * len(ls):
+            return False
+        if len(ls) >= 8 and sum(1 for n in ls if n in (5, 7)) >= 0.85 * len(ls):
+            return False
+    cj = len(_CJK.findall(t)) or 1
+    return sum(len(_CJK.findall(x)) for x in sents if is_couplet(x)) >= 0.7 * cj
+
+
 def is_ci(text: str) -> bool:
     """词、曲（长短句）：小句长短不一（1–9 字）、几乎不用文言虚词和白话标志词、句末押韵。
     is_poetry 要求句长整齐，只认得出约 85% 的宋词；加上这条后宋词约 96%，古文误认约 1%，现代文约 0.1%。"""
@@ -507,6 +541,8 @@ def detect_register(text: str) -> str:
     # 从 0.46% 升到 0.48%；AI 文言识别率 89% → 90%，gdwx 57% → 66%。
     if cjk >= 30 and mr <= 0.03 and len(_CLASSICAL_EXT.findall(_MODERN_COMPOUND.sub("", t))) / cjk >= 0.08:
         return "zh_classical"
+    if cjk >= 30 and is_couplet_run(t):
+        return "zh_poetry"
     return "zh"
 
 
@@ -565,6 +601,39 @@ def quotation_ratio(text: str) -> float:
     cjk = len(_CJK.findall(text)) or 1
     quoted = sum(len(m.group(0)) for m in _QUOTED.finditer(text))
     return min(1.0, quoted / cjk)
+
+
+def _free_verse_lines(lines):
+    """分行的现代诗（新诗）：多数诗行不带句末标点、短而不齐，以前每一行都像“无标点短标题”，一首诗被切成几十字的碎片、
+    各自当成新作品（2026-11-13 用户上传：ChatGPT《把清晨留给自己》、智谱《归人》整首 0% 检出）。
+    连续 ≥ 8 行（中间允许单个空行分节）、每行 ≤ 40 字、以汉字为主、六成以上不以句末标点结尾的一段，除第一行（可能是诗题）外
+    都标为诗行：不当标题、空行不断段，整首按一段判断。返回这些行号（含诗节之间的空行）。"""
+    out, run = set(), []
+
+    def close():
+        nz = [i for i in run if lines[i]]
+        if len(nz) >= 8:
+            bare = sum(1 for i in nz if not re.search(r"[。！？!?；;…]$", lines[i]))
+            if bare >= 0.6 * len(nz):
+                out.update(i for i in run if i > nz[0])
+    blank = 0
+    for i, l in enumerate(lines):
+        if not l:
+            blank += 1
+            if blank > 1:
+                close(); run = []
+            elif run:
+                run.append(i)
+            continue
+        blank = 0
+        cj = len(_CJK.findall(l))
+        if len(l) <= 40 and cj >= 2 and cj >= 0.6 * len(re.sub(r"\s", "", l)) and not _SECTION_NUM.match(l) \
+                and not re.fullmatch(r".{1,12}[：:].*", l):
+            run.append(i)
+        else:
+            close(); run = []
+    close()
+    return out
 
 
 GENRES = ("auto", "classical")
@@ -693,6 +762,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                                     detect_register(p) if len(pieces) > 1 else reg, block, title if i == 0 else ""))
             off += len(p)
 
+    verse = _free_verse_lines(lines_all) if config.FREE_VERSE_JOIN else set()
     line_no = -1
     in_table = False
     for line in text.splitlines(keepends=True):
@@ -738,7 +808,7 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                 flush("reference")
             continue
         if not stripped or _RULE_LINE.match(stripped) or is_drawing_line(stripped):
-            if buf.strip():
+            if buf.strip() and line_no not in verse:
                 pending_break = True
             continue
         # 表格：Turnitin 等平台只检测"连贯的正文"（qualifying prose），表格、列表不计入。表格行单独成段，标为 table
@@ -754,6 +824,8 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
             continue
         section = is_section_heading(stripped)
         title = stripped in paper_titles or (is_title(stripped) and not section)
+        if line_no in verse:
+            title = section = False
         item = list_mode and (is_list_item(stripped) or is_list_head(stripped))
         if labeled_mode:
             # 用户编号的作品集：只有带字母编号的行开始新作品；作品内部的小标题、"1. Preheat …"步骤都是正文
@@ -1034,6 +1106,8 @@ def _flag_quotations(segments):
                     s.kind, s.notes = "quotation", [f"文言段落（文言虚词 {classical_ratio(s.text):.0%}），有引用痕迹，疑为古籍引文"]
             elif s.register == "zh_poetry" and modern_doc and not s.title and not classical_collection:
                 s.kind, s.notes = "quotation", ["正文中引用的诗词（无标题）"]
+                if config.QUOTE_NEED_EVIDENCE and not _cited(s, prev_of.get(id(s))):
+                    s.uncited = True
 
 
 # 古籍语料（NiuTrans）排印时不用引号，而 AI 写的文言几乎都带引号：如果把引号送进模型，
