@@ -773,7 +773,7 @@ class Engine:
                 out.append(s)
                 continue
             tagger = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(s.register)
-            if s.register == "zh_poetry" and config.TAGGER_ZP_COUPLET_ONLY and not is_couplet_run(text):
+            if s.register == "zh_poetry" and config.TAGGER_ZP_COUPLET_ONLY and not is_couplet_run(text, strict=True):
                 tagger = None
             if classical and not (tagger and tagger.ready) and config.HYBRID_REQUIRE_TAGGER and not config.HYBRID_CLASSICAL:
                 out.append(s)
@@ -992,7 +992,7 @@ class Engine:
         blocks: dict = {}
         for x in segs:
             if x.register == "zh_poetry" and not (self.tag_zp and self.tag_zp.ready and
-                                                  (not config.TAGGER_ZP_COUPLET_ONLY or is_couplet_run(x.text))):
+                                                  (not config.TAGGER_ZP_COUPLET_ONLY or is_couplet_run(x.text, strict=True))):
                 continue      # 诗词还没有句级模型：逐行打分不可靠（2026-11-11 回归：AI 诗被逐行拆成人写），仍按整段判断
                 # 诗词句级模型只管“几副对联首尾相接”；律诗、宋词、歌谣仍按整首判断（2026-11-13 cs1111：
                 # 句级模型一载入，AI 词 / 歌谣 3 首被逐句拆成人写，AI 检出 90.1% → 85.3%）
