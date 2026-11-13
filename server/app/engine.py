@@ -757,15 +757,24 @@ class Engine:
         next_block = max((x.block for x in segs), default=0) + 1
         cjk = lambda t: len(re.findall(r"[\u4e00-\u9fff]", t))
         for s in segs:
-            if not (s.kind == "quotation" and getattr(s, "uncited", False)
-                    and s.register in ("zh_classical", "zh_poetry")):
+            quote = (s.kind == "quotation" and getattr(s, "uncited", False)
+                     and s.register in ("zh_classical", "zh_poetry"))
+            # 正文里的文言 / 诗词也逐句核对（2026-11-13 cs1113-2：苏轼《日喻》原文与 AI 仿写的家书接在一段里，
+            # 逐句判断时《日喻》中的一句被判成 AI）：与古籍原文逐句相同的部分按引文不计入，其余部分照常判断
+            body = (config.SOURCE_VERIFY_BODY and s.kind == "body" and s.register in ("zh_classical", "zh_poetry"))
+            if not (quote or body):
                 out.append(s)
                 continue
             head = s.title if (s.title and s.text.startswith(s.title)) else ""
             text = s.text[len(head):]
-            parts = source_parts(text)
-            # 至少一块找得到出处、一块足够长且找不到出处，才切开
-            if not parts or not any(ok for _, _, ok in parts) or \
+            parts = source_parts(text, strict=body)
+            if body:
+                # 正文：找得到出处的部分合计 ≥ SOURCE_VERIFY_MIN_CHARS 字才处理（零星一两句成语、典故不算）
+                if not parts or sum(cjk(text[a:b]) for a, b, ok in parts if ok) < config.SOURCE_VERIFY_MIN_CHARS:
+                    out.append(s)
+                    continue
+            # 引文：至少一块找得到出处、一块足够长且找不到出处，才切开
+            elif not parts or not any(ok for _, _, ok in parts) or \
                     not any(not ok and cjk(text[a:b]) >= config.QUOTE_VERIFY_MIN_CHARS for a, b, ok in parts):
                 out.append(s)
                 continue
@@ -783,7 +792,8 @@ class Engine:
                 lead = len(piece) - len(piece.lstrip())
                 if k == 0 and head:
                     piece, lead = head + piece, 0
-                sub = Segment(index=0, text=piece.strip(), start=s.start + len(head) * (k > 0) + a + lead, kind="quotation",
+                sub = Segment(index=0, text=piece.strip(), start=s.start + len(head) * (k > 0) + a + lead,
+                              kind="quotation" if (ok or quote) else "body",
                               notes=list(s.notes) + [("引文核对：与古籍原文逐句相同（原句相同），按引文不计入" if ok else
                                                       "引文核对：古籍句库里找不到这几句的出处，单独判断")],
                               register=detect_register(piece) if not ok else s.register,
@@ -791,8 +801,8 @@ class Engine:
                 if sub.register not in ("zh_classical", "zh_poetry", "zh"):
                     sub.register = s.register
                 sub.orig_block = s.block
-                sub.uncited = not ok
-                sub.unsourced = not ok
+                sub.uncited = (not ok) and quote
+                sub.unsourced = (not ok) and quote
                 next_block += 1
                 out.append(sub)
         for k, x in enumerate(out):
