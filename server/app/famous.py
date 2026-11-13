@@ -154,12 +154,17 @@ def _hits(frags: list[str]) -> list[bool]:
     return [bool(h) and 4 <= len(f) <= 12 for h, f in zip(out, frags)]
 
 
-def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2) -> list[tuple[int, int, bool]]:
+def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2, strict: bool = False) -> list[tuple[int, int, bool]]:
     """把一段文字按“能否在古籍句库里逐句找到出处”切成几块 [(起, 止, 有出处)]，起止都在句末标点之后。
     有出处：命中的小句（4–12 字）连成一片，中间最多隔 max_gap 个没命中的 4–12 字小句（不足 4 字的小句不计）；
     6 字以上的命中句记 1 分、4–5 字的记 0.5 分（“一言一动”“日出而作”这类成语 AI 也常用），合计 ≥ min_score，
     且命中句占片内 4–12 字小句的 60% 以上。
-    没有任何一块有出处时返回 []。"""
+    没有任何一块有出处时返回 []。
+    strict=True（正文里的文言 / 诗词，事先没有“这是引文”的迹象）：4–5 字的命中句（多是成语、套语）不计分，
+    中间最多隔 1 个没命中的小句，命中句占 75% 以上，且整块（扩到句末）的汉字里命中的占 70% 以上
+    （2026-11-13：AI 写的书信里“如闻其声，如见其人”“自以为工”几个成语命中，宽松规则把整句当成了古籍原文）。"""
+    if strict:
+        max_gap = min(max_gap, 1)
     cl = [(m.start(), m.end(), re.sub(r"[^一-鿿]", "", m.group())) for m in _CLAUSE.finditer(text)]
     cl = [c for c in cl if c[2]]
     hit = _hits([c[2] for c in cl])
@@ -167,7 +172,7 @@ def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2) -> list[tu
     combo = [(k, n) for n in (2, 3) for k in range(len(cl) - n + 1)
              if 4 <= sum(len(cl[k + x][2]) for x in range(n)) <= 12]
     for (k, n), h in zip(combo, _hits(["".join(cl[k + x][2] for x in range(n)) for k, n in combo])):
-        if h:
+        if h and (not strict or sum(len(cl[k + x][2]) for x in range(n)) >= 8):
             for x in range(n):
                 hit[k + x] = True
     runs, k = [], 0
@@ -175,7 +180,7 @@ def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2) -> list[tu
         if not hit[k]:
             k += 1
             continue
-        w = lambda x: 1.0 if len(cl[x][2]) >= 6 else 0.5
+        w = lambda x: 1.0 if len(cl[x][2]) >= 6 else (0.0 if strict else 0.5)
         a = b = k
         gap, j, sc = 0, k + 1, w(k)
         while j < len(cl):
@@ -188,13 +193,18 @@ def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2) -> list[tu
             j += 1
         elig = sum(4 <= len(cl[x][2]) <= 12 for x in range(a, b + 1))
         nh = sum(hit[x] for x in range(a, b + 1))
-        if sc >= min_score and nh >= 0.6 * elig:
+        if sc >= min_score and nh >= (0.75 if strict else 0.6) * elig:
             m = None
             for m in _SENT_END.finditer(text, 0, cl[a][0]):
                 pass
             st = m.end() if m else 0
             m2 = _SENT_END.search(text, cl[b][1])
             en = m2.end() if m2 else len(text)
+            if strict:
+                hc = sum(len(cl[x][2]) for x in range(a, b + 1) if hit[x])
+                if hc < 0.7 * len(re.findall(r"[一-鿿]", text[st:en])):
+                    k = b + 1
+                    continue
             if runs and st <= runs[-1][1]:
                 runs[-1] = (runs[-1][0], max(en, runs[-1][1]))
             else:
