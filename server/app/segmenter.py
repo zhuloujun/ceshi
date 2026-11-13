@@ -507,6 +507,22 @@ def is_poetry(text: str) -> bool:
     return sd <= 2.0 and len(_POETRY_FUNC.findall(t)) / cjk <= 0.05 and modern_ratio(t) <= 0.02
 
 
+def is_regular_verse(text: str) -> bool:
+    """绝句、律诗：4 或 8 个小句、句长都是 5 或 7、偶数句押同一韵（最多一句出韵）、几乎没有白话字。
+    is_poetry 要求白话字 ≤ 2%，七绝里一个“了”（“何事庄生齐物了”）就超了，按现代文判断（2026-11-13 cs1112）。"""
+    t = re.sub(r"\s+", "", text)
+    cls = [c for c in re.split(r"[，。！？；,!?;]", t) if _CJK.search(c)]
+    lens = {len(_CJK.findall(c)) for c in cls}
+    if len(cls) not in (4, 8) or len(lens) != 1 or not lens <= {5, 7}:
+        return False
+    if len(_CJK.findall(t)) < sum(lens) * len(cls) * 0.95 or modern_ratio(t) > 0.05:
+        return False
+    from .structure import _rhyme
+    rh = [_rhyme(_CJK.findall(c)[-1]) for c in cls[1::2]]
+    top = max((rh.count(r) for r in set(rh) if r), default=0)
+    return top >= len(rh) - 1
+
+
 def detect_register(text: str) -> str:
     """zh（现代汉语）/ zh_classical（文言）/ zh_poetry（诗词、对联）/ en（英文及其他拉丁字母语言）。"""
     raw = "\n".join(strip_list_mark(l) for l in text.splitlines())
@@ -521,6 +537,8 @@ def detect_register(text: str) -> str:
     if latin >= 8 and latin >= 2 * cjk:
         return "en"
     if cjk >= 12 and is_poetry(t):
+        return "zh_poetry"
+    if cjk >= 20 and is_regular_verse(t):
         return "zh_poetry"
     if is_couplet(t) or is_couplet(raw):
         return "zh_poetry"
@@ -1493,6 +1511,29 @@ def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, g
             else:
                 runs.append([reg, g])
         size = lambda r: len(_CJK.findall(r[1]))
+        if config.REG_SPLIT_POETRY:
+            # 文言、诗词各自不足 min_run 字但首尾相接时，先合成一块“古文”再比较长短（2026-11-13 cs1112：现代文里夹的 AI 浅近文言
+            # “天地之间……少人求宁静”37 字被认作文言、28 字被认作诗，各自太短都并回现代文，按现代文判断）
+            # 只合并“一串文言 / 诗词小块、每块都不足 min_run 字”的情况；其中有一块够长时（整篇都是文言、诗词）照旧
+            cl = ("zh_classical", "zh_poetry")
+            co, k = [], 0
+            while k < len(runs):
+                j = k
+                while j < len(runs) and runs[j][0] in cl:
+                    j += 1
+                grp = runs[k:j]
+                if len(grp) >= 2 and all(size(r) < min_run for r in grp):
+                    sc = sum(size(r) for r in grp if r[0] == "zh_classical")
+                    co.append(["zh_classical" if sc >= sum(size(r) for r in grp) - sc else "zh_poetry",
+                               "".join(r[1] for r in grp)])
+                    k = j
+                elif grp:
+                    co.extend(list(r) for r in grp)
+                    k = j
+                else:
+                    co.append(list(runs[k]))
+                    k += 1
+            runs = co
         merged = []
         for r in runs:
             if merged and (size(r) < min_run or merged[-1][0] == r[0]):
@@ -1521,6 +1562,35 @@ def _complete_work(t: str) -> bool:
 
 _VERSE_SENT = re.compile(r"\s*(?:[\u4e00-\u9fff]{4,7}[，,]){0,2}[\u4e00-\u9fff]{4,7}[。]")
 _SENT_END_CH = "。！？!?；;”」』\""
+
+
+def _RCML():
+    from .structure import RHYME_CUT_MIN_LINE
+    return RHYME_CUT_MIN_LINE
+
+
+def _uniform57(t: str) -> bool:
+    """全是 5 字句或全是 7 字句（近体诗，或玉楼春、生查子这类与诗句式相同的词牌）。"""
+    lens = {len(_CJK.findall(c)) for c in re.split(r"[，。！？；,!?;]", t) if _CJK.search(c)}
+    return len(lens) == 1 and lens <= {5, 7}
+
+
+def _rhyme_differs(t1: str, t2: str) -> bool:
+    """两首相邻的近体诗押的韵不同（偶数句句末韵母的多数不同）：是两首诗，不合并（见 structure._rhyme_cut）。"""
+    from .structure import _rhyme, RHYME_CUT, RHYME_CUT_MIN_LINE
+    if not RHYME_CUT or len(_CJK.findall(t1 + t2)) < 40:
+        return False
+
+    def top(t):
+        cls = [c for c in re.split(r"[，。！？；,!?;]", t) if _CJK.search(c)]
+        rh = [_rhyme(_CJK.findall(c)[-1]) for c in cls[1::2]]
+        rh = [r for r in rh if r]
+        if len(rh) < 2:
+            return None
+        r = max(set(rh), key=rh.count)
+        return r if rh.count(r) >= len(rh) - 1 else None
+    a, b = top(t1), top(t2)
+    return bool(a and b and a != b)
 
 
 def split_work_spans(text: str, min_line: int = 80, min_work: int = 20, min_rest: int = 8):
@@ -1557,7 +1627,9 @@ def split_work_spans(text: str, min_line: int = 80, min_work: int = 20, min_rest
             raw_sp.append((a, b, kind))
         sp = []
         for k, (a, b, kind) in enumerate(raw_sp):
-            if sp and sp[-1][2] == kind and not line[sp[-1][1]:a].strip():
+            if sp and (sp[-1][2] == kind or _uniform57(line[sp[-1][0]:sp[-1][1]]) and _uniform57(line[a:b])) \
+                    and not line[sp[-1][1]:a].strip() and \
+                    not (cjk(line) >= _RCML() and _rhyme_differs(line[sp[-1][0]:sp[-1][1]], line[a:b])):
                 sp[-1] = (sp[-1][0], b, kind)
             else:
                 sp.append((a, b, kind))

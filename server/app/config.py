@@ -227,6 +227,11 @@ QUOTE_UNCITED_PROB = float(os.getenv("QUOTE_UNCITED_PROB", "0.93") or 0.93)   # 
 # 现代文里夹的无标题诗词：同样先看有没有引用痕迹（引号、“诗云 / 有诗曰”、出处），没有痕迹且诗词模型几乎肯定是 AI 的改为计入
 # （2026-11-13 cs1112：AI 七律、AI 宋词夹在现代文里，被当成“正文中引用的诗词”整段排除）。
 QUOTE_UNCITED_PROB_PO = float(os.getenv("QUOTE_UNCITED_PROB_PO", "0.93") or 0)
+# 引文核对（engine._verify_quotes / famous.source_parts）：没有引用痕迹的古文 / 诗词“引文”逐句到古籍句库里找出处，
+# 找不到出处的部分（≥ QUOTE_VERIFY_MIN_CHARS 字）单独打分，分数 ≥ QUOTE_VERIFY_PROB 时计入
+QUOTE_VERIFY = _bool("QUOTE_VERIFY", True)
+QUOTE_VERIFY_MIN_CHARS = _int("QUOTE_VERIFY_MIN_CHARS", 30)
+QUOTE_VERIFY_PROB = float(os.getenv("QUOTE_VERIFY_PROB", "0.9") or 0.9)
 QUOTE_UNCITED_MIN_CHARS = int(os.getenv("QUOTE_UNCITED_MIN_CHARS", "40") or 40)
 # 无引用痕迹的文言 / 诗词“引文”也做人机混写切分：名篇原文与 AI 仿作首尾相接时，整段当引文会把 AI 部分一起排除
 HYBRID_SPLIT_UNCITED = _bool("HYBRID_SPLIT_UNCITED", True)
