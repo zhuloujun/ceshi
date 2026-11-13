@@ -1475,6 +1475,63 @@ def _refine_reg_cuts(merged, min_run):
             merged[i][1], merged[i + 1][1] = new_a, new_b
 
 
+def _modern(t: str) -> bool:
+    """邻近的文字是现代白话（不是骈文、赋、奏疏）：白话标志词至少 3 个，且按文体判为现代汉语。"""
+    return len(re.findall(r"[的了着们这那呢吗吧]", t)) >= 3 and detect_register(t) == "zh"
+
+
+def _loose_couplets(sents: list) -> bool:
+    """几句“上联；下联。”是各自独立的对联，而不是一首诗 / 一篇骈赋的连续句子：小句字数不全相同、句末不押同一个韵。"""
+    from .structure import _rhyme
+    cls = [len(_CJK.findall(c)) for x in sents for c in re.split(r"[，；。！？,;!?]", x) if _CJK.search(c)]
+    if len(set(cls)) <= 1:
+        return False
+    ends = [_rhyme((_CJK.findall(x) or [""])[-1]) for x in sents]
+    top = max((ends.count(r) for r in set(ends) if r), default=0)
+    return not (len(ends) >= 3 and top >= len(ends) - 1) and not (len(ends) == 2 and top == 2)
+
+
+def split_couplet_runs(text: str, min_run: int = 40, min_rest: int = 40):
+    """一段（没有换行）里夹着几副首尾相接的对联（“上联；下联。”）时，把这串对联单独断成一段（2026-11-13 cs1113：
+    散曲、4 副真人 / AI 交替的对联、评论文字、AI 家训首尾相接 800 字，按约 24 字一组判断文体时每组都跨了对联边界，
+    整段被当成现代文，落在“接近阈值、未计入”）。断出来的对联串按诗词（对联串）判断，诗词句级模型逐副判断。
+    只认用分号分上下联、至少两副相连、合计 ≥ min_run 字的；绝句律诗（逗号分句）不受影响。
+    前后两句里有文言散文的不断（2026-11-14 cs1111：AI 文言论说文里“松生山巅，不与桃李争艳；泉出石隙……”两句骈偶
+    被当成对联串断出，前一句文言并进了前面的现代文，句级模型把真人现代文误标 48 字）。返回 (文本, 断开的处数)。"""
+    if not config.COUPLET_SPLIT:
+        return text, 0
+    lines = (text or "").split("\n")
+    n = 0
+    for li, line in enumerate(lines):
+        if len(_CJK.findall(line)) < min_run + min_rest:
+            continue
+        sents = [x for x in re.split(r"(?<=[。！？!?])", line) if x]
+        flags = [("；" in x or ";" in x) and is_couplet(x) for x in sents]
+        out, k, cut = [], 0, False
+        while k < len(sents):
+            if not flags[k]:
+                out.append(sents[k]); k += 1
+                continue
+            j = k
+            while j < len(sents) and flags[j]:
+                j += 1
+            run = "".join(sents[k:j])
+            if j - k >= 2 and len(_CJK.findall(run)) >= min_run and _loose_couplets(sents[k:j]) and \
+                    "兮" not in run and (_modern("".join(sents[max(0, k - 3):k])) or _modern("".join(sents[j:j + 3]))) and \
+                    not any(detect_register(x) == "zh_classical" for x in sents[max(0, k - 2):k] + sents[j:j + 2]):
+                out.append("\n\n" + run.strip() + "\n\n"); cut = True; n += 1
+            else:
+                out.append(run)
+            k = j
+        if cut:
+            rest = len(_CJK.findall(line)) - sum(len(_CJK.findall(x)) for x in out if x.startswith("\n\n"))
+            if rest >= min_rest:
+                lines[li] = re.sub(r"\n{3,}", "\n\n", "".join(out)).strip("\n")
+            else:
+                n -= 1
+    return "\n".join(lines), n
+
+
 def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, group: int | None = None):
     """同一段（没有换行）里现代汉语、文言、诗词成块交替时，在文体切换处断开（2026-11-06 cs1106：整篇 1.1 万字
     只有一个段落，文言、宋词、元曲、对联和现代散文首尾相接，切成 400 字的窗口后，文言和现代文混在一起，按“现代汉语”
