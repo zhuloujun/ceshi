@@ -232,7 +232,8 @@ QUOTE_UNCITED_PROB_PO = float(os.getenv("QUOTE_UNCITED_PROB_PO", "0.93") or 0)
 QUOTE_VERIFY = _bool("QUOTE_VERIFY", True)
 QUOTE_VERIFY_MIN_CHARS = _int("QUOTE_VERIFY_MIN_CHARS", 30)
 QUOTE_VERIFY_PROB = float(os.getenv("QUOTE_VERIFY_PROB", "0.9") or 0.9)
-COUPLET_SPLIT = _bool("COUPLET_SPLIT", False)  # 2026-11-14：对联串里真人 / AI 交替时整串一起判，真人名联被标成 AI，先关闭               # 段中首尾相接的几副对联（分号分上下联）单独成段
+COUPLET_SPLIT = _bool("COUPLET_SPLIT", False)  # 段中首尾相接的几副对联（分号分上下联）单独成段
+# 2026-11-14 默认关闭：cs1113 里真人 / AI 对联交替出现，整串一起判，真人名联被一起标成 AI
 SOURCE_VERIFY_BODY = _bool("SOURCE_VERIFY_BODY", True)        # 正文里的文言 / 诗词也到古籍句库逐句核对出处
 SOURCE_VERIFY_MIN_CHARS = _int("SOURCE_VERIFY_MIN_CHARS", 20)
 QUOTE_UNCITED_MIN_CHARS = int(os.getenv("QUOTE_UNCITED_MIN_CHARS", "40") or 40)
