@@ -23,10 +23,18 @@ def size_of(text: str, register: str) -> int:
     return len(text.split()) if register == "en" else len(_CJK.findall(text))
 
 
+QUOTE_UNITS = True
+
+
 def sentence_units(text: str, register: str, min_zh: int = 20, min_en: int = 12) -> list[tuple[int, int]]:
     """切成首尾相接、覆盖全文的句子单元 [(起, 止)]。"""
     pat = _EN_SENT if register == "en" else _ZH_SENT
     cuts = sorted({m.start() for m in pat.finditer(text) if 0 < m.start() < len(text)})
+    if QUOTE_UNITS:
+        # 引号里的一段对话 / 引语是同一个人写的，不从中间切开（2026-11-13 cs1112：真人小说里一句 4 个句子的对白，
+        # 后半句被并进前面的 AI 产品介绍，判成 AI）。太长的引文（> 600 字符）照常按句切。
+        qs = [(m.start(), m.end()) for m in re.finditer(r"“[^“”]{1,600}”|「[^「」]{1,600}」", text)]
+        cuts = [c for c in cuts if not any(a < c < b - 1 for a, b in qs)]
     bounds = [0] + cuts + [len(text)]
     spans = [(a, b) for a, b in zip(bounds, bounds[1:]) if text[a:b].strip()]
     need = min_en if register == "en" else min_zh

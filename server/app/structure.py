@@ -122,6 +122,27 @@ def _rhymed_runs(text: str, cl: list, lens: list, taken: set) -> list:
     return out
 
 
+def _rhyme_cut(text: str, cl: list, i: int, j: int) -> int:
+    """同为 5 / 7 字句的一串小句里，前一首（≥ 4 句）押一个韵、紧接着的 4 句换成另一个韵且前韵不再出现时，是两首诗首尾相接，
+    在换韵处断开（2026-11-13 cs1112：真人七绝“富嫌千口犹伶仃……”押 eng 韵，后接 AI 七言“潮头忽卷千层雪……”押 ang 韵，
+    被认成一首、整段当引文排除）。返回这首诗的终点（不含）。"""
+    if not RHYME_CUT or j - i < 8 or len(_CJK.findall(text)) < RHYME_CUT_MIN_LINE:
+        return j      # 只在很长、不换行的大段里断（几篇不相干的作品首尾相接）；分行的古体诗换韵是常事，不断
+    last = lambda k: (lambda cj: _rhyme(cj[-1]) if cj else None)(_CJK.findall(text[cl[k][0]:cl[k][1]]))
+    for c in range(i + 4, j - 3, 4):
+        prev = [last(k) for k in range(i + 1, c, 2)]
+        nxt = [last(k) for k in (c + 1, c + 3)]
+        r1 = max(set(prev), key=prev.count) if prev else None
+        if (r1 and prev.count(r1) >= max(2, len(prev) - 1) and nxt[0] and nxt[0] == nxt[1]
+                and nxt[0] != r1):
+            return c
+    return j
+
+
+RHYME_CUT = True
+RHYME_CUT_MIN_LINE = 300
+
+
 def work_spans(text: str) -> list[tuple[int, int, str]]:
     cl = clauses(text)
     lens = [c[2] for c in cl]
@@ -132,12 +153,20 @@ def work_spans(text: str) -> list[tuple[int, int, str]]:
         for p, name in pats:
             k = len(p)
             if tuple(lens[i:i + k]) == p:
+                # 全是 5 / 7 字句的词牌（玉楼春、生查子……）与近体诗句式相同，同样在换韵处断开（见 _rhyme_cut）
+                if len(set(p)) == 1 and p[0] in (5, 7):
+                    j = i
+                    while j < len(cl) and lens[j] == lens[i]:
+                        j += 1
+                    if _rhyme_cut(text, cl, i, j) < i + k:
+                        continue
                 hit = (k, f"词·{name}")
                 break
         if hit is None and lens[i] in (5, 7):
             j = i
             while j < len(cl) and lens[j] == lens[i]:
                 j += 1
+            j = _rhyme_cut(text, cl, i, j)
             run = j - i
             if run >= 4:
                 size = 8 if run % 8 == 0 or (run >= 8 and run % 4 != 0) else 4

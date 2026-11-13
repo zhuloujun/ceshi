@@ -112,3 +112,102 @@ def famous_spans(line: str, min_hits: int = 2, max_gap: int = 1) -> list[tuple[i
                 spans.append((st, en))
         k = b + 1
     return spans
+
+
+# —— 引文核对（2026-11-13）——
+# 用户 cs1112：AI 仿写的文言（“夫学之难，不难于读……”“书中所记，非王侯将相之事……”）夹在真古籍引文（《金刚经》、《汉书》、
+# 孔庙碑文）中间，整段被当成“正文中引用的古文”不计入。知网、Turnitin 的做法是把引文与来源库比对：能逐句找到出处的是引文，
+# 找不到出处的另行检测。这里另建一个更大的古籍句库（app/data/classics_ext.u16d.xz，约 2083 万个句子哈希，只存哈希）：
+# 二十四史、《资治通鉴》《续资治通鉴》、十三经与四书、宋明理学语录（《传习录》《朱子语类》《近思录》等）、诸子、兵家、法家、
+# 《全唐文》《全上古三代秦汉三国六朝文》《文选》《唐宋八大家文钞》等总集、唐宋明清名家别集与笔记、常用佛经（《金刚经》
+# 《心经》《法华经》《坛经》《楞严经》《华严经》等）与道经（《道德经》《南华真经》等）、NiuTrans 古文原文全集。
+# 来源：殆知阁古籍文献（garychowcmu/daizhigev20）、NiuTrans/Classical-Modern。生成脚本 tools/build_classics_ext.py。
+# 单句哈希偶有碰撞（一句约 0.5%），所以要求至少 2 句命中、中间最多隔 2 句没命中的，才算“找到出处”。
+_EXT_PATH = Path(__file__).resolve().parent / "data" / "classics_ext.u16d.xz"
+_HX = None
+
+
+def _load_ext():
+    global _HX
+    with _lock:
+        if _HX is None:
+            import numpy as np
+            try:
+                d = np.frombuffer(lzma.decompress(_EXT_PATH.read_bytes()), dtype="<u2")
+                _HX = np.cumsum(d.astype(np.uint64)).astype(np.uint32)
+            except Exception:  # noqa: BLE001
+                _HX = np.zeros(0, dtype=np.uint32)
+    return _HX
+
+
+def _hits(frags: list[str]) -> list[bool]:
+    import numpy as np
+    if not frags:
+        return []
+    hs = np.array([zlib.crc32(f.encode("utf-8")) for f in frags], dtype=np.uint32)
+    out = np.zeros(len(frags), dtype=bool)
+    for H in (_load(), _load_ext()):
+        if len(H):
+            i = np.searchsorted(H, hs)
+            i[i >= len(H)] = 0
+            out |= H[i] == hs
+    return [bool(h) and 4 <= len(f) <= 12 for h, f in zip(out, frags)]
+
+
+def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2) -> list[tuple[int, int, bool]]:
+    """把一段文字按“能否在古籍句库里逐句找到出处”切成几块 [(起, 止, 有出处)]，起止都在句末标点之后。
+    有出处：命中的小句（4–12 字）连成一片，中间最多隔 max_gap 个没命中的 4–12 字小句（不足 4 字的小句不计）；
+    6 字以上的命中句记 1 分、4–5 字的记 0.5 分（“一言一动”“日出而作”这类成语 AI 也常用），合计 ≥ min_score，
+    且命中句占片内 4–12 字小句的 60% 以上。
+    没有任何一块有出处时返回 []。"""
+    cl = [(m.start(), m.end(), re.sub(r"[^一-鿿]", "", m.group())) for m in _CLAUSE.finditer(text)]
+    cl = [c for c in cl if c[2]]
+    hit = _hits([c[2] for c in cl])
+    # 引用时断句常与底本不同（底本“教人为学不可执一偏”，引文“教人为学，不可执一偏”）：相邻 2–3 个小句连起来再查一次
+    combo = [(k, n) for n in (2, 3) for k in range(len(cl) - n + 1)
+             if 4 <= sum(len(cl[k + x][2]) for x in range(n)) <= 12]
+    for (k, n), h in zip(combo, _hits(["".join(cl[k + x][2] for x in range(n)) for k, n in combo])):
+        if h:
+            for x in range(n):
+                hit[k + x] = True
+    runs, k = [], 0
+    while k < len(cl):
+        if not hit[k]:
+            k += 1
+            continue
+        w = lambda x: 1.0 if len(cl[x][2]) >= 6 else 0.5
+        a = b = k
+        gap, j, sc = 0, k + 1, w(k)
+        while j < len(cl):
+            if hit[j]:
+                b, gap, sc = j, 0, sc + w(j)
+            elif 4 <= len(cl[j][2]) <= 12:
+                gap += 1
+                if gap > max_gap:
+                    break
+            j += 1
+        elig = sum(4 <= len(cl[x][2]) <= 12 for x in range(a, b + 1))
+        nh = sum(hit[x] for x in range(a, b + 1))
+        if sc >= min_score and nh >= 0.6 * elig:
+            m = None
+            for m in _SENT_END.finditer(text, 0, cl[a][0]):
+                pass
+            st = m.end() if m else 0
+            m2 = _SENT_END.search(text, cl[b][1])
+            en = m2.end() if m2 else len(text)
+            if runs and st <= runs[-1][1]:
+                runs[-1] = (runs[-1][0], max(en, runs[-1][1]))
+            else:
+                runs.append((st, en))
+        k = b + 1
+    if not runs:
+        return []
+    parts, pos = [], 0
+    for a, b in runs:
+        if a > pos:
+            parts.append((pos, a, False))
+        parts.append((max(a, pos), b, True))
+        pos = max(pos, b)
+    if pos < len(text):
+        parts.append((pos, len(text), False))
+    return [p for p in parts if text[p[0]:p[1]].strip()]

@@ -747,6 +747,58 @@ class Engine:
         return [None if x is None and y is None else (x if y is None else y if x is None else (x + y) / 2)
                 for x, y in zip(a, b)]
 
+    def _verify_quotes(self, segs):
+        """引文核对：被当成“正文中引用的古文 / 诗词”（没有引用痕迹）的段落，逐句到古籍句库（famous.source_parts）里找出处。
+        找得到出处的部分仍按引文不计入；夹在中间、找不到出处的部分（≥ QUOTE_VERIFY_MIN_CHARS 字）单独成段另行打分，
+        模型判断几乎肯定是 AI 时计入（2026-11-13 cs1112：AI 仿写“夫学之难……”夹在《金刚经》和孔庙碑文之间，
+        “书中所记……”接在《汉书》引文前，整段当引文排除）。返回 (新段落列表, 切开的段数)。"""
+        from .famous import source_parts
+        out, n_split = [], 0
+        next_block = max((x.block for x in segs), default=0) + 1
+        cjk = lambda t: len(re.findall(r"[\u4e00-\u9fff]", t))
+        for s in segs:
+            if not (s.kind == "quotation" and getattr(s, "uncited", False)
+                    and s.register in ("zh_classical", "zh_poetry")):
+                out.append(s)
+                continue
+            head = s.title if (s.title and s.text.startswith(s.title)) else ""
+            text = s.text[len(head):]
+            parts = source_parts(text)
+            # 至少一块找得到出处、一块足够长且找不到出处，才切开
+            if not parts or not any(ok for _, _, ok in parts) or \
+                    not any(not ok and cjk(text[a:b]) >= config.QUOTE_VERIFY_MIN_CHARS for a, b, ok in parts):
+                out.append(s)
+                continue
+            # 太短的“找不到出处”部分（改了几个字的引文、过渡语）并入相邻的有出处部分
+            merged = []
+            for a, b, ok in parts:
+                ok = ok or cjk(text[a:b]) < config.QUOTE_VERIFY_MIN_CHARS
+                if merged and merged[-1][2] == ok:
+                    merged[-1] = (merged[-1][0], b, ok)
+                else:
+                    merged.append((a, b, ok))
+            n_split += 1
+            for k, (a, b, ok) in enumerate(merged):
+                piece = text[a:b]
+                lead = len(piece) - len(piece.lstrip())
+                if k == 0 and head:
+                    piece, lead = head + piece, 0
+                sub = Segment(index=0, text=piece.strip(), start=s.start + len(head) * (k > 0) + a + lead, kind="quotation",
+                              notes=list(s.notes) + [("引文核对：与古籍原文逐句相同（原句相同），按引文不计入" if ok else
+                                                      "引文核对：古籍句库里找不到这几句的出处，单独判断")],
+                              register=detect_register(piece) if not ok else s.register,
+                              block=next_block, title=head if k == 0 else "")
+                if sub.register not in ("zh_classical", "zh_poetry", "zh"):
+                    sub.register = s.register
+                sub.orig_block = s.block
+                sub.uncited = not ok
+                sub.unsourced = not ok
+                next_block += 1
+                out.append(sub)
+        for k, x in enumerate(out):
+            x.index = k
+        return out, n_split
+
     def _hybrid_split(self, segs):
         """同一段里人写、AI 写的句子交替时，在作者换了的地方切开（见 app/hybrid.py）。返回 (新段落列表, 切开的段数)。"""
         from . import hybrid
@@ -1241,8 +1293,12 @@ class Engine:
                 s.kind = "reference_only"
                 s.notes = list(s.notes) + [f"篇幅过短（不足 {config.EN_MIN_WORDS_WORK} 词），检测结果不可靠，仅供参考、不计入 AI 率"]
         n_hybrid = 0
+        if config.QUOTE_VERIFY:
+            segs, n_qv = self._verify_quotes(segs)
+            n_hybrid += n_qv
         if config.HYBRID_SPLIT:
-            segs, n_hybrid = self._hybrid_split(segs)
+            segs, n_hy = self._hybrid_split(segs)
+            n_hybrid += n_hy
         counted = [s for s in segs if s.counted]
         # 不计入的引文段落也打分，作为"参考值"显示（不影响 AI 率）；参考文献条目没有检测意义，不打分
         ref_scored = [s for s in segs if s.kind in ("quotation", "reference_only")]
@@ -1404,12 +1460,14 @@ class Engine:
             fam_words0 = ("名篇", "逐字复现", "原句相同")
             for x in segs:
                 thr = config.QUOTE_UNCITED_PROB_PO if x.register == "zh_poetry" else config.QUOTE_UNCITED_PROB
+                if getattr(x, "unsourced", False):
+                    thr = config.QUOTE_VERIFY_PROB
                 if (thr > 0 and x.kind == "quotation" and getattr(x, "uncited", False) and x.index not in memo
                         and len(x.text) >= config.QUOTE_UNCITED_MIN_CHARS and combos[x.index]["prob"] is not None
                         and combos[x.index]["prob"] >= thr
                         and not any(w in n for n in x.notes for w in fam_words0)):
                     x.kind = "body"
-                    x.notes = list(x.notes) + ["没有引用痕迹，且" + ("诗词" if x.register == "zh_poetry" else "文言") + "模型判断几乎肯定是 AI 写的，改为计入"]
+                    x.notes = list(x.notes) + [("古籍里找不到出处" if getattr(x, "unsourced", False) else "没有引用痕迹") + "，且" + {"zh_poetry": "诗词", "zh": "现代文"}.get(x.register, "文言") + "模型判断几乎肯定是 AI 写的，改为计入"]
             counted = [x for x in segs if x.counted]
         if config.QUOTE_POOL_MIN_SEGS > 0:
             fam_words = ("名篇", "逐字复现", "原句相同")
