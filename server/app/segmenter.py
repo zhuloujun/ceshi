@@ -1495,7 +1495,9 @@ def split_couplet_runs(text: str, min_run: int = 40, min_rest: int = 40):
     """一段（没有换行）里夹着几副首尾相接的对联（“上联；下联。”）时，把这串对联单独断成一段（2026-11-13 cs1113：
     散曲、4 副真人 / AI 交替的对联、评论文字、AI 家训首尾相接 800 字，按约 24 字一组判断文体时每组都跨了对联边界，
     整段被当成现代文，落在“接近阈值、未计入”）。断出来的对联串按诗词（对联串）判断，诗词句级模型逐副判断。
-    只认用分号分上下联、至少两副相连、合计 ≥ min_run 字的；绝句律诗（逗号分句）不受影响。返回 (文本, 断开的处数)。"""
+    只认用分号分上下联、至少两副相连、合计 ≥ min_run 字的；绝句律诗（逗号分句）不受影响。
+    前后两句里有文言散文的不断（2026-11-14 cs1111：AI 文言论说文里“松生山巅，不与桃李争艳；泉出石隙……”两句骈偶
+    被当成对联串断出，前一句文言并进了前面的现代文，句级模型把真人现代文误标 48 字）。返回 (文本, 断开的处数)。"""
     if not config.COUPLET_SPLIT:
         return text, 0
     lines = (text or "").split("\n")
@@ -1515,7 +1517,8 @@ def split_couplet_runs(text: str, min_run: int = 40, min_rest: int = 40):
                 j += 1
             run = "".join(sents[k:j])
             if j - k >= 2 and len(_CJK.findall(run)) >= min_run and _loose_couplets(sents[k:j]) and \
-                    "兮" not in run and (_modern("".join(sents[max(0, k - 3):k])) or _modern("".join(sents[j:j + 3]))):
+                    "兮" not in run and (_modern("".join(sents[max(0, k - 3):k])) or _modern("".join(sents[j:j + 3]))) and \
+                    not any(detect_register(x) == "zh_classical" for x in sents[max(0, k - 2):k] + sents[j:j + 2]):
                 out.append("\n\n" + run.strip() + "\n\n"); cut = True; n += 1
             else:
                 out.append(run)

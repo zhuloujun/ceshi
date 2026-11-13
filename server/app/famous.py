@@ -160,7 +160,8 @@ def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2, strict: bo
     6 字以上的命中句记 1 分、4–5 字的记 0.5 分（“一言一动”“日出而作”这类成语 AI 也常用），合计 ≥ min_score，
     且命中句占片内 4–12 字小句的 60% 以上。
     没有任何一块有出处时返回 []。
-    strict=True（正文里的文言 / 诗词，事先没有“这是引文”的迹象）：4–5 字的命中句（多是成语、套语）不计分，
+    strict=True（正文里的文言 / 诗词，事先没有“这是引文”的迹象）：4 字的命中句（多是成语、套语）不计分（5 字的仍记 0.5 分，
+    五言诗句；2026-11-14 cs1113 王维“漾楫溯清川……”四句五言原诗因此找不到出处），
     中间最多隔 1 个没命中的小句，命中句占 75% 以上，且整块（扩到句末）的汉字里命中的占 70% 以上
     （2026-11-13：AI 写的书信里“如闻其声，如见其人”“自以为工”几个成语命中，宽松规则把整句当成了古籍原文）。"""
     if strict:
@@ -180,7 +181,7 @@ def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2, strict: bo
         if not hit[k]:
             k += 1
             continue
-        w = lambda x: 1.0 if len(cl[x][2]) >= 6 else (0.0 if strict else 0.5)
+        w = lambda x: 1.0 if len(cl[x][2]) >= 6 else (0.5 if len(cl[x][2]) == 5 or not strict else 0.0)
         a = b = k
         gap, j, sc = 0, k + 1, w(k)
         while j < len(cl):
