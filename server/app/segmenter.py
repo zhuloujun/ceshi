@@ -284,7 +284,7 @@ def is_couplet(text: str) -> bool:
     return modern_ratio(t) <= 0.08
 
 
-def is_couplet_run(text: str) -> bool:
+def is_couplet_run(text: str, strict: bool = False) -> bool:
     """几副对联首尾相接（"莫道人生尽是功名事，且看花开花落；须知天地原无富贵心，只教云卷云舒。金界庄严，……"）：
     整段不是一副对联，is_couplet 认不出，以前按现代汉语判断（2026-11-13 cs1112：5 副对联全部按现代文打分、AI 对联 0% 检出）。
     按句号切开，至少两句、且 70% 以上的字数各自是一副对联时，按诗词（对联）处理。"""
@@ -303,6 +303,16 @@ def is_couplet_run(text: str) -> bool:
         rh = [_rhyme(_CJK.findall(c)[-1]) for c in cls[1::2]]
         top = max((rh.count(r) for r in set(rh) if r), default=0)
         if top >= len(rh) - 1:
+            return False
+    # strict：给诗词句级模型（逐句拆开判断）用的更严格的认定。组诗、古体、乐府（8 个小句以上、85% 以上小句是 5 字或 7 字）、
+    # 骚体（带“兮”）、四言铭文 / 骈文（六成以上小句 4 字）虽然每句也像一副对联，实际是整首诗文，逐句拆开会把 AI 作品拆成人写
+    # （2026-11-13 回归 t1106b：AI 七绝组诗、五言乐府、七律组诗 6 篇逐句判断，从 1.0 掉到 0.1–0.4）。
+    # 不 strict 时仍按对联串定文体、用对联阈值（t1108n、tca 因此多检出 8 篇 AI 诗词，真人误判不变）。
+    if strict:
+        ls = [len(_CJK.findall(c)) for c in cls]
+        if "兮" in t or sum(1 for n in ls if n == 4) >= 0.6 * len(ls):
+            return False
+        if len(ls) >= 8 and sum(1 for n in ls if n in (5, 7)) >= 0.85 * len(ls):
             return False
     cj = len(_CJK.findall(t)) or 1
     return sum(len(_CJK.findall(x)) for x in sents if is_couplet(x)) >= 0.7 * cj
