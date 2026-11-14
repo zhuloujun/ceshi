@@ -167,6 +167,26 @@ def auroc(pos, neg):
     return (rank_sum - n1 * (n1 + 1) / 2) / (n1 * n0)
 
 
+def extra_couplets(path):
+    import hashlib
+    out = {"train": [], "test": []}
+    if not path:
+        return [], []
+    for line in Path(path).read_text("utf-8").splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        if r.get("r") != "cp":
+            continue
+        part = "test" if int(hashlib.md5(r["t"].encode("utf-8")).hexdigest(), 16) % 5 == 0 else "train"
+        out[part].append({"text": r["t"], "y": 0, "model": "名家-楹联书-" + r.get("d", "?")[:6], "kind": "couplet"})
+    rnd = random.Random(14)
+    for v in out.values():
+        rnd.shuffle(v)
+    print(f"楹联书真人对联：训练 {len(out['train'])}，评估 {len(out['test'])}", flush=True)
+    return out["train"], out["test"]
+
+
 def load_user_docs(path, register):
     """用户提供的已标注文档（chalw2、gw 这类"单数 AI、双数真人"的测试文档里，与评估文档不重复的段落）：
     {text, y, register, doc}。只在训练时通过私有 Kaggle 脚本传入，不进公开仓库。"""
@@ -206,6 +226,7 @@ def main():
     ap.add_argument("--user-docs-reps", type=int, default=6, help="用户文档段落在训练集里重复几次")
     ap.add_argument("--tagger", action="store_true", help="改为训练句级“作者标注”模型（人机混写定位，见 tools/tagger_train.py）")
     ap.add_argument("--tagger-steps", type=int, default=6000)
+    ap.add_argument("--n-cp-extra", type=int, default=12000, help="楹联书真人对联最多取多少副参与训练")
     ap.add_argument("--tagger-unit", default="", help="couplet = 以整联（句号断开）为单位拼接真人 / AI 混写样本")
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--grad-ckpt", action="store_true")
@@ -249,6 +270,11 @@ def main():
     lit_train, lit_test = human_cl_poetry(random.Random(9))
     lit_train = lit_train[: args.n_literary]
     lit_test = lit_test[:800]
+    # 2026-11-14 新增：用户上传的楹联书（中华对联大典、实用对联全鉴、民俗实用对联、客家对联大典、名城胜地 / 山水佳迹 / 祠庙陵墓对联、
+    # 春联对联大观、秋雨楹联等）整理出的约 2.9 万副真人对联，随用户文档加密传入（{t, y: 0, r: "cp", d: 书名}），每 5 副留 1 副评估
+    cpx_train, cpx_test = extra_couplets(args.user_docs)
+    lit_train += cpx_train[: args.n_cp_extra]
+    lit_test += cpx_test[:1000]
     base = train_h + classic_train + train_a + user_train + gen_train + cp_train + lit_train
     rnd.shuffle(base)
     dev = base[: min(max(200, len(base) // 20), len(base) // 5)]
