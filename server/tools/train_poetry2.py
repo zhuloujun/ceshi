@@ -228,6 +228,7 @@ def main():
     ap.add_argument("--tagger-steps", type=int, default=6000)
     ap.add_argument("--n-cp-extra", type=int, default=12000, help="楹联书真人对联最多取多少副参与训练")
     ap.add_argument("--tagger-unit", default="", help="couplet = 以整联（句号断开）为单位拼接真人 / AI 混写样本")
+    ap.add_argument("--pack-ensemble", action="store_true", help="与 --eval-model release:A+B 合用：把合议包发布出来")
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--grad-ckpt", action="store_true")
     args = ap.parse_args()
@@ -472,6 +473,13 @@ def main():
         # 只留评估结果，好让打包步骤照常发布（不含模型权重）
         Path(args.out).mkdir(parents=True, exist_ok=True)
         (Path(args.out) / "training_result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), "utf-8")
+        if members and args.pack_ensemble:
+            # 把合议包（各成员 + ensemble.json）原样打进发布包，供线上 / 离线验收使用
+            import shutil
+            for n in json.loads((Path(args.eval_model) / "ensemble.json").read_text("utf-8"))["members"]:
+                shutil.copytree(Path(args.eval_model) / n, Path(args.out) / n.replace("/", "_"), dirs_exist_ok=True)
+            (Path(args.out) / "ensemble.json").write_text(json.dumps({"members": [n.replace("/", "_") for n in json.loads(
+                (Path(args.eval_model) / "ensemble.json").read_text("utf-8"))["members"]]}), "utf-8")
         return
 
     out = Path(args.out)
