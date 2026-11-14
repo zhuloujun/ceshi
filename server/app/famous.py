@@ -140,17 +140,33 @@ def _load_ext():
     return _HX
 
 
+_T2S = None
+
+
+def _simp(f: str) -> str:
+    """繁简混排（“一簾春欲暮，茶烟细颺落花风”）逐字转成简体再查：句库里只存了整句简体和整句繁体两种写法。"""
+    global _T2S
+    if _T2S is None:
+        try:
+            k, v = (Path(__file__).resolve().parent / "data" / "t2s_chars.txt").read_text("utf-8").split("\n")[:2]
+            _T2S = str.maketrans(k, v)
+        except Exception:  # noqa: BLE001
+            _T2S = {}
+    return f.translate(_T2S)
+
+
 def _hits(frags: list[str]) -> list[bool]:
     import numpy as np
     if not frags:
         return []
-    hs = np.array([zlib.crc32(f.encode("utf-8")) for f in frags], dtype=np.uint32)
     out = np.zeros(len(frags), dtype=bool)
-    for H in (_load(), _load_ext()):
-        if len(H):
-            i = np.searchsorted(H, hs)
-            i[i >= len(H)] = 0
-            out |= H[i] == hs
+    for form in (frags, [_simp(f) for f in frags]):
+        hs = np.array([zlib.crc32(f.encode("utf-8")) for f in form], dtype=np.uint32)
+        for H in (_load(), _load_ext()):
+            if len(H):
+                i = np.searchsorted(H, hs)
+                i[i >= len(H)] = 0
+                out |= H[i] == hs
     return [bool(h) and 4 <= len(f) <= 12 for h, f in zip(out, frags)]
 
 
@@ -182,6 +198,10 @@ def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2, strict: bo
             k += 1
             continue
         w = lambda x: 1.0 if len(cl[x][2]) >= 6 else (0.5 if len(cl[x][2]) == 5 or not strict else 0.0)
+        if strict and w(k) == 0:
+            # 不从不计分的 4 字命中句（“归去来兮”）起头：否则扩到句首时把前面整句 AI 文字也算进来，名联反而达不到 70%
+            k += 1
+            continue
         a = b = k
         gap, j, sc = 0, k + 1, w(k)
         while j < len(cl):
@@ -202,7 +222,7 @@ def source_parts(text: str, min_score: float = 2.0, max_gap: int = 2, strict: bo
             m2 = _SENT_END.search(text, cl[b][1])
             en = m2.end() if m2 else len(text)
             if strict:
-                hc = sum(len(cl[x][2]) for x in range(a, b + 1) if hit[x])
+                hc = sum(len(c[2]) for c, h in zip(cl, hit) if h and st <= c[0] and c[1] <= en)
                 if hc < 0.7 * len(re.findall(r"[一-鿿]", text[st:en])):
                     k = b + 1
                     continue
