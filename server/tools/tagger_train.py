@@ -22,11 +22,15 @@ from pathlib import Path
 
 _EN = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"“‘(])|(?<=[.!?][\"”’)])\s+(?=[A-Z])")
 _ZH = re.compile(r"(?<=[。！？!?；;])(?![”’」』\"'）)])|(?<=[。！？!?；;][”’」』\"'）)])")
+# 以“联”为单位（2026-11-14 用户：对联与律诗颔联、颈联性质相同）：只在句号 / 问号 / 叹号处断，上下联（分号、逗号隔开）不拆开，
+# 真人联与 AI 联按整联交错拼接，模型学的是“这一联是谁写的”
+_ZH_LIAN = re.compile(r"(?<=[。！？!?])(?![”’」』\"'）)])|(?<=[。！？!?][”’」』\"'）)])")
+UNIT = {"v": ""}
 
 
 def split_sents(text: str, lang: str) -> list[str]:
     text = re.sub(r"\s+", " ", text).strip() if lang == "en" else re.sub(r"\s+", "", text)
-    pat = _EN if lang == "en" else _ZH
+    pat = _EN if lang == "en" else (_ZH_LIAN if UNIT["v"] == "couplet" else _ZH)
     out = [s.strip() for s in pat.split(text) if s and s.strip()]
     if lang == "en":
         return [s for s in out if len(s.split()) >= 4]
@@ -67,8 +71,9 @@ def make_doc(rnd, pool, lang, budget):
     else:
         y = rnd.randint(0, 1)
         plan = []
-        for _ in range(12):
-            plan.append((y, rnd.randint(1, 4)))
+        hi = 2 if UNIT["v"] == "couplet" else 4   # 按联拼接时多用 1–2 联一换（cs1113：真人 / AI 对联逐副交替）
+        for _ in range(16):
+            plan.append((y, rnd.randint(1, hi)))
             y = 1 - y
     text, spans, used = "", [], 0
     for y, k in plan:
@@ -93,6 +98,7 @@ def train_tagger(rows, args, lang, out_dir):
     t0 = time.time()
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     rnd = random.Random(1105)
+    UNIT["v"] = getattr(args, "tagger_unit", "") or ""
     pools = build_pools(rows, lang)
     for sp in ("train", "test"):
         print(f"句子池 {sp}：人写 {len(pools[sp][0])} 篇，AI {len(pools[sp][1])} 篇", flush=True)

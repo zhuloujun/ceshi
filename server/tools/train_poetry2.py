@@ -206,6 +206,7 @@ def main():
     ap.add_argument("--user-docs-reps", type=int, default=6, help="用户文档段落在训练集里重复几次")
     ap.add_argument("--tagger", action="store_true", help="改为训练句级“作者标注”模型（人机混写定位，见 tools/tagger_train.py）")
     ap.add_argument("--tagger-steps", type=int, default=6000)
+    ap.add_argument("--tagger-unit", default="", help="couplet = 以整联（句号断开）为单位拼接真人 / AI 混写样本")
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--grad-ckpt", action="store_true")
     args = ap.parse_args()
