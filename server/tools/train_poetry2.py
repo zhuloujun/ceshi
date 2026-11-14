@@ -460,6 +460,9 @@ def main():
     print(json.dumps(res, ensure_ascii=False, indent=1), flush=True)
     print("::notice title=诗词分类器评估（没见过的作者、名篇与模型）::" + json.dumps(res, ensure_ascii=False), flush=True)
     if args.eval_model:
+        # 只留评估结果，好让打包步骤照常发布（不含模型权重）
+        Path(args.out).mkdir(parents=True, exist_ok=True)
+        (Path(args.out) / "training_result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), "utf-8")
         return
 
     out = Path(args.out)
