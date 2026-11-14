@@ -313,6 +313,16 @@ def main():
           f"国产新模型 {len(ut)}×{reps}），开发 {len(dev)}；评估：ChangAn {len(test_h)} 人写 / {len(test_a)} AI，"
           f"唐宋三百首 {len(classic_eval)}，国产新模型 {len(user_test)}，故事诗 {len(story)}", flush=True)
 
+    if args.eval_model.startswith("release:"):
+        # 直接取已发布的模型（如 release:poetry-classifier-v26），与本次训练用完全相同的评估集对比
+        import tarfile as _tf, urllib.request as _ur
+        _u = f"https://github.com/zhuloujun/ceshi/releases/download/{args.eval_model[8:]}/poetry-classifier.tar.gz"
+        Path("/tmp/evm").mkdir(exist_ok=True)
+        _ur.urlretrieve(_u, "/tmp/evm/m.tar.gz")
+        with _tf.open("/tmp/evm/m.tar.gz") as _t: _t.extractall("/tmp/evm")
+        args.eval_model = str(next(Path("/tmp/evm").rglob("config.json")).parent) if not list(Path("/tmp/evm").rglob("ensemble.json")) \
+            else str(next(Path("/tmp/evm").rglob("ensemble.json")).parent)
+        print("评估已发布模型", _u, "->", args.eval_model, flush=True)
     members = []
     if args.eval_model and (Path(args.eval_model) / "ensemble.json").exists():
         # 多版本合议包：各版本分别打分，取对数几率的平均（与线上 app/detectors/classifier.py 相同）
