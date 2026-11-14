@@ -314,15 +314,24 @@ def main():
           f"唐宋三百首 {len(classic_eval)}，国产新模型 {len(user_test)}，故事诗 {len(story)}", flush=True)
 
     if args.eval_model.startswith("release:"):
-        # 直接取已发布的模型（如 release:poetry-classifier-v26），与本次训练用完全相同的评估集对比
+        # 直接取已发布的模型（如 release:poetry-classifier-v26），与本次训练用完全相同的评估集对比；
+        # 多个用 + 连接（release:poetry-classifier-v26+poetry-classifier-v32）= 合议包，取对数几率平均
         import tarfile as _tf, urllib.request as _ur
-        _u = f"https://github.com/zhuloujun/ceshi/releases/download/{args.eval_model[8:]}/poetry-classifier.tar.gz"
-        Path("/tmp/evm").mkdir(exist_ok=True)
-        _ur.urlretrieve(_u, "/tmp/evm/m.tar.gz")
-        with _tf.open("/tmp/evm/m.tar.gz") as _t: _t.extractall("/tmp/evm")
-        args.eval_model = str(next(Path("/tmp/evm").rglob("config.json")).parent) if not list(Path("/tmp/evm").rglob("ensemble.json")) \
-            else str(next(Path("/tmp/evm").rglob("ensemble.json")).parent)
-        print("评估已发布模型", _u, "->", args.eval_model, flush=True)
+        tags = args.eval_model[8:].split("+")
+        for tg in tags:
+            d = Path("/tmp/evm") / tg
+            d.mkdir(parents=True, exist_ok=True)
+            _u = f"https://github.com/zhuloujun/ceshi/releases/download/{tg}/poetry-classifier.tar.gz"
+            _ur.urlretrieve(_u, str(d / "m.tar.gz"))
+            with _tf.open(str(d / "m.tar.gz")) as _t: _t.extractall(str(d))
+            (d / "m.tar.gz").unlink()
+            print("评估已发布模型", _u, flush=True)
+        if len(tags) == 1:
+            args.eval_model = str(next((Path("/tmp/evm") / tags[0]).rglob("config.json")).parent)
+        else:
+            mem = [str(next((Path("/tmp/evm") / tg).rglob("config.json")).parent.relative_to("/tmp/evm")) for tg in tags]
+            Path("/tmp/evm/ensemble.json").write_text(json.dumps({"members": mem}), "utf-8")
+            args.eval_model = "/tmp/evm"
     members = []
     if args.eval_model and (Path(args.eval_model) / "ensemble.json").exists():
         # 多版本合议包：各版本分别打分，取对数几率的平均（与线上 app/detectors/classifier.py 相同）
