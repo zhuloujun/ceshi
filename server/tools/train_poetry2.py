@@ -328,7 +328,8 @@ def main():
             (d / "m.tar.gz").unlink()
             print("评估已发布模型", _u, flush=True)
         if len(tags) == 1:
-            args.eval_model = str(next((Path("/tmp/evm") / tags[0]).rglob("config.json")).parent)
+            _e = list((Path("/tmp/evm") / tags[0]).rglob("ensemble.json"))
+            args.eval_model = str(_e[0].parent if _e else next((Path("/tmp/evm") / tags[0]).rglob("config.json")).parent)
         else:
             mem = [str(next((Path("/tmp/evm") / tg).rglob("config.json")).parent.relative_to("/tmp/evm")) for tg in tags]
             Path("/tmp/evm/ensemble.json").write_text(json.dumps({"members": mem}), "utf-8")
@@ -444,6 +445,13 @@ def main():
         by.setdefault(r["model"], []).append(p)
     thr = sorted(ph)[int(len(ph) * 0.95)]          # ChangAn 人写误判约 5% 的参考阈值
     rate = lambda v: round(sum(x >= thr for x in v) / len(v), 3) if v else None
+    def _sweep(t):
+        r_ = lambda v: round(sum(x >= t for x in v) / len(v), 3) if v else None
+        return {"thr": round(t, 4), "changan_human_flagged": r_(ph), "tang_song_300_flagged": r_(pc), "changan_ai_caught": r_(pa),
+                "gen_cl_caught": r_(pg), "ai_couplets_caught": r_(pcp_ai), "human_couplets_flagged": r_(pcp),
+                "literary_flagged": r_(plit), "user_models_caught": r_(pu)}
+    sweep = {f"changan_fp_{round((1 - q) * 100)}": _sweep(sorted(ph)[int(len(ph) * q)]) for q in (0.90, 0.93, 0.95, 0.97, 0.99)}
+    sweep.update({f"tang_song_fp_{round((1 - q) * 100)}": _sweep(sorted(pc)[int(len(pc) * q)]) for q in (0.95, 0.96, 0.97, 0.98)})
     res = {"dev_auroc": round(best, 4), "test_auroc": round(auroc(pa, ph), 4),
            "test_auroc_by_model": {m: round(auroc(v, ph), 4) for m, v in by.items()},
            "changan_ai_vs_tang_song_300_auroc": round(auroc(pa, pc), 4),
@@ -455,7 +463,7 @@ def main():
            "couplet_ai_vs_human_couplet_auroc": round(auroc(pcp_ai, pcp), 4) if pcp and pcp_ai else None,
            "gen_cl_vs_literary_auroc": round(auroc(pg, plit), 4) if pg and plit else None,
            "ai_couplets_vs_literary_couplets_auroc": round(auroc(pcp_ai, [p_ for p_, r in zip(plit, lit_test) if r["kind"] == "couplet"]), 4) if pcp_ai and plit else None,
-           "n_couplet_test": [len(pcp_ai), len(pcp)],
+           "n_couplet_test": [len(pcp_ai), len(pcp)], "sweep": sweep,
            "reference_threshold": round(thr, 4),
            "at_threshold": {"changan_ai_caught": rate(pa), "user_models_caught": rate(pu), "story_caught": rate(ps),
                             "tang_song_300_flagged": rate(pc), "gen_cl_caught": rate(pg),
