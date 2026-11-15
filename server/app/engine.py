@@ -773,6 +773,15 @@ class Engine:
                 if not parts or sum(cjk(text[a:b]) for a, b, ok in parts if ok) < config.SOURCE_VERIFY_MIN_CHARS:
                     out.append(s)
                     continue
+            # 诗词“引文”整段在古籍句库（含 85 万首历代诗词）里都找不到出处、又没有引用痕迹：多半不是引用的古诗，按正文检测
+            # （2026-11-15 cs1115：AI 七律、AI 绝句夹在真人名句之间，整段当“正文中引用的诗词”不计入）
+            elif (quote and config.QUOTE_PO_UNSOURCED_BODY and s.register == "zh_poetry"
+                  and not any(ok for _, _, ok in parts) and cjk(text) >= config.QUOTE_PO_MIN_CHARS):
+                s.kind = "body"
+                s.uncited = False
+                s.notes = list(s.notes) + ["引文核对：古籍句库（含历代诗词约 85 万首）里找不到出处，也没有引用痕迹，按正文检测"]
+                out.append(s)
+                continue
             # 引文：至少一块找得到出处、一块足够长且找不到出处，才切开
             elif not parts or not any(ok for _, _, ok in parts) or \
                     not any(not ok and cjk(text[a:b]) >= config.QUOTE_VERIFY_MIN_CHARS for a, b, ok in parts):
@@ -792,8 +801,10 @@ class Engine:
                 lead = len(piece) - len(piece.lstrip())
                 if k == 0 and head:
                     piece, lead = head + piece, 0
+                po_body = (quote and not ok and config.QUOTE_PO_UNSOURCED_BODY and s.register == "zh_poetry"
+                           and cjk(piece) >= config.QUOTE_PO_MIN_CHARS)
                 sub = Segment(index=0, text=piece.strip(), start=s.start + len(head) * (k > 0) + a + lead,
-                              kind="quotation" if (ok or quote) else "body",
+                              kind="quotation" if (ok or quote) and not po_body else "body",
                               notes=list(s.notes) + [("引文核对：与古籍原文逐句相同（原句相同），按引文不计入" if ok else
                                                       "引文核对：古籍句库里找不到这几句的出处，单独判断")],
                               register=detect_register(piece) if not ok else s.register,
@@ -801,8 +812,8 @@ class Engine:
                 if sub.register not in ("zh_classical", "zh_poetry", "zh"):
                     sub.register = s.register
                 sub.orig_block = s.block
-                sub.uncited = (not ok) and quote
-                sub.unsourced = (not ok) and quote
+                sub.uncited = (not ok) and quote and not po_body
+                sub.unsourced = (not ok) and quote and not po_body
                 next_block += 1
                 out.append(sub)
         for k, x in enumerate(out):
