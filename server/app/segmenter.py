@@ -943,6 +943,11 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                   and _complete_work(buf)):
                 # 空行隔开的两首完整作品（各自是一首完整的词 / 诗）是两篇作品，不并成一段（2026-11-12 cs1111）
                 flush()
+            elif (config.WORK_FLUSH_EITHER and pending_break and len(_CJK.findall(stripped)) >= 16
+                  and len(_CJK.findall(buf)) >= 16 and _work_boundary(buf, stripped)):
+                # 一边是一首完整的诗 / 词、另一边是别的文字（另一首不完整的词、对联、现代文）时也不合并
+                # （2026-11-15 cs1115：真人《贺新郎》末尾、真人七律、两首 AI 词被并成 298 字一段、按现代文判断）
+                flush()
             elif (pending_break or section) and len(buf) >= flush_chars(reg):
                 # 章节标题相当于一次段落分隔：窗口够长就另起一段，否则与下一节合并（仍属同一篇作品）
                 flush()
@@ -1632,6 +1637,32 @@ def _uniform57(t: str) -> bool:
     return len(lens) == 1 and lens <= {5, 7}
 
 
+def _sourced(t: str) -> bool:
+    """一半以上的汉字能在古籍句库（诗词、古文）里逐句找到出处。"""
+    from .famous import source_parts
+    n = len(_CJK.findall(t))
+    if n < 16:
+        return False
+    return sum(len(_CJK.findall(t[a:b])) for a, b, ok in source_parts(t) if ok) >= 0.5 * n
+
+
+def _work_boundary(buf: str, new: str) -> bool:
+    """空行两边是不是两篇不同的作品（不该并成一段）：一边能在古籍里找到出处、另一边找不到（真人名篇与 AI 仿作相邻）；
+    或一边是完整的诗 / 词，而两边不都是同一首词被切开的片段（都是诗词、都不是 5 / 7 字整齐句式、出处情况相同）。"""
+    sb, sn = _sourced(buf), _sourced(new)
+    if sb != sn:
+        return True
+    if not (_complete_work(new) or _complete_work(buf)):
+        return False
+    both_ci = (detect_register(buf) == detect_register(new) == "zh_poetry"
+               and not _uniform57(buf) and not _uniform57(new))
+    return not both_ci
+
+
+def _n_clauses(t: str) -> int:
+    return sum(1 for c in re.split(r"[，。！？；,!?;]", t) if _CJK.search(c))
+
+
 def _rhyme_differs(t1: str, t2: str) -> bool:
     """两首相邻的近体诗押的韵不同（偶数句句末韵母的多数不同）：是两首诗，不合并（见 structure._rhyme_cut）。"""
     from .structure import _rhyme, RHYME_CUT, RHYME_CUT_MIN_LINE
@@ -1686,7 +1717,9 @@ def split_work_spans(text: str, min_line: int = 80, min_work: int = 20, min_rest
         for k, (a, b, kind) in enumerate(raw_sp):
             if sp and (sp[-1][2] == kind or _uniform57(line[sp[-1][0]:sp[-1][1]]) and _uniform57(line[a:b])) \
                     and not line[sp[-1][1]:a].strip() and \
-                    not (cjk(line) >= _RCML() and _rhyme_differs(line[sp[-1][0]:sp[-1][1]], line[a:b])):
+                    not (cjk(line) >= _RCML() and _rhyme_differs(line[sp[-1][0]:sp[-1][1]], line[a:b])) and \
+                    not (config.WORK_MAX8 and _uniform57(line[sp[-1][0]:b]) and
+                         _n_clauses(line[sp[-1][0]:sp[-1][1]]) + _n_clauses(line[a:b]) > 8):
                 sp[-1] = (sp[-1][0], b, kind)
             else:
                 sp.append((a, b, kind))

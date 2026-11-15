@@ -58,6 +58,28 @@ def is_famous_verse(text: str) -> bool:
     return m >= 2 and m >= 0.5 * n
 
 
+def _snap_couplet(line: str, st: int, en: int) -> tuple[int, int]:
+    """名篇片段的起止落在对联的上下联之间（“野草怕霜霜怕日；| 月光如水水如天。”，下联不在句库里）时，把另一半联补进来
+    （2026-11-15 cs1115：真人对联串被从分号处切开，下联“云凝碧树渚宫秋。”并进了后面的 AI 绝句，被判 AI）。
+    只在分号两边的小句字数相同（对联的上下联）时才补。"""
+    import os
+    if os.getenv("FAMOUS_COUPLET_SNAP", "1") in ("0", "false", "False"):
+        return st, en
+    cj = lambda t: len(re.findall(r"[一-鿿]", t))
+    if en < len(line) and line[en - 1] in "；;":
+        m = re.compile(r"[。！？!?]").search(line, en)
+        if m:
+            prev = re.split(r"[。！？!?；;]", line[st:en - 1])[-1]
+            if cj(line[en:m.end()]) == cj(prev) > 0 and not re.search(r"[；;]", line[en:m.start()]):
+                en = m.end()
+    if st > 0 and line[st - 1] in "；;":
+        head = re.split(r"[。！？!?；;]", line[st:en])[0]
+        k = max(line.rfind(c, 0, st - 1) for c in "。！？!?；;")
+        if cj(line[k + 1:st - 1]) == cj(head) > 0:
+            st = k + 1
+    return st, en
+
+
 _CLAUSE = re.compile(r"[^，。！？；：、,.!?;:\s「」『』“”‘’（）()《》〈〉—…·]+")
 _SENT_END = re.compile(r"[。！？!?；;]")
 
@@ -106,6 +128,7 @@ def famous_spans(line: str, min_hits: int = 2, max_gap: int = 1) -> list[tuple[i
             en = cl[b][1]
             m2 = _SENT_END.search(line, en)
             en = m2.end() if m2 else len(line)
+            st, en = _snap_couplet(line, st, en)
             if spans and st <= spans[-1][1]:
                 spans[-1] = (spans[-1][0], max(en, spans[-1][1]))
             else:
