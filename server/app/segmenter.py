@@ -1717,9 +1717,7 @@ def split_work_spans(text: str, min_line: int = 80, min_work: int = 20, min_rest
         for k, (a, b, kind) in enumerate(raw_sp):
             if sp and (sp[-1][2] == kind or _uniform57(line[sp[-1][0]:sp[-1][1]]) and _uniform57(line[a:b])) \
                     and not line[sp[-1][1]:a].strip() and \
-                    not (cjk(line) >= _RCML() and _rhyme_differs(line[sp[-1][0]:sp[-1][1]], line[a:b])) and \
-                    not (config.WORK_MAX8 and _uniform57(line[sp[-1][0]:b]) and
-                         _n_clauses(line[sp[-1][0]:sp[-1][1]]) + _n_clauses(line[a:b]) > 8):
+                    not (cjk(line) >= _RCML() and _rhyme_differs(line[sp[-1][0]:sp[-1][1]], line[a:b])):
                 sp[-1] = (sp[-1][0], b, kind)
             else:
                 sp.append((a, b, kind))
@@ -1734,6 +1732,27 @@ def split_work_spans(text: str, min_line: int = 80, min_work: int = 20, min_rest
             sp[-1] = (a0, b0, kd)
         if not sp:
             continue
+        if config.WORK_MAX8:
+            # 一串 5 / 7 字整齐句式、句数是 8 的整数倍（16、24……）：多半是几首律诗首尾相接，每 8 句一首分开
+            # （2026-11-15 cs1115：AI 七律、两首真人七律、AI 七律并成 32 句一块）；12 句之类的排律、古体不拆
+            sp2 = []
+            for a, b, kd in sp:
+                n = _n_clauses(line[a:b])
+                if n > 8 and n % 8 == 0 and _uniform57(line[a:b]):
+                    ends = [m.end() for m in re.finditer(r"[。！？!?]", line[a:b])]
+                    cl_end, cnt, cuts = [], 0, []
+                    for m in re.finditer(r"[，。！？；,!?;]", line[a:b]):
+                        cnt += 1
+                        if cnt % 8 == 0 and line[a + m.start()] in "。！？!?":
+                            cuts.append(a + m.end())
+                    st = a
+                    for c in cuts:
+                        sp2.append((st, c, kd)); st = c
+                    if st < b:
+                        sp2.append((st, b, kd))
+                else:
+                    sp2.append((a, b, kd))
+            sp = sp2
         parts, pos = [], 0
         for a, b, _ in sp:
             pre = line[pos:a]
