@@ -231,6 +231,9 @@ QUOTE_UNCITED_PROB_PO = float(os.getenv("QUOTE_UNCITED_PROB_PO", "0.93") or 0)
 # 找不到出处的部分（≥ QUOTE_VERIFY_MIN_CHARS 字）单独打分，分数 ≥ QUOTE_VERIFY_PROB 时计入
 QUOTE_VERIFY = _bool("QUOTE_VERIFY", True)
 QUOTE_VERIFY_MIN_CHARS = _int("QUOTE_VERIFY_MIN_CHARS", 30)
+# 2026-11-15：诗词“引文”在古籍句库里完全找不到出处（没有引用痕迹）时按正文检测，不再要求模型分数 ≥ QUOTE_UNCITED_PROB_PO
+QUOTE_PO_UNSOURCED_BODY = _bool("QUOTE_PO_UNSOURCED_BODY", True)
+QUOTE_PO_MIN_CHARS = _int("QUOTE_PO_MIN_CHARS", 20)
 QUOTE_VERIFY_PROB = float(os.getenv("QUOTE_VERIFY_PROB", "0.9") or 0.9)
 COUPLET_SPLIT = _bool("COUPLET_SPLIT", True)  # 段中首尾相接的几副对联（分号分上下联）单独成段
 # 2026-11-14：对联串里真人 / AI 交替时，靠名联出处库（classics_ext 并入楹联丛话等 18 万个对联小句）把真人名联按引文排除
@@ -355,6 +358,11 @@ HYBRID_CL_HUMAN_MEAN = float(os.getenv("HYBRID_CL_HUMAN_MEAN", "0.35") or 0.35)
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
 # 同一段里夹着完整的词 / 近体诗：整首单独成段，不从作品中间切开（见 segmenter.split_work_spans）
 SPLIT_WORKS = _bool("SPLIT_WORKS", True)
+# 2026-11-15 cs1115：一段里首尾相接的几首律诗（全是 5 / 7 字句）不再并成一块——并起来超过 8 句就各自成段
+# （AI 七律、两首真人七律、AI 七律被并成 256 字一段，一半 AI 一半真人）
+WORK_MAX8 = _bool("WORK_MAX8", True)
+# 空行（含前面各步切出的段落分隔）一边是完整的诗 / 词时，不与另一边合并
+WORK_FLUSH_EITHER = _bool("WORK_FLUSH_EITHER", True)
 # 句级“作者标注”模型（tools/tagger_train.py 训练，Release english-tagger-v* / chinese-tagger-v*）：有它时人机混写切分用它的句子分数
 TAGGER_EN_MODEL = os.getenv("TAGGER_EN_MODEL", "")
 TAGGER_ZH_MODEL = os.getenv("TAGGER_ZH_MODEL", "")
