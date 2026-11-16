@@ -980,6 +980,13 @@ def segment_text(text: str, exclude_references: bool = True, flag_quotations: bo
                 # 一边是一首完整的诗 / 词、另一边是别的文字（另一首不完整的词、对联、现代文）时也不合并
                 # （2026-11-15 cs1115：真人《贺新郎》末尾、真人七律、两首 AI 词被并成 298 字一段、按现代文判断）
                 flush()
+            elif (config.REG_VOTE and config.REG_VOTE_RHYME and pending_break and reg != "zh"
+                  and len(_CJK.findall(stripped)) >= 16 and len(_CJK.findall(buf)) >= 16
+                  and len(_CJK.findall(buf + stripped)) >= 60 and detect_register(stripped) != "zh"
+                  and detect_register(buf + stripped, _vote=False) == "zh"):
+                # 空行两边各自是诗词 / 文言，合起来却认不出是哪种体裁（不整齐、不同韵）：是两篇不同的作品，不合并
+                # （2026-11-16 cs1116，见 _rhyme_pieces）
+                flush()
             elif (pending_break or section) and len(buf) >= flush_chars(reg):
                 # 章节标题相当于一次段落分隔：窗口够长就另起一段，否则与下一节合并（仍属同一篇作品）
                 flush()
@@ -1479,7 +1486,52 @@ def split_script_switches(text: str):
         if len(merged) >= 2 and all(long_enough(r) for r in merged):
             lines[li] = "\n\n".join(r[1].strip() for r in merged)
             n_split += len(merged) - 1
-    return "\n".join(lines), n_split
+    text = "\n".join(lines)
+    if config.REG_VOTE and config.REG_VOTE_RHYME:
+        out = []
+        for line in text.split("\n"):
+            parts = _rhyme_pieces(line) if len(_CJK.findall(line)) >= 60 else None
+            if parts and len(parts) > 1:
+                out.append("\n\n".join(parts))
+                n_split += len(parts) - 1
+            else:
+                out.append(line)
+        text = "\n".join(out)
+    return text, n_split
+
+
+def _rhyme_pieces(line: str, min_piece: int = 16):
+    """按组投票才认出是诗词 / 文言的一段（见 _vote_register：几首作品首尾相接），在换韵处断开，每首单独判断
+    （2026-11-16 cs1116：AI 骈句 + 两首真人散曲 + AI 骈句 + AI 词并成 350 字一块，整块判成 AI，两首真人散曲被连带误判）。
+    逐句（。！？）取句末字的韵：连续 ≥ 2 句同韵的是一首（或同韵的几首）；其间不成韵的句子各自连成一块。"""
+    if detect_register(line, _vote=False) != "zh" or detect_register(line) == "zh":
+        return None
+    from .structure import _rhyme
+    sents = [x for x in re.split(r"(?<=[。！？!?])", line) if x.strip()]
+    if len(sents) < 3:
+        return None
+    rh = [_rhyme((_CJK.findall(x) or [""])[-1]) if _CJK.search(x) else None for x in sents]
+    blocks, k = [], 0
+    while k < len(sents):
+        j = k + 1
+        while j < len(sents) and rh[k] and rh[j] == rh[k]:
+            j += 1
+        rhymed = j - k >= 2
+        if blocks and not rhymed and not blocks[-1][0]:
+            blocks[-1][1] += "".join(sents[k:j])
+        else:
+            blocks.append([rhymed, "".join(sents[k:j])])
+        k = j
+    parts = []
+    for rhymed, t in blocks:
+        if parts and len(_CJK.findall(t)) < min_piece:
+            parts[-1] += t
+        else:
+            parts.append(t)
+    if len(parts) >= 2 and len(_CJK.findall(parts[0])) < min_piece:
+        parts[1] = parts[0] + parts[1]
+        parts.pop(0)
+    return [x.strip() for x in parts]
 
 
 _ZH_SENT = re.compile(r"(?<=[。！？!?；;])")
@@ -1642,7 +1694,52 @@ def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, g
         if len(merged) >= 2 and all(size(r) >= min_run for r in merged):
             lines[li] = "\n\n".join(r[1].strip() for r in merged)
             n_split += len(merged) - 1
-    return "\n".join(lines), n_split
+    text = "\n".join(lines)
+    if config.REG_VOTE and config.REG_VOTE_RHYME:
+        out = []
+        for line in text.split("\n"):
+            parts = _rhyme_pieces(line) if len(_CJK.findall(line)) >= 60 else None
+            if parts and len(parts) > 1:
+                out.append("\n\n".join(parts))
+                n_split += len(parts) - 1
+            else:
+                out.append(line)
+        text = "\n".join(out)
+    return text, n_split
+
+
+def _rhyme_pieces(line: str, min_piece: int = 16):
+    """按组投票才认出是诗词 / 文言的一段（见 _vote_register：几首作品首尾相接），在换韵处断开，每首单独判断
+    （2026-11-16 cs1116：AI 骈句 + 两首真人散曲 + AI 骈句 + AI 词并成 350 字一块，整块判成 AI，两首真人散曲被连带误判）。
+    逐句（。！？）取句末字的韵：连续 ≥ 2 句同韵的是一首（或同韵的几首）；其间不成韵的句子各自连成一块。"""
+    if detect_register(line, _vote=False) != "zh" or detect_register(line) == "zh":
+        return None
+    from .structure import _rhyme
+    sents = [x for x in re.split(r"(?<=[。！？!?])", line) if x.strip()]
+    if len(sents) < 3:
+        return None
+    rh = [_rhyme((_CJK.findall(x) or [""])[-1]) if _CJK.search(x) else None for x in sents]
+    blocks, k = [], 0
+    while k < len(sents):
+        j = k + 1
+        while j < len(sents) and rh[k] and rh[j] == rh[k]:
+            j += 1
+        rhymed = j - k >= 2
+        if blocks and not rhymed and not blocks[-1][0]:
+            blocks[-1][1] += "".join(sents[k:j])
+        else:
+            blocks.append([rhymed, "".join(sents[k:j])])
+        k = j
+    parts = []
+    for rhymed, t in blocks:
+        if parts and len(_CJK.findall(t)) < min_piece:
+            parts[-1] += t
+        else:
+            parts.append(t)
+    if len(parts) >= 2 and len(_CJK.findall(parts[0])) < min_piece:
+        parts[1] = parts[0] + parts[1]
+        parts.pop(0)
+    return [x.strip() for x in parts]
 
 
 def _complete_work(t: str) -> bool:
