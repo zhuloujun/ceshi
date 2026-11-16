@@ -523,7 +523,7 @@ def is_regular_verse(text: str) -> bool:
     return top >= len(rh) - 1
 
 
-def detect_register(text: str) -> str:
+def detect_register(text: str, _vote: bool = True) -> str:
     """zh（现代汉语）/ zh_classical（文言）/ zh_poetry（诗词、对联）/ en（英文及其他拉丁字母语言）。"""
     raw = "\n".join(strip_list_mark(l) for l in text.splitlines())
     t = _body_lines(raw)
@@ -561,7 +561,39 @@ def detect_register(text: str) -> str:
         return "zh_classical"
     if cjk >= 30 and is_couplet_run(t):
         return "zh_poetry"
+    if _vote and config.REG_VOTE and cjk >= 60 and mr <= 0.02:
+        v = _vote_register(t)
+        if v:
+            return v
     return "zh"
+
+
+def _vote_register(t: str):
+    """几首诗词曲、骈句首尾相接成一段（没有换行）时，整段既不整齐也不押同一个韵，上面各条都认不出，以前按现代汉语打分
+    （2026-11-16 cs1116：“乡人皆言……”39 字文言 + 骈句 + 两首散曲 + 一首词共 350 字，逐组看都是诗词，整段却判成现代文，
+    AI 写的词、骈句全部漏检）。按约 24 字一组分别判断：七成以上的字落在诗词 / 文言组里、且整段几乎没有白话标志词
+    （调用处已限定 ≤ 2%）时，按占多数的那种文体处理。"""
+    sents = [x for x in _ZH_SENT.split(t.replace("\n", "")) if x]
+    groups, cur = [], ""
+    for x in sents:
+        cur += x
+        if len(_CJK.findall(cur)) >= config.REG_SPLIT_GROUP:
+            groups.append(cur); cur = ""
+    if cur:
+        if groups:
+            groups[-1] += cur
+        else:
+            groups.append(cur)
+    if len(groups) < 3:
+        return None
+    n = {"zh": 0, "zh_poetry": 0, "zh_classical": 0}
+    for g in groups:
+        r = detect_register(g, _vote=False)
+        n[r if r in n else "zh"] += len(_CJK.findall(g))
+    tot = sum(n.values()) or 1
+    if (n["zh_poetry"] + n["zh_classical"]) / tot < config.REG_VOTE_MIN:
+        return None
+    return "zh_poetry" if n["zh_poetry"] >= n["zh_classical"] else "zh_classical"
 
 
 def target_chars(register: str) -> int:

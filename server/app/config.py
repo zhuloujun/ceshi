@@ -250,6 +250,9 @@ FREE_VERSE_JOIN = _bool("FREE_VERSE_JOIN", True)
 REG_SPLIT_POETRY = _bool("REG_SPLIT_POETRY", True)
 REG_SPLIT_GROUP = _int("REG_SPLIT_GROUP", 24)
 REG_SPLIT_REFINE = _bool("REG_SPLIT_REFINE", True)   # 现代文 / 文言交界处按句细调切点（见 segmenter._refine_reg_cuts）
+# 整段认不出文体时按组投票（几首诗词曲首尾相接成一段，见 segmenter._vote_register）
+REG_VOTE = _bool("REG_VOTE", True)
+REG_VOTE_MIN = float(os.getenv("REG_VOTE_MIN", "0.7") or 0.7)
 QUOTE_POOL_MIN_CHARS = _int("QUOTE_POOL_MIN_CHARS", 40)
 QUOTE_POOL_PROB = float(os.getenv("QUOTE_POOL_PROB", "0.95") or 0.95)
 QUOTE_POOL_SHARE = float(os.getenv("QUOTE_POOL_SHARE", "0.25") or 0.25)
