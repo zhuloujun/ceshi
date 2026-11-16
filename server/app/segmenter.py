@@ -593,7 +593,8 @@ def _vote_register(t: str):
     tot = sum(n.values()) or 1
     if (n["zh_poetry"] + n["zh_classical"]) / tot < config.REG_VOTE_MIN:
         return None
-    return "zh_poetry" if n["zh_poetry"] >= n["zh_classical"] else "zh_classical"
+    # 只在诗词占多数时改判：文言占多数的两处（mx2 一段真人笔记、长安集一首真人诗的小序）改判后都成了误判
+    return "zh_poetry" if n["zh_poetry"] >= n["zh_classical"] else None
 
 
 def target_chars(register: str) -> int:
