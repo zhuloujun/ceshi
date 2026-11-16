@@ -249,7 +249,9 @@ FREE_VERSE_JOIN = _bool("FREE_VERSE_JOIN", True)
 # 同一段里文体切换：文言、诗词分开切；按约 REG_SPLIT_GROUP 个汉字一组判断文体（原为 36，切点偏差最多一组）
 REG_SPLIT_POETRY = _bool("REG_SPLIT_POETRY", True)
 REG_SPLIT_GROUP = _int("REG_SPLIT_GROUP", 24)
-REG_SPLIT_REFINE = _bool("REG_SPLIT_REFINE", True)   # 现代文 / 文言交界处按句细调切点（见 segmenter._refine_reg_cuts）
+REG_SPLIT_REFINE = _bool("REG_SPLIT_REFINE", True)
+REG_REFINE_EXT = _bool("REG_REFINE_EXT", True)     # 交界细调用扩充文言字比例、窗口 5 句（浅近文言家书，2026-11-16 cs1115）   # 现代文 / 文言交界处按句细调切点（见 segmenter._refine_reg_cuts）
+REG_REFINE_KEEP = _bool("REG_REFINE_KEEP", True)
 QUOTE_POOL_MIN_CHARS = _int("QUOTE_POOL_MIN_CHARS", 40)
 QUOTE_POOL_PROB = float(os.getenv("QUOTE_POOL_PROB", "0.95") or 0.95)
 QUOTE_POOL_SHARE = float(os.getenv("QUOTE_POOL_SHARE", "0.25") or 0.25)

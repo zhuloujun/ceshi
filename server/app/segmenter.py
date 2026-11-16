@@ -1453,6 +1453,11 @@ def split_script_switches(text: str):
 _ZH_SENT = re.compile(r"(?<=[。！？!?；;])")
 
 
+def _ext_ratio(t: str) -> float:
+    n = len(_CJK.findall(t))
+    return len(_CLASSICAL_EXT.findall(_MODERN_COMPOUND.sub("", t))) / n if n else 0.0
+
+
 def _refine_reg_cuts(merged, min_run):
     """现代文与文言 / 诗词交界处的切点按“句”细调（2026-11-12 cs1111：按 24 字一组判断文体，切点最多偏一组——
     浅近文言“余因是知，世间万物，各有其性。松生山巅……”的头两句被并进前面的现代文议论）。交界前后各取 3 句，
@@ -1464,11 +1469,17 @@ def _refine_reg_cuts(merged, min_run):
         sd = 1 if rb != "zh" else -1           # +1：后面是文言 / 诗词
         ta = [x for x in _ZH_SENT.split(merged[i][1]) if x]
         tb = [x for x in _ZH_SENT.split(merged[i + 1][1]) if x]
-        ka, kb = min(3, len(ta) - 1), min(3, len(tb) - 1)
+        kw = 5 if config.REG_REFINE_EXT else 3
+        ka, kb = min(kw, len(ta) - 1), min(kw, len(tb) - 1)
         if ka < 0 or kb < 0:
             continue
         win = ta[len(ta) - ka:] + tb[:kb]
-        v = [(classical_ratio(x) - modern_ratio(x)) * sd for x in win]
+        if config.REG_REFINE_EXT:
+            # 浅近文言（“吾少时在村塾读书，先父每夜必携热汤半盏”）严格文言虚词很少，用扩充的文言常用字比例
+            # （与 detect_register 的浅近文言规则相同）衡量倾向，窗口放宽到前后各 5 个小句（2026-11-16 cs1115）
+            v = [(max(classical_ratio(x), _ext_ratio(x) / 2) - modern_ratio(x)) * sd for x in win]
+        else:
+            v = [(classical_ratio(x) - modern_ratio(x)) * sd for x in win]
         score = lambda c: sum(v[c:]) - sum(v[:c])
         c0 = ka
         best = max(range(len(win) + 1), key=lambda c: (round(score(c), 4), -abs(c - c0)))
@@ -1476,7 +1487,11 @@ def _refine_reg_cuts(merged, min_run):
             continue
         new_a = "".join(ta[:len(ta) - ka] + win[:best])
         new_b = "".join(win[best:] + tb[kb:])
-        if len(_CJK.findall(new_a)) >= min_run // 2 and len(_CJK.findall(new_b)) >= min_run // 2:
+        lim = min_run // 2
+        if config.REG_REFINE_EXT and len(_CJK.findall(merged[i][1])) >= min_run \
+                and len(_CJK.findall(merged[i + 1][1])) >= min_run:
+            lim = min_run                  # 原来两块都够长时，细调后也要都够长，免得整行因一块太短而不切
+        if len(_CJK.findall(new_a)) >= lim and len(_CJK.findall(new_b)) >= lim:
             merged[i][1], merged[i + 1][1] = new_a, new_b
 
 
@@ -1606,7 +1621,11 @@ def split_register_switches(text: str, min_run: int = 40, min_line: int = 150, g
             merged[1][1] = merged[0][1] + merged[1][1]
             merged.pop(0)
         if config.REG_SPLIT_REFINE:
+            before = [list(r) for r in merged]
             _refine_reg_cuts(merged, min_run)
+            if config.REG_REFINE_EXT and config.REG_REFINE_KEEP and not all(size(r) >= min_run for r in merged) \
+                    and all(size(r) >= min_run for r in before):
+                merged = before            # 细调后有一块不足 min_run、整行就不切了：保留细调前的切法
         if len(merged) >= 2 and all(size(r) >= min_run for r in merged):
             lines[li] = "\n\n".join(r[1].strip() for r in merged)
             n_split += len(merged) - 1
