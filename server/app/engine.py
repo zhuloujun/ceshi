@@ -1103,7 +1103,9 @@ class Engine:
                 tx = [x.text[a:b] for a, b in sp]
                 regs = [x.register] * len(tx)
                 c1 = (self.classify_en2(tx, regs) if x.register == "en" else
-                      self.classify_zh2(tx, regs) if x.register == "zh" else self.classify(tx, regs))
+                      self.classify_zh2(tx, regs, ens=False) if x.register == "zh" else self.classify(tx, regs))
+                # 逐句只用 own1：v14 对单句的分数不可靠（2026-11-18 mx2：真人基金新闻整段合议分 0、v14 分 0，
+                # 但逐句用合议分时 239 字被改判为 AI）
                 tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
                 tgp = tg.span_probs(x.text, sp) if (tg and tg.ready) else [None] * len(sp)
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
@@ -1217,7 +1219,7 @@ class Engine:
                     promote.add(x.index)
         return hmm_ai, hmm_units, promote
 
-    def classify_zh2(self, texts: list[str], registers: list[str]) -> list:
+    def classify_zh2(self, texts: list[str], registers: list[str], ens: bool = True) -> list:
         """现代汉语段落再用中文第二分类器（见过新一代国产大模型的散文、游记、论文）打一次分。"""
         out = [None] * len(texts)
         if not (self.cls_zh2 and self.cls_zh2.ready):
@@ -1226,7 +1228,7 @@ class Engine:
         if idx:
             sub_t = [texts[i] for i in idx]
             ps = self.cls_zh2.predict(sub_t)
-            if config.ZH2_ENS_W > 0 and self.cls_zh3 and self.cls_zh3.ready:
+            if ens and config.ZH2_ENS_W > 0 and self.cls_zh3 and self.cls_zh3.ready:
                 import math
                 lg = lambda p: math.log(min(1 - 1e-4, max(1e-4, p)) / (1 - min(1 - 1e-4, max(1e-4, p))))
                 p3 = self.cls_zh3.predict(sub_t)
