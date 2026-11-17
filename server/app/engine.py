@@ -1725,7 +1725,7 @@ class Engine:
                     c, z, z3 = (results[i].get(k) for k in ("classifier", "classifier_zh2", "classifier_zh3"))
                     if (c is not None and z is not None and z3 is not None and z3 >= config.ZH3_AGREE
                             and z >= config.ZH3_ZH2_MIN and c >= config.ZH3_CLS_MIN
-                            and len(segs_by_idx[i].text) >= config.ZH_AGREE_MIN_CHARS and i not in memo
+                            and len(segs_by_idx[i].text) >= max(config.ZH_AGREE_MIN_CHARS, config.ZH3_MIN_CHARS) and i not in memo
                             and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
                         zh2_seg.add(i)
         # 6.575) 第二分类器多段合议：同一文档里 ≥ ZH2_POOL_MIN_SEGS 段现代中文（各 ≥ ZH2_POOL_MIN_CHARS 字）的第二分类器得分
