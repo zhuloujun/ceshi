@@ -1224,7 +1224,16 @@ class Engine:
             return out
         idx = [i for i, r in enumerate(registers) if r == "zh"]
         if idx:
-            for i, p in zip(idx, self.cls_zh2.predict([texts[i] for i in idx])):
+            sub_t = [texts[i] for i in idx]
+            ps = self.cls_zh2.predict(sub_t)
+            if config.ZH2_ENS_W > 0 and self.cls_zh3 and self.cls_zh3.ready:
+                import math
+                lg = lambda p: math.log(min(1 - 1e-4, max(1e-4, p)) / (1 - min(1 - 1e-4, max(1e-4, p))))
+                p3 = self.cls_zh3.predict(sub_t)
+                ps = [None if (a is None or b is None) else
+                      1 / (1 + math.exp(-((1 - config.ZH2_ENS_W) * lg(a) + config.ZH2_ENS_W * lg(b) - config.ZH2_ENS_OFF)))
+                      for a, b in zip(ps, p3)]
+            for i, p in zip(idx, ps):
                 out[i] = p
         return out
 
