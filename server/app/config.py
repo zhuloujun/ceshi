@@ -53,6 +53,7 @@ EN2_CLASSIFIER_ID = os.getenv("EN2_CLASSIFIER_ID", "english-classifier-v29")
 # 中文第二分类器（tools/train_chinese.py 训练）：专门识别新一代国产大模型（DeepSeek / Kimi / 文心 / 千问 / 豆包）的中文，
 # 尤其是散文、游记、回忆类文学文字。只用于"整篇判断"（不参与逐段校准）。
 ZH2_CLASSIFIER_MODEL = os.getenv("ZH2_CLASSIFIER_MODEL", "")
+ZH3_CLASSIFIER_MODEL = os.getenv("ZH3_CLASSIFIER_MODEL", "")
 # 英文整篇分类器（另一版英文第二分类器，加入了故事、散文、清单等非论文体裁）：只用于非论文英文作品的"整篇判断"，
 # 不参与逐段校准（v5 / v6 换进逐段校准后真人误判升高，已否决）。
 EN3_CLASSIFIER_MODEL = os.getenv("EN3_CLASSIFIER_MODEL", "")
@@ -107,6 +108,14 @@ ZH2_HUMAN_VETO = float(os.getenv("ZH2_HUMAN_VETO", "0.3") or 0.3)
 # 2026-11-11 查明：11-05 起各流程按“文件里第一个 chinese-classifier- 名字”取模型，实际取到的一直是 own1（v7 从未生效），
 # 所有回归数字也都基于 own1。现改为严格按本项取 Release，并如实写 own1，行为不变。v8 试过：真人误判升高，未采用。
 ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-own1")
+# 中文第三分类器（“补检”用，2026-11-17）：v11 用 11 月各批 AI 文档训练，对 AI 现代文几乎全部打到 ≥ 0.95（254 段里 253 段，
+# own1 只有 75 段），但对旧白话小说、历算古文、诗词赏析等真人文字也有约 9% 打到 1.00，单独用必然误判（v9–v11 均因此未采用）。
+# 只在它 ≥ ZH3_AGREE、同时 own1（zh2）≥ ZH3_ZH2_MIN、MPU 分类器（cls）≥ ZH3_CLS_MIN 三个模型一致时才计入：
+# 与商用检测器多模型合议的做法一致。12 个测试集逐段模拟：AI 检出 13,767 → 17,105 字，真人新增 1 段 124 字（带【原文】标记的古文引文）。
+ZH3_CLASSIFIER_ID = os.getenv("ZH3_CLASSIFIER_ID", "chinese-classifier-v11")
+ZH3_AGREE = float(os.getenv("ZH3_AGREE", "0.99") or 0.99)
+ZH3_ZH2_MIN = float(os.getenv("ZH3_ZH2_MIN", "0.7") or 0.7)
+ZH3_CLS_MIN = float(os.getenv("ZH3_CLS_MIN", "0.5") or 0.5)
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
 def _calibrated_classifier(profile: str, prefix: str, default: str) -> str:

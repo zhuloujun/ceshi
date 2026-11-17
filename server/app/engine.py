@@ -532,6 +532,7 @@ class Engine:
                        if (config.ENABLE_EN_CLASSIFIER and config.EN_CLASSIFIER_MODEL) else None)
         self.cls_en2 = (Classifier(config.EN2_CLASSIFIER_MODEL, 320) if config.EN2_CLASSIFIER_MODEL else None)
         self.cls_zh2 = (Classifier(config.ZH2_CLASSIFIER_MODEL, 384) if config.ZH2_CLASSIFIER_MODEL else None)
+        self.cls_zh3 = (Classifier(config.ZH3_CLASSIFIER_MODEL, 384) if config.ZH3_CLASSIFIER_MODEL else None)
         self.cls_en3 = (Classifier(config.EN3_CLASSIFIER_MODEL, 320) if config.EN3_CLASSIFIER_MODEL else None)
         self.cls_en4 = (Classifier(config.EN4_CLASSIFIER_MODEL, 320) if config.EN4_CLASSIFIER_MODEL else None)
         self.cls_poetry = (Classifier(config.POETRY_CLASSIFIER_MODEL, 128) if config.POETRY_CLASSIFIER_MODEL else None)
@@ -631,7 +632,7 @@ class Engine:
     def load_all(self):
         try:
             for name, det in (("语言模型", self.lm), ("中文分类器", self.cls), ("英文分类器", self.cls_en),
-                              ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("英文整篇分类器", self.cls_en3), ("英文整篇分类器 2", self.cls_en4),
+                              ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("中文第三分类器", self.cls_zh3), ("英文整篇分类器", self.cls_en3), ("英文整篇分类器 2", self.cls_en4),
                               ("诗词分类器", self.cls_poetry), ("文言分类器", self.cls_classical),
                               ("英文句级标注模型", self.tag_en), ("中文句级标注模型", self.tag_zh),
                               ("文言句级标注模型", self.tag_zc), ("诗词句级标注模型", self.tag_zp)):
@@ -1350,6 +1351,10 @@ class Engine:
         for s, p in zip(scored, self.classify_zh2(sc_texts, sc_regs)):
             if p is not None:
                 results[s.index]["classifier_zh2"] = p
+        if self.cls_zh3 and self.cls_zh3.ready:
+            idx = [k for k, r in enumerate(sc_regs) if r == "zh"]
+            for k, p in zip(idx, self.cls_zh3.predict([sc_texts[k] for k in idx]) if idx else []):
+                results[scored[k].index]["classifier_zh3"] = p
         if self.cls_en3 and self.cls_en3.ready:
             idx = [k for k, r in enumerate(sc_regs) if r == "en"]
             for k, p in zip(idx, self.cls_en3.predict([sc_texts[k] for k in idx]) if idx else []):
@@ -1707,6 +1712,19 @@ class Engine:
                 for i in idxs:
                     c, z = results[i].get("classifier"), results[i].get("classifier_zh2")
                     if (c is not None and z is not None and c >= config.ZH_AGREE_CLS and z >= config.ZH_AGREE_ZH2
+                            and len(segs_by_idx[i].text) >= config.ZH_AGREE_MIN_CHARS and i not in memo
+                            and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
+                        zh2_seg.add(i)
+        # 6.572) 三个中文分类器一致（见 config.ZH3_CLASSIFIER_ID）：第三分类器 ≥ ZH3_AGREE、第二分类器 ≥ ZH3_ZH2_MIN、
+        #        MPU 分类器 ≥ ZH3_CLS_MIN 时，这一段按"中度疑似"计入。
+        if config.ZH3_AGREE < 1:
+            for (blk, reg), idxs in groups.items():
+                if reg != "zh":
+                    continue
+                for i in idxs:
+                    c, z, z3 = (results[i].get(k) for k in ("classifier", "classifier_zh2", "classifier_zh3"))
+                    if (c is not None and z is not None and z3 is not None and z3 >= config.ZH3_AGREE
+                            and z >= config.ZH3_ZH2_MIN and c >= config.ZH3_CLS_MIN
                             and len(segs_by_idx[i].text) >= config.ZH_AGREE_MIN_CHARS and i not in memo
                             and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
                         zh2_seg.add(i)

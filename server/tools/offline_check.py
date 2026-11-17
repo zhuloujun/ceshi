@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 for env, d in (("POETRY_CLASSIFIER_MODEL", "poetry-classifier"), ("CLASSICAL_CLASSIFIER_MODEL", "classical-classifier"),
-               ("EN2_CLASSIFIER_MODEL", "english-classifier"), ("ZH2_CLASSIFIER_MODEL", "chinese-classifier"),
+               ("EN2_CLASSIFIER_MODEL", "english-classifier"), ("ZH2_CLASSIFIER_MODEL", "chinese-classifier"), ("ZH3_CLASSIFIER_MODEL", "chinese-classifier3"),
                ("EN3_CLASSIFIER_MODEL", "english-doc-classifier"), ("EN4_CLASSIFIER_MODEL", "english-doc-classifier-2")):
     p = HERE / d
     if (p / "config.json").exists() or (p / "ensemble.json").exists():
@@ -87,6 +87,7 @@ def main():
             segs.append(f"[{g['text'][:6].replace(chr(10), ' ')}]@{g.get('start')}+{g.get('chars')} {g.get('label') or g.get('kind')} p{round((g.get('prob') or g.get('ref_prob') or 0) * 100)} u{round((g.get('prob_unsmoothed') or 0) * 100)} b{g.get('block')} t{round((g.get('threshold') or 0) * 100)}"
                         f" o{_o} {reg}{f('classifier')}{f('classifier_zh2')}{f('classifier_en2')}{f('classifier_en3')}{f('classifier_en4')}"
                         + ("" if r.get("classifier_zh2") is None else f" z3{round(r['classifier_zh2'] * 1000)}")
+                        + ("" if r.get("classifier_zh3") is None else f" y3{round(r['classifier_zh3'] * 1000)}")
                         + (f" P{g['partial'][0]}{g.get('ai_chars')}" if g.get("partial") else "")
                         + ("" if not g.get("partial") else " W" + ";".join(
                             f"{w['start']}+{w['chars']}{(w.get('flag') or '-')[0]}" for w in g.get("windows") or [] if w.get("flag"))))
