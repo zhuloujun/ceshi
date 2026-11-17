@@ -115,7 +115,10 @@ ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-own1")
 ZH3_CLASSIFIER_ID = os.getenv("ZH3_CLASSIFIER_ID", "chinese-classifier-v11")
 ZH3_AGREE = float(os.getenv("ZH3_AGREE", "0.99") or 0.99)
 ZH3_ZH2_MIN = float(os.getenv("ZH3_ZH2_MIN", "0.7") or 0.7)
-ZH3_CLS_MIN = float(os.getenv("ZH3_CLS_MIN", "0.5") or 0.5)
+ZH3_CLS_MIN = float(os.getenv("ZH3_CLS_MIN", "0.8") or 0.8)
+# 13 个测试集实测（2026-11-17）：cls ≥ 0.5、不限字数时新增真人误判 288 字（48 字的词、50 字的对联、124 字的古文引文、
+# cls 0.62 的一段议论）；cls ≥ 0.8 且 ≥ 150 字时这些都不触发，AI 仍多检出约 690 字。短段三个模型都不可靠。
+ZH3_MIN_CHARS = int(os.getenv("ZH3_MIN_CHARS", "150") or 150)
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
 def _calibrated_classifier(profile: str, prefix: str, default: str) -> str:
