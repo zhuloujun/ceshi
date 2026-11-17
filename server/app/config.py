@@ -112,12 +112,17 @@ ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-own1")
 # own1 只有 75 段），但对旧白话小说、历算古文、诗词赏析等真人文字也有约 9% 打到 1.00，单独用必然误判（v9–v11 均因此未采用）。
 # 只在它 ≥ ZH3_AGREE、同时 own1（zh2）≥ ZH3_ZH2_MIN、MPU 分类器（cls）≥ ZH3_CLS_MIN 三个模型一致时才计入：
 # 与商用检测器多模型合议的做法一致。12 个测试集逐段模拟：AI 检出 13,767 → 17,105 字，真人新增 1 段 124 字（带【原文】标记的古文引文）。
-ZH3_CLASSIFIER_ID = os.getenv("ZH3_CLASSIFIER_ID", "chinese-classifier-v11")
-ZH3_AGREE = float(os.getenv("ZH3_AGREE", "0.99") or 0.99)
+ZH3_CLASSIFIER_ID = os.getenv("ZH3_CLASSIFIER_ID", "chinese-classifier-v14")
+ZH3_AGREE = float(os.getenv("ZH3_AGREE", "1") or 1)   # 三模型一致补检：已停用，改为下面的合议打分
 ZH3_ZH2_MIN = float(os.getenv("ZH3_ZH2_MIN", "0.7") or 0.7)
 ZH3_CLS_MIN = float(os.getenv("ZH3_CLS_MIN", "0.8") or 0.8)
 # 13 个测试集实测（2026-11-17）：cls ≥ 0.5、不限字数时新增真人误判 288 字（48 字的词、50 字的对联、124 字的古文引文、
 # cls 0.62 的一段议论）；cls ≥ 0.8 且 ≥ 150 字时这些都不触发，AI 仍多检出约 690 字。短段三个模型都不可靠。
+# 第二分类器合议打分（2026-11-18）：own1 与 v14 各自的对数几率按 ZH2_ENS_W 加权平均，再减 ZH2_ENS_OFF，作为“第二分类器”分数。
+# own1 很少误判但认不出新一代 AI；v14 几乎认出所有 AI，却会把少数真人散文、财经评论打满分——两者犯错的段落几乎不重合。
+# 12 个测试集纯真人 369 段、纯 AI 221 段逐段模拟：在不多误判一段真人的门槛下，own1 单独 0 段，合议 103 段（16,768 字）。
+ZH2_ENS_W = float(os.getenv("ZH2_ENS_W", "0.5") or 0)
+ZH2_ENS_OFF = float(os.getenv("ZH2_ENS_OFF", "2.3") or 0)
 ZH3_MIN_CHARS = int(os.getenv("ZH3_MIN_CHARS", "150") or 150)
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
