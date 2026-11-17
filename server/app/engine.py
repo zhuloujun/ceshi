@@ -1103,6 +1103,13 @@ class Engine:
                 regs = [x.register] * len(tx)
                 c1 = (self.classify_en2(tx, regs) if x.register == "en" else
                       self.classify_zh2(tx, regs) if x.register == "zh" else self.classify(tx, regs))
+                # 整段明确像人写时，单句分数不许把句子拉向 AI（2026-11-17 mx2：一篇真人基金新闻 432 字，第二分类器整段 0.00，
+                # 但逐句打分时“精选成长性良好……”这类单句被打到 0.9 以上，逐句判断把其中 3 句、292 字改判为 AI）。
+                # 短句信息太少，模型对单句的极端分数远不如整段可靠；只往“人写”方向收，不会增加误判。
+                if x.register == "zh" and config.UNIT_ZH2_SEG_VETO > 0:
+                    zs = results.get(x.index, {}).get("classifier_zh2")
+                    if zs is not None and zs < config.UNIT_ZH2_SEG_VETO:
+                        c1 = [None if p is None else min(p, config.UNIT_ZH2_SEG_CAP) for p in c1]
                 tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
                 tgp = tg.span_probs(x.text, sp) if (tg and tg.ready) else [None] * len(sp)
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
