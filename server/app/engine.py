@@ -532,6 +532,7 @@ class Engine:
                        if (config.ENABLE_EN_CLASSIFIER and config.EN_CLASSIFIER_MODEL) else None)
         self.cls_en2 = (Classifier(config.EN2_CLASSIFIER_MODEL, 320) if config.EN2_CLASSIFIER_MODEL else None)
         self.cls_zh2 = (Classifier(config.ZH2_CLASSIFIER_MODEL, 384) if config.ZH2_CLASSIFIER_MODEL else None)
+        self.cls_zh3 = (Classifier(config.ZH3_CLASSIFIER_MODEL, 384) if config.ZH3_CLASSIFIER_MODEL else None)
         self.cls_en3 = (Classifier(config.EN3_CLASSIFIER_MODEL, 320) if config.EN3_CLASSIFIER_MODEL else None)
         self.cls_en4 = (Classifier(config.EN4_CLASSIFIER_MODEL, 320) if config.EN4_CLASSIFIER_MODEL else None)
         self.cls_poetry = (Classifier(config.POETRY_CLASSIFIER_MODEL, 128) if config.POETRY_CLASSIFIER_MODEL else None)
@@ -631,7 +632,7 @@ class Engine:
     def load_all(self):
         try:
             for name, det in (("语言模型", self.lm), ("中文分类器", self.cls), ("英文分类器", self.cls_en),
-                              ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("英文整篇分类器", self.cls_en3), ("英文整篇分类器 2", self.cls_en4),
+                              ("英文第二分类器", self.cls_en2), ("中文第二分类器", self.cls_zh2), ("中文第三分类器", self.cls_zh3), ("英文整篇分类器", self.cls_en3), ("英文整篇分类器 2", self.cls_en4),
                               ("诗词分类器", self.cls_poetry), ("文言分类器", self.cls_classical),
                               ("英文句级标注模型", self.tag_en), ("中文句级标注模型", self.tag_zh),
                               ("文言句级标注模型", self.tag_zc), ("诗词句级标注模型", self.tag_zp)):
@@ -1102,7 +1103,9 @@ class Engine:
                 tx = [x.text[a:b] for a, b in sp]
                 regs = [x.register] * len(tx)
                 c1 = (self.classify_en2(tx, regs) if x.register == "en" else
-                      self.classify_zh2(tx, regs) if x.register == "zh" else self.classify(tx, regs))
+                      self.classify_zh2(tx, regs, ens=False) if x.register == "zh" else self.classify(tx, regs))
+                # 逐句只用 own1：v14 对单句的分数不可靠（2026-11-18 mx2：真人基金新闻整段合议分 0、v14 分 0，
+                # 但逐句用合议分时 239 字被改判为 AI）
                 tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
                 tgp = tg.span_probs(x.text, sp) if (tg and tg.ready) else [None] * len(sp)
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
@@ -1216,14 +1219,23 @@ class Engine:
                     promote.add(x.index)
         return hmm_ai, hmm_units, promote
 
-    def classify_zh2(self, texts: list[str], registers: list[str]) -> list:
+    def classify_zh2(self, texts: list[str], registers: list[str], ens: bool = True) -> list:
         """现代汉语段落再用中文第二分类器（见过新一代国产大模型的散文、游记、论文）打一次分。"""
         out = [None] * len(texts)
         if not (self.cls_zh2 and self.cls_zh2.ready):
             return out
         idx = [i for i, r in enumerate(registers) if r == "zh"]
         if idx:
-            for i, p in zip(idx, self.cls_zh2.predict([texts[i] for i in idx])):
+            sub_t = [texts[i] for i in idx]
+            ps = self.cls_zh2.predict(sub_t)
+            if ens and config.ZH2_ENS_W > 0 and self.cls_zh3 and self.cls_zh3.ready:
+                import math
+                lg = lambda p: math.log(min(1 - 1e-4, max(1e-4, p)) / (1 - min(1 - 1e-4, max(1e-4, p))))
+                p3 = self.cls_zh3.predict(sub_t)
+                ps = [None if (a is None or b is None) else
+                      1 / (1 + math.exp(-((1 - config.ZH2_ENS_W) * lg(a) + config.ZH2_ENS_W * lg(b) - config.ZH2_ENS_OFF)))
+                      for a, b in zip(ps, p3)]
+            for i, p in zip(idx, ps):
                 out[i] = p
         return out
 
@@ -1350,6 +1362,10 @@ class Engine:
         for s, p in zip(scored, self.classify_zh2(sc_texts, sc_regs)):
             if p is not None:
                 results[s.index]["classifier_zh2"] = p
+        if self.cls_zh3 and self.cls_zh3.ready:
+            idx = [k for k, r in enumerate(sc_regs) if r == "zh"]
+            for k, p in zip(idx, self.cls_zh3.predict([sc_texts[k] for k in idx]) if idx else []):
+                results[scored[k].index]["classifier_zh3"] = p
         if self.cls_en3 and self.cls_en3.ready:
             idx = [k for k, r in enumerate(sc_regs) if r == "en"]
             for k, p in zip(idx, self.cls_en3.predict([sc_texts[k] for k in idx]) if idx else []):
@@ -1708,6 +1724,19 @@ class Engine:
                     c, z = results[i].get("classifier"), results[i].get("classifier_zh2")
                     if (c is not None and z is not None and c >= config.ZH_AGREE_CLS and z >= config.ZH_AGREE_ZH2
                             and len(segs_by_idx[i].text) >= config.ZH_AGREE_MIN_CHARS and i not in memo
+                            and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
+                        zh2_seg.add(i)
+        # 6.572) 三个中文分类器一致（见 config.ZH3_CLASSIFIER_ID）：第三分类器 ≥ ZH3_AGREE、第二分类器 ≥ ZH3_ZH2_MIN、
+        #        MPU 分类器 ≥ ZH3_CLS_MIN 时，这一段按"中度疑似"计入。
+        if config.ZH3_AGREE < 1:
+            for (blk, reg), idxs in groups.items():
+                if reg != "zh":
+                    continue
+                for i in idxs:
+                    c, z, z3 = (results[i].get(k) for k in ("classifier", "classifier_zh2", "classifier_zh3"))
+                    if (c is not None and z is not None and z3 is not None and z3 >= config.ZH3_AGREE
+                            and z >= config.ZH3_ZH2_MIN and c >= config.ZH3_CLS_MIN
+                            and len(segs_by_idx[i].text) >= max(config.ZH_AGREE_MIN_CHARS, config.ZH3_MIN_CHARS) and i not in memo
                             and smoothed.get(i) is not None and smoothed[i] < float(prof[i][0].get("threshold", 0.5))):
                         zh2_seg.add(i)
         # 6.575) 第二分类器多段合议：同一文档里 ≥ ZH2_POOL_MIN_SEGS 段现代中文（各 ≥ ZH2_POOL_MIN_CHARS 字）的第二分类器得分
