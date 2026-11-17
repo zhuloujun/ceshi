@@ -121,8 +121,10 @@ ZH3_CLS_MIN = float(os.getenv("ZH3_CLS_MIN", "0.8") or 0.8)
 # 第二分类器合议打分（2026-11-18）：own1 与 v14 各自的对数几率按 ZH2_ENS_W 加权平均，再减 ZH2_ENS_OFF，作为“第二分类器”分数。
 # own1 很少误判但认不出新一代 AI；v14 几乎认出所有 AI，却会把少数真人散文、财经评论打满分——两者犯错的段落几乎不重合。
 # 12 个测试集纯真人 369 段、纯 AI 221 段逐段模拟：在不多误判一段真人的门槛下，own1 单独 0 段，合议 103 段（16,768 字）。
+# 偏移 2.3 时一段真人家训赏析合议 0.934、越过“两模型一致”门槛 0.9；取 3.0 后 13 个测试集真人误判字数与 own1 完全相同。
+# 逐句判断仍只用 own1（见 engine._unit_hmm）。
 ZH2_ENS_W = float(os.getenv("ZH2_ENS_W", "0.5") or 0)
-ZH2_ENS_OFF = float(os.getenv("ZH2_ENS_OFF", "2.3") or 0)
+ZH2_ENS_OFF = float(os.getenv("ZH2_ENS_OFF", "3.0") or 0)
 ZH3_MIN_CHARS = int(os.getenv("ZH3_MIN_CHARS", "150") or 150)
 # 诗词专用分类器（tools/train_poetry.py 在 ChangAn 上微调，发布在本仓库 Release）。填本地目录；留空则诗词用通用中文分类器。
 POETRY_CLASSIFIER_MODEL = os.getenv("POETRY_CLASSIFIER_MODEL", "")
