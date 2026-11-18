@@ -57,9 +57,9 @@ EN = {
     "现代汉语": "Modern Chinese", "文言": "Classical Chinese", "诗词": "Chinese poetry", "英文": "English",
     "参考文献，不计入": "References, not counted", "表格，不计入": "Table / list, not counted",
     "题目 / 作者信息，不计入": "Title / author info, not counted", "引文为主，不计入": "Mostly quotation, not counted",
-    "仅供参考，不计入": "Reference only, not counted", "接近阈值（未计入）": "Near threshold (not counted)", "未达阈值": "Below threshold",
+    "仅供参考，不计入": "Reference only, not counted", "可能 AI（低置信，未计入主 AI 率）": "Possibly AI (low confidence, not in main rate)", "含“可能 AI”的上限": "Upper bound incl. possibly-AI", "未达阈值": "Below threshold",
     "高度疑似": "High suspicion", "中度疑似": "Medium suspicion", "轻度疑似": "Light suspicion", "未见 AI 特征": "No AI features",
-    "接近阈值": "Near threshold", "不计入": "Not counted",
+    "接近阈值": "Near threshold", "可能 AI（低置信）": "Possibly AI (low confidence)", "不计入": "Not counted",
     "审读 · AI 文本检测报告": "Shendu · AI Text Detection Report", "审读": "Shendu", "粘贴文本": "Pasted text",
     "来源": "Source", "生成时间": "Generated",
     "疑似 AI 生成为主": "Mostly suspected AI-generated", "部分内容疑似 AI": "Some content suspected AI",
@@ -165,14 +165,14 @@ def seg_tag(seg) -> str:
         return _("引文为主，不计入")
     if k == "reference_only":
         return _("仅供参考，不计入")
-    return seg.get("label") or (_("接近阈值（未计入）") if seg.get("near_threshold") else _("未达阈值"))
+    return seg.get("label") or (_("可能 AI（低置信，未计入主 AI 率）") if seg.get("near_threshold") else _("未达阈值"))
 
 
 def bar(summary, width):
     """AI 率分级色条：高度 / 中度 / 轻度 / 接近阈值 / 其余。"""
     parts = [(_("高度疑似"), summary.get("high_rate") or 0, C_HIGH), (_("中度疑似"), summary.get("mid_rate") or 0, C_MID),
              (_("轻度疑似"), summary.get("light_rate") or 0, C_LIGHT),
-             (_("接近阈值（未计入）"), summary.get("near_threshold_rate") or 0, C_NEAR)]
+             (_("可能 AI（低置信，未计入主 AI 率）"), summary.get("near_threshold_rate") or 0, C_NEAR)]
     rest = max(0.0, 1 - sum(p for _n, p, _c in parts))
     d = Drawing(width, 34)
     x, h = 0.0, 12
@@ -231,6 +231,7 @@ def _build(payload: dict) -> bytes:
     stats = [
         [_("总字数"), f"{s.get('total_chars', '—')}", _("计入字数"), f"{s.get('counted_chars', '—')}"],
         [_("未计入（参考文献 / 引文等）"), f"{s.get('excluded_chars', '—')}", _("平均 AI 概率"), pct(s.get("mean_prob"))],
+        [_("含“可能 AI”的上限"), pct(s.get("ai_rate_upper")), "", ""],
         *([[_("判定阈值"), pct(s.get("threshold")), _("校准"), _("已校准") if s.get("calibrated") else _("未校准")]] if detail else []),
         [_("检测模式"), _("快速（抽样）") if s.get("mode") == "fast" else _("完整"),
          _("文体"), (", " if en else "、").join(f"{_reg(k)} {v} {_('字') if en else '字'}"
@@ -310,7 +311,7 @@ def _build(payload: dict) -> bytes:
     # ---- 分段明细 ----
     story.append(Paragraph(_("分段明细"), S["h2"]))
     legend = "　".join(f'<font color="{LEVEL_COLOR[k].hexval().replace("0x", "#")}">■</font> {_(n)}' for k, n in
-                      (("high", "高度疑似"), ("mid", "中度疑似"), ("light", "轻度疑似"), ("near", "接近阈值"),
+                      (("high", "高度疑似"), ("mid", "中度疑似"), ("light", "轻度疑似"), ("near", "可能 AI（低置信）"),
                        ("low", "未达阈值"), ("none", "不计入")))
     story += [Paragraph(legend, S["small"]), Spacer(1, 4)]
     for seg in segs:

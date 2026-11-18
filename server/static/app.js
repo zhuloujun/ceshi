@@ -398,6 +398,8 @@ function renderResult(res){
   $('sumRate').textContent = pct(s.ai_rate) + (s.low_rate_caution ? '*' : '');
   $('sumRate').title = s.low_rate_caution ? '低于 20% 的结果误判可能性较高，仅作提示' : '';
   $('sumMean').textContent = pct(s.mean_prob);
+  $('sumUpper').textContent = s.ai_rate_upper == null ? '—' : pct(s.ai_rate_upper);
+  $('sumUpper').title = 'AI 率 + 标为“可能 AI（低置信）”的文字。这部分 AI 概率略低于判定阈值：其中有 AI 文字，也有被误判的真人文字，请逐段复核。';
   $('sumHigh').textContent = pct(s.high_rate);
   const L = s.segments_by_level || {};
   const flagged = (L.high||0) + (L.mid||0) + (L.light||0);
@@ -496,7 +498,7 @@ function renderResult(res){
         <div class="para-text">${textHtml}</div>
         <div class="para-tags">
           ${seg.label ? `<span class="para-tag strong">${seg.label}</span>` : ''}
-          ${seg.near_threshold ? '<span class="para-tag" title="低于判定阈值，但相差不大，未计入 AI 率">接近阈值</span>' : ''}
+          ${seg.near_threshold ? '<span class="para-tag" title="AI 概率略低于判定阈值：计入“含可能 AI 的上限”，不计入主 AI 率。测试中这一档里 AI 与真人文字都有，请复核">可能 AI（低置信）</span>' : ''}
           ${seg.by_work ? '<span class="para-tag" title="本段略低于阈值，但同一篇作品的大部分段落已判为疑似 AI，按整篇判断计入">整篇判断</span>' : ''}
           ${seg.memorized ? '<span class="para-tag" title="语言模型几乎能逐字复现、而分类器判为人写：多半是公开名篇，已不采信语言模型信号">疑似名篇原文</span>' : ''}
           ${seg.short ? '<span class="para-tag" title="篇幅短，结果波动较大">篇幅短</span>' : ''}
