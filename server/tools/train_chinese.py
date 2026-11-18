@@ -80,7 +80,7 @@ def build(args, rnd):
     # 用户提供的已标注段落（私有 Kaggle 脚本传入，不进公开仓库）：紧凑格式 {t, y, r:'z', d}，只取现代汉语
     if getattr(args, "user_docs", ""):
         n_ud = 0
-        for line in Path(args.user_docs).read_text("utf-8").splitlines():
+        for line in Path(args.user_docs).read_text("utf-8").split("\n"):
             if not line.strip():
                 continue
             r = json.loads(line)

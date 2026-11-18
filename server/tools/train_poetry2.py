@@ -173,7 +173,7 @@ def load_user_docs(path, register):
     rows = []
     if not path:
         return rows
-    for line in Path(path).read_text("utf-8").splitlines():
+    for line in Path(path).read_text("utf-8").split("\n"):
         if line.strip():
             r = json.loads(line)
             reg = r.get("register") or {"c": "zh_classical", "p": "zh_poetry"}.get(r.get("r"), "")   # 紧凑格式 {t, y, r, d}
