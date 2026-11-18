@@ -72,7 +72,7 @@ jobs:
             tar xzf /tmp/poetry-classifier.tar.gz -C server/
             ls server/poetry-classifier
           else
-            echo "::warning::没有找到诗词分类器（Release $T），诗词将改用通用中文分类器。"
+            echo "::error::没有找到诗词分类器（Release $T），诗词将改用通用中文分类器。（已中止部署：配置里写明的模型取不到时宁可不部署）"; exit 1
           fi
       - name: 取出文言分类器（只在内置校准已按它拟合时使用，否则文言校准会因模型不一致被丢弃）
         env:
@@ -108,7 +108,7 @@ jobs:
             tar xzf /tmp/chinese-classifier.tar.gz -C server/
             ls server/chinese-classifier
           else
-            echo "::warning title=中文第二分类器::没有找到 Release $TAG，本次不部署它"
+            echo "::error title=中文第二分类器::没有找到 Release $TAG，本次不部署它（已中止部署：配置里写明的模型取不到时宁可不部署）"; exit 1
           fi
       - name: 取出中文第三分类器（版本见 server/app/config.py 的 ZH3_CLASSIFIER_ID）
         env:
@@ -121,7 +121,7 @@ jobs:
             mv /tmp/zh3/chinese-classifier server/chinese-classifier3
             ls server/chinese-classifier3
           else
-            echo "::warning title=中文第三分类器::没有找到 Release $TAG，本次不使用它"
+            echo "::error title=中文第三分类器::没有找到 Release $TAG，本次不使用它（已中止部署：配置里写明的模型取不到时宁可不部署）"; exit 1
           fi
       - name: 取出句级标注模型（版本见 server/app/config.py 的 TAGGER_ZH_ID / TAGGER_EN_ID）
         env:
@@ -135,7 +135,7 @@ jobs:
             if gh release download "$TAG" -p "$A" -D /tmp/tg-$L -R "${{ github.repository }}"; then
               tar xzf /tmp/tg-$L/$A -C /tmp/tg-$L && D=$(dirname "$(find /tmp/tg-$L -name config.json | head -1)") && mv "$D" server/$L-tagger && ls server/$L-tagger
             else
-              echo "::warning title=句级标注模型::没有找到 Release $TAG，本次不部署它"
+              echo "::error title=句级标注模型::没有找到 Release $TAG，本次不部署它（已中止部署：配置里写明的模型取不到时宁可不部署）"; exit 1
             fi
           done
       - name: 取出英文整篇分类器（版本见 server/app/config.py 的 EN3_CLASSIFIER_ID）
@@ -148,7 +148,7 @@ jobs:
             mv /tmp/en3x/english-classifier server/english-doc-classifier
             ls server/english-doc-classifier
           else
-            echo "::warning title=英文整篇分类器::没有找到 Release $TAG，本次不部署它"
+            echo "::error title=英文整篇分类器::没有找到 Release $TAG，本次不部署它（已中止部署：配置里写明的模型取不到时宁可不部署）"; exit 1
           fi
       - name: 取出第二个英文整篇分类器（版本见 server/app/config.py 的 EN4_CLASSIFIER_ID）
         env:
@@ -160,7 +160,7 @@ jobs:
             mv /tmp/en4x/english-classifier server/english-doc-classifier-2
             ls server/english-doc-classifier-2
           else
-            echo "::warning title=第二个英文整篇分类器::没有找到 Release $TAG，本次不部署它"
+            echo "::error title=第二个英文整篇分类器::没有找到 Release $TAG，本次不部署它（已中止部署：配置里写明的模型取不到时宁可不部署）"; exit 1
           fi
       - name: 检查专用分类器确实会随镜像部署（内置校准用到了却没装上，相应文体的校准会被整个丢弃）
         working-directory: server
