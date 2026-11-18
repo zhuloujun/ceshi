@@ -42,7 +42,15 @@ def clauses(text: str):
         n = len(_CJK.findall(m.group(0)))
         if n:
             out.append((m.start(), m.end(), n))
+        elif len(_LATIN.findall(m.group(0))) >= 20 and not (out and out[-1][2] == 0):
+            # 成段外文作“隔断”（汉字数记 0）：词 / 诗 / 韵文不能跨过去（2026-11-19 用户 cs1118：中文诗词和
+            # 4700 字符英文首尾相接、没有换行，前后的五言句被认成同一首《生查子》，整段英文绑在里面，
+            # 逐句判断把其中 AI 写的英文全部判成人写）
+            out.append((m.start(), m.end(), 0))
     return out
+
+
+_LATIN = re.compile(r"[A-Za-z]")
 
 
 _SENT_END = "。！？!?"

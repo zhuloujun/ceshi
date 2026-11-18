@@ -1158,7 +1158,7 @@ class Engine:
                 wid = []
                 for u in units:
                     w = None
-                    if u[4] is not None:
+                    if u[4] is not None and u[0].register != "en":   # 外文句子不属于中文诗词
                         mid = u[4] + (u[2] - u[1]) // 2
                         for j, (wa, wb, _) in enumerate(works):
                             if wa <= mid < wb:
