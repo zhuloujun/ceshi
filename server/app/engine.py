@@ -1104,6 +1104,13 @@ class Engine:
                 regs = [x.register] * len(tx)
                 c1 = (self.classify_en2(tx, regs) if x.register == "en" else
                       self.classify_zh2(tx, regs, ens=False) if x.register == "zh" else self.classify(tx, regs))
+                if x.register == "en" and config.EN_UNIT_WIN > 0 and len(sp) >= 2:
+                    k_ = config.EN_UNIT_WIN
+                    wt = [x.text[sp[max(0, j - k_)][0]:sp[min(len(sp) - 1, j + k_)][1]] for j in range(len(sp))]
+                    cw = self.classify_en2(wt, ["en"] * len(wt))
+                    ww = config.EN_UNIT_WIN_W
+                    c1 = [q if (q is None or r is None) else
+                          1 / (1 + math.exp(-((1 - ww) * lg(q) + ww * lg(r)))) for q, r in zip(c1, cw)]
                 # 逐句只用 own1：v14 对单句的分数不可靠（2026-11-18 mx2：真人基金新闻整段合议分 0、v14 分 0，
                 # 但逐句用合议分时 239 字被改判为 AI）
                 tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
@@ -1119,10 +1126,12 @@ class Engine:
                         e = -6.0
                     else:
                         xs_ = []
+                        al = (config.UNIT_HMM_ALPHA_EN if (x.register == "en" and config.UNIT_HMM_ALPHA_EN >= 0)
+                              else config.UNIT_HMM_ALPHA)
                         if p2 is not None:
-                            xs_.append((lg(p2), 1 - config.UNIT_HMM_ALPHA))
+                            xs_.append((lg(p2), 1 - al))
                         if p1 is not None:
-                            xs_.append((lg(p1), config.UNIT_HMM_ALPHA if p2 is not None else 1.0))
+                            xs_.append((lg(p1), al if p2 is not None else 1.0))
                         e = (sum(v * w for v, w in xs_) / sum(w for _, w in xs_) - lg(th[x.register])) if xs_ else 0.0
                         # 整篇判断 / 作品判断为 AI 的段落先验更强：逐句模型须有很强的证据才能把其中句子改判为人写
                         # （2026-11-11 回归：整篇判断为 AI 的文章被逐句判断大半改为人写，文档 AI 比例 1.0→0.22）

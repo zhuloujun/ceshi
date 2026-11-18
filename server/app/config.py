@@ -359,6 +359,11 @@ UNIT_HMM_REG_SNAP = int(os.getenv("UNIT_HMM_REG_SNAP", "150") or 0)
 UNIT_HMM_REG_SNAP_COH = float(os.getenv("UNIT_HMM_REG_SNAP_COH", "0.5") or 0)   # 且接缝处语意衔接度（nats / 词元）≥ 此值
 UNIT_HMM_SWITCH = float(os.getenv("UNIT_HMM_SWITCH", "0.5") or 0.5)
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
+# 英文逐句判断（2026-11-19 用户 cs1118：11 段 20–129 词的短英文首尾相接、没有换行，整块分类器 0.93，逐句却全判人写）：
+# EN_UNIT_WIN>0 时每个英文句子单元再取前后各 EN_UNIT_WIN 个单元组成的窗口用英文分类器打分，与单句分数按 EN_UNIT_WIN_W 混合
+EN_UNIT_WIN = _int("EN_UNIT_WIN", 0)
+EN_UNIT_WIN_W = float(os.getenv("EN_UNIT_WIN_W", "0.5") or 0.5)
+UNIT_HMM_ALPHA_EN = float(os.getenv("UNIT_HMM_ALPHA_EN", "-1") or -1)   # 英文分类器所占权重（<0 = 同 UNIT_HMM_ALPHA）
 UNIT_HMM_BETA_DOC = float(os.getenv("UNIT_HMM_BETA_DOC", "1.5"))
 UNIT_HMM_BETA = float(os.getenv("UNIT_HMM_BETA", "0.5") or 0.5)     # 整段原判断作为先验的权重
 # 网页提交的检测任务超过这么多秒没人查询进度（页面关了 / 取消了），自动取消，不再占着队列（0 = 不自动取消）
