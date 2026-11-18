@@ -1148,6 +1148,8 @@ class Engine:
                             e = lg(p2) - lg(th["en"])
                     units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
             if len(units) < config.UNIT_HMM_MIN_UNITS:
+                if os.getenv("UNIT_HMM_DEBUG"):
+                    print("HMMDBG", blk, "skip units", len(units), flush=True)
                 continue
             # 同一首词 / 诗里的句子绑成一组（按原文位置判断）
             groups = [[k] for k in range(len(units))]
@@ -1200,6 +1202,11 @@ class Engine:
             # 沿用整段 / 整篇的判断（2026-11-11 回归：整篇 AI 的书信、对联被逐句判断整段降为“人写”，AI 检出 969→935）
             ai_ch = sum(u[2] - u[1] for u, st in zip(units, path) if st)
             hu_ch = sum(u[2] - u[1] for u, st in zip(units, path) if not st)
+            if os.getenv("UNIT_HMM_DEBUG"):
+                # 只打印位置与分数（不打印原文：运行日志公开）
+                print("HMMDBG", blk, "units", len(units), "ai", ai_ch, "hu", hu_ch, flush=True)
+                for (x, a, bnd, e, _, e0), st in zip(units, path):
+                    print("HMMDBG  seg", x.index, x.register, a, bnd, round(e, 2), round(e0, 2), st, flush=True)
             if min(ai_ch, hu_ch) < config.UNIT_HMM_MIN_MIX:
                 # 英文标注模型加强后整段都成了 AI，而不加强时本是“人写 + AI”混合：仍按逐句结果（全部 AI）计入，
                 # 不退回整段判断（2026-11-12 XN 回归：AI 菜谱、书信因此从逐句计入退回“说明类文字更严门槛”，4+5 篇漏检）
