@@ -182,6 +182,50 @@ def load_user_docs(path, register):
     return rows
 
 
+def poetry_genre(t: str) -> str:
+    """粗分体裁：对联 / 绝句 / 律诗 / 词 / 曲 / 其他（用于按体裁平衡训练样本）。"""
+    import re
+    ls = [x for x in re.split(r"[，。！？；、,.!?;\s]+", t) if x]
+    lens = {len(x) for x in ls}
+    if lens and (lens <= {5} or lens <= {7}):
+        if len(ls) == 4:
+            return "绝句"
+        if len(ls) == 8:
+            return "律诗"
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from app import segmenter as S
+        if S.has_qupai(t) or S.is_sanqu(t):
+            return "曲"
+        if S.is_ci(t):
+            return "词"
+        if S.is_couplet(t) or S.is_couplet_run(t):
+            return "联"
+    except Exception:
+        pass
+    return "其他" if len(lens) > 1 or len(ls) > 8 else "古体"
+
+
+def balance_by_genre(rows, rnd):
+    """每种体裁里人写、AI 数量拉平（少的一方有放回地补到与多的一方相同，最多补到原来的 4 倍）。
+    2026-11-19：v27–v29 只调重复次数，对联、律诗里 AI 多、真人少，结果真人律诗、对联被判 AI（tchg 真人误判升高）。"""
+    from collections import defaultdict
+    g = defaultdict(lambda: ([], []))
+    for r in rows:
+        g[poetry_genre(r["text"])][r["y"]].append(r)
+    out = []
+    for k, (h, a) in sorted(g.items()):
+        nh, na = len(h), len(a)
+        out += h + a
+        if nh and na:
+            if nh < na:
+                out += [rnd.choice(h) for _ in range(min(na - nh, 3 * nh))]
+            elif na < nh:
+                out += [rnd.choice(a) for _ in range(min(nh - na, 3 * na))]
+        print(f"  体裁 {k}: 人写 {nh} / AI {na}", flush=True)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--changan", required=True)
@@ -204,6 +248,8 @@ def main():
     ap.add_argument("--eval-model", default="", help="只评估这个已训练好的模型（同样的评估集，用于新旧版本对比），不训练")
     ap.add_argument("--user-docs", default="", help="用户提供的已标注文档段落（jsonl，见 load_user_docs）")
     ap.add_argument("--user-docs-reps", type=int, default=6, help="用户文档段落在训练集里重复几次")
+    ap.add_argument("--user-docs-balance", action="store_true",
+                    help="用户文档段落按体裁（对联 / 绝句 / 律诗 / 词 / 曲 / 其他）分别让人写、AI 数量相等（少的一方过采样）")
     ap.add_argument("--tagger", action="store_true", help="改为训练句级“作者标注”模型（人机混写定位，见 tools/tagger_train.py）")
     ap.add_argument("--tagger-steps", type=int, default=6000)
     ap.add_argument("--label-smoothing", type=float, default=0.1)
@@ -257,6 +303,8 @@ def main():
     from memo_filter import drop_memorized, threshold_from_env
     ud = drop_memorized(ud, threshold_from_env())   # 去掉 AI 文档里照抄的古人原文（困惑度极低）
     print(f"用户已标注文档（诗词）：AI {sum(r['y'] for r in ud)} / 人写 {sum(1 - r['y'] for r in ud)}，各重复 {args.user_docs_reps} 次", flush=True)
+    if args.user_docs_balance:
+        ud = balance_by_genre(ud, random.Random(5))
     train += ud * args.user_docs_reps
     if args.tagger:
         # 句级模型（诗词、词、曲、对联混写定位）：古人作品 + 新模型仿写按句子拼接训练
