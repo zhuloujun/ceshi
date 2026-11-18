@@ -2039,11 +2039,11 @@ class Engine:
             by_work = s.index in work_ai or s.index in paper_ai or s.index in zh2_ai
             if s.index in zh_human_work:
                 level, near = "low", True
-                label = ("接近阈值（说明/操作类文字，按更严门槛未计入）" if s.index in en_instr else
-                         "接近阈值（学术摘要/学术文字，按更严门槛未计入）" if s.index in en_abs else
-                         "接近阈值（整篇像人写的孤立段落，未计入）" if s.index in en_isolated else
-                         "接近阈值（疑似名篇，未计入）" if s.index in famous_like else
-                         "接近阈值（孤立段落，未计入）" if s.index in isolated else "接近阈值（整篇像人写，未计入）")
+                label = ("可能 AI（低置信·说明/操作类文字，按更严门槛未计入）" if s.index in en_instr else
+                         "可能 AI（低置信·学术摘要/学术文字，按更严门槛未计入）" if s.index in en_abs else
+                         "可能 AI（低置信·整篇像人写的孤立段落，未计入）" if s.index in en_isolated else
+                         "可能 AI（低置信·疑似名篇，未计入）" if s.index in famous_like else
+                         "可能 AI（低置信·孤立段落，未计入）" if s.index in isolated else "可能 AI（低置信·整篇像人写，未计入）")
             elif s.index in zh2_seg:
                 level, label, near = "mid", "中度疑似（单段：带有国产大模型写作风格）", False
             elif s.index in paper_ai or s.index in zh2_ai:
@@ -2059,7 +2059,7 @@ class Engine:
                 # 选择性判断（selective classification）：专门见过新一代大模型的第二分类器很肯定是 AI，综合分数却很低——
                 # 证据互相矛盾时不下结论，标出来请人复核，不计入 AI 率（不把"没标出"当成"确认是人写"）
                 level, near = "low", True
-                label = "接近阈值（检测器意见不一致，建议复核）"
+                label = "可能 AI（低置信·检测器意见不一致，建议复核）"
             # 逐句窗口：整段判 AI 但有成片的句子明显像人写 → 只按 AI 部分计入（部分疑似）；
             # 整段未过阈值但有几句非常像 AI（综合分数和第二分类器都很肯定）→ 只把这几句计入（局部疑似）
             wins_out, ai_chars, partial = [], None, None
@@ -2069,7 +2069,7 @@ class Engine:
                 if a_ch == 0:
                     if level in ("high", "mid", "light"):
                         level, near = "low", True
-                        label = "接近阈值（逐句判断：这段的句子与前后文相比像人写，未计入）"
+                        label = "可能 AI（低置信·逐句判断：这段的句子与前后文相比像人写，未计入）"
                 elif a_ch >= 0.85 * n_ch:
                     if level in ("low", "none"):
                         level, near = "mid", False
@@ -2272,18 +2272,18 @@ class Engine:
                          "如果其中有你亲自写的段落，请逐段复核。")
         if famous_like:
             notes.append(f"有 {len(famous_like)} 段中文所在文章带有公开名篇的特征（语言模型对其中部分句子几乎逐字复现，"
-                         "如课文、名家散文），且整篇不像 AI 写作，这些段落未计入 AI 率，标为“接近阈值”供复核。")
+                         "如课文、名家散文），且整篇不像 AI 写作，这些段落未计入 AI 率，标为“可能 AI（低置信）”供复核。")
         if isolated:
             notes.append(f"有 {len(isolated)} 段中文单看过了阈值，但所在文章整体像人写、过线文字不足四分之一且只是轻度疑似"
-                         "（孤立段落误判较多，参照 Turnitin 对低占比结果的处理），未计入 AI 率，标为“接近阈值”供复核。")
+                         "（孤立段落误判较多，参照 Turnitin 对低占比结果的处理），未计入 AI 率，标为“可能 AI（低置信）”供复核。")
         if en_isolated:
             notes.append(f"有 {len(en_isolated)} 段英文单看过了阈值，但所在文章整体像人写（第二分类器整篇中位数很低）、过线文字不足五分之一"
                          "且只是轻度过线（畅销小说、文风简洁流畅的真人作品常见这种零星误判，参照 Turnitin 对低占比结果的处理），"
-                         "未计入 AI 率，标为“接近阈值”供复核。")
+                         "未计入 AI 率，标为“可能 AI（低置信）”供复核。")
         rest = zh_human_work - famous_like - isolated - en_isolated
         if rest:
             notes.append(f"有 {len(rest)} 段中文单看过了阈值，但中文分类器判为人写、所在文章整体也像人写"
-                         "（常见于被大模型部分背过的名篇、文风工整的范文），未计入 AI 率，标为“接近阈值”供复核。")
+                         "（常见于被大模型部分背过的名篇、文风工整的范文），未计入 AI 率，标为“可能 AI（低置信）”供复核。")
         if zh_doc_ai:
             notes.append(f"按整篇判断：有 {len(zh_doc_ai)} 段中文单看得分未过阈值，但所在文章整体带有明显的大模型写作风格"
                          "（中文分类器整篇中位得分达到阈值），按“轻度疑似（整篇判断）”计入。Claude、Kimi 等模型写的中文常见这种情况；"
@@ -2292,7 +2292,7 @@ class Engine:
             notes.append(f"有 {len(work_ai - zh_doc_ai)} 段 AI 概率接近阈值，但所在作品的大部分段落已判为疑似 AI，"
                          "按整篇判断计为“轻度疑似（整篇判断）”（AI 文章通常整篇生成）。")
         if near_chars and counted_chars:
-            notes.append(f"另有 {near_chars / counted_chars:.0%} 的文字 AI 概率接近阈值（已标“接近阈值”，未计入 AI 率），"
+            notes.append(f"另有 {near_chars / counted_chars:.0%} 的文字 AI 概率接近阈值（已标“可能 AI（低置信）”，计入“含可能 AI 的上限”，不计入主 AI 率），"
                          "可重点复核；AI 翻译、经过改写或人工润色的 AI 文字常落在这一区间。")
         n_part = [x for x in seg_out if x.get("partial") == "partial"]
         n_local = [x for x in seg_out if x.get("partial") == "local"]
@@ -2375,6 +2375,9 @@ class Engine:
                 "counted_chars": counted_chars,
                 "flagged_chars": flagged_chars,
                 "near_threshold_rate": rate(near_chars),
+                # 含“可能 AI（低置信）”的上限：主 AI 率只计确定的部分（与 Turnitin 一致，宁漏勿冤），
+                # 低置信部分另给一个上限数字，与 GPTZero / Copyleaks 给出连续概率的做法对应（2026-11-18 用户反馈）
+                "ai_rate_upper": rate(flagged_chars + near_chars),
                 "chars_by_level": chars_by_level,
                 "chars_by_register": chars_by_register,
                 "main_register": main_reg,
