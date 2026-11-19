@@ -851,7 +851,7 @@ def test_chinese_human_like_work_demotes_lm_only_hits(client, monkeypatch):
     zh = [s for s in res["segments"] if s["register"] == "zh" and s["kind"] == "body"]
     assert len(zh) >= 3, zh
     hit = [s for s in zh if s["prob"] >= s["threshold"]]
-    assert hit and all(s["label"].startswith("接近阈值") for s in hit)
+    assert hit and all(s["label"].startswith("可能 AI（低置信") for s in hit)
     assert res["summary"]["ai_rate"] == 0
 
 
@@ -875,7 +875,7 @@ def test_chinese_famous_work_guard(client, monkeypatch):
     res = client.post("/v1/detect", json={"text": doc, "wait": True}, headers=h).json()["result"]
     zh = [s for s in res["segments"] if s["register"] == "zh" and s["kind"] == "body"]
     labels = [s["label"] for s in zh]
-    assert len(zh) >= 3 and "接近阈值（疑似名篇，未计入）" in labels and set(labels) <= {"", "接近阈值（疑似名篇，未计入）"}, labels
+    assert len(zh) >= 3 and "可能 AI（低置信·疑似名篇，未计入）" in labels and set(labels) <= {"", "可能 AI（低置信·疑似名篇，未计入）"}, labels
     assert res["summary"]["ai_rate"] == 0
     monkeypatch.setattr(config, "ZH_DOC_THRESHOLD", 0.5)          # 整篇像 AI（中位数 0.9 ≥ 0.5）时不保护
     res = client.post("/v1/detect", json={"text": doc + "。", "wait": True}, headers=h).json()["result"]
