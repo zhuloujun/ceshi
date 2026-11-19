@@ -7,6 +7,7 @@ from __future__ import annotations
 import bisect
 import logging
 import math
+import os
 import re
 import queue
 import threading
@@ -1104,6 +1105,13 @@ class Engine:
                 regs = [x.register] * len(tx)
                 c1 = (self.classify_en2(tx, regs) if x.register == "en" else
                       self.classify_zh2(tx, regs, ens=False) if x.register == "zh" else self.classify(tx, regs))
+                if x.register == "en" and config.EN_UNIT_WIN > 0 and len(sp) >= 2:
+                    k_ = config.EN_UNIT_WIN
+                    wt = [x.text[sp[max(0, j - k_)][0]:sp[min(len(sp) - 1, j + k_)][1]] for j in range(len(sp))]
+                    cw = self.classify_en2(wt, ["en"] * len(wt))
+                    ww = config.EN_UNIT_WIN_W
+                    c1 = [q if (q is None or r is None) else
+                          1 / (1 + math.exp(-((1 - ww) * lg(q) + ww * lg(r)))) for q, r in zip(c1, cw)]
                 # 逐句只用 own1：v14 对单句的分数不可靠（2026-11-18 mx2：真人基金新闻整段合议分 0、v14 分 0，
                 # 但逐句用合议分时 239 字被改判为 AI）
                 tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
@@ -1119,10 +1127,12 @@ class Engine:
                         e = -6.0
                     else:
                         xs_ = []
+                        al = (config.UNIT_HMM_ALPHA_EN if (x.register == "en" and config.UNIT_HMM_ALPHA_EN >= 0)
+                              else config.UNIT_HMM_ALPHA)
                         if p2 is not None:
-                            xs_.append((lg(p2), 1 - config.UNIT_HMM_ALPHA))
+                            xs_.append((lg(p2), 1 - al))
                         if p1 is not None:
-                            xs_.append((lg(p1), config.UNIT_HMM_ALPHA if p2 is not None else 1.0))
+                            xs_.append((lg(p1), al if p2 is not None else 1.0))
                         e = (sum(v * w for v, w in xs_) / sum(w for _, w in xs_) - lg(th[x.register])) if xs_ else 0.0
                         # 整篇判断 / 作品判断为 AI 的段落先验更强：逐句模型须有很强的证据才能把其中句子改判为人写
                         # （2026-11-11 回归：整篇判断为 AI 的文章被逐句判断大半改为人写，文档 AI 比例 1.0→0.22）
@@ -1139,6 +1149,8 @@ class Engine:
                             e = lg(p2) - lg(th["en"])
                     units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
             if len(units) < config.UNIT_HMM_MIN_UNITS:
+                if os.getenv("UNIT_HMM_DEBUG"):
+                    print("HMMDBG", blk, "skip units", len(units), flush=True)
                 continue
             # 同一首词 / 诗里的句子绑成一组（按原文位置判断）
             groups = [[k] for k in range(len(units))]
@@ -1146,7 +1158,7 @@ class Engine:
                 wid = []
                 for u in units:
                     w = None
-                    if u[4] is not None:
+                    if u[4] is not None and u[0].register != "en":   # 外文句子不属于中文诗词
                         mid = u[4] + (u[2] - u[1]) // 2
                         for j, (wa, wb, _) in enumerate(works):
                             if wa <= mid < wb:
@@ -1176,6 +1188,18 @@ class Engine:
                     gain = self._coh_gain(raw, u[4], u[4] + (u[2] - u[1])) if u[4] is not None else None
                     f = 1.0 if gain is None else min(config.UNIT_HMM_COH_MAX, max(config.UNIT_HMM_COH_MIN, gain / config.UNIT_HMM_COH))
                     sw_cost.append(config.UNIT_HMM_SWITCH * f)
+            if config.UNIT_HMM_LANG_SWITCH < 1 or config.UNIT_HMM_REG_SWITCH < 1:
+                # 文体 / 语种切换处换作者的代价减小（2026-11-19 cs1118：AI 诗词、真人散文、AI 英文首尾相接，
+                # 中间 103 字真人散文本身分数接近阈值，被前后两段 AI 拉成 AI）
+                base_c = sw_cost if isinstance(sw_cost, list) else [sw_cost] * (len(groups) - 1)
+                sw_cost = []
+                for gi, c in enumerate(base_c):
+                    r0, r1 = units[groups[gi][-1]][0].register, units[groups[gi + 1][0]][0].register
+                    if (r0 == "en") != (r1 == "en"):
+                        c *= config.UNIT_HMM_LANG_SWITCH
+                    elif r0 != r1:
+                        c *= config.UNIT_HMM_REG_SWITCH
+                    sw_cost.append(c)
             gpath = hybrid.viterbi(gev, sw_cost, 1.0)
             path = [0] * len(units)
             for g, st in zip(groups, gpath):
@@ -1191,6 +1215,11 @@ class Engine:
             # 沿用整段 / 整篇的判断（2026-11-11 回归：整篇 AI 的书信、对联被逐句判断整段降为“人写”，AI 检出 969→935）
             ai_ch = sum(u[2] - u[1] for u, st in zip(units, path) if st)
             hu_ch = sum(u[2] - u[1] for u, st in zip(units, path) if not st)
+            if os.getenv("UNIT_HMM_DEBUG"):
+                # 只打印位置与分数（不打印原文：运行日志公开）
+                print("HMMDBG", blk, "units", len(units), "ai", ai_ch, "hu", hu_ch, flush=True)
+                for (x, a, bnd, e, _, e0), st in zip(units, path):
+                    print("HMMDBG  seg", x.index, x.register, a, bnd, round(e, 2), round(e0, 2), st, flush=True)
             if min(ai_ch, hu_ch) < config.UNIT_HMM_MIN_MIX:
                 # 英文标注模型加强后整段都成了 AI，而不加强时本是“人写 + AI”混合：仍按逐句结果（全部 AI）计入，
                 # 不退回整段判断（2026-11-12 XN 回归：AI 菜谱、书信因此从逐句计入退回“说明类文字更严门槛”，4+5 篇漏检）
