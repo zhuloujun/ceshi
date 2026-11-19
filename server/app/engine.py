@@ -1140,7 +1140,15 @@ class Engine:
                             k_ += 1
                         run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
                         if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_MIN:
-                            pr_ = self.classify([run_t], [ur[j_]])[0]
+                            if config.UNIT_ROUTE_MODE == 1:
+                                pr_ = self._hybrid_unit_scores([run_t], ur[j_])[0]   # 专用分类器与通用中文分类器各半
+                            else:
+                                pr_ = self.classify([run_t], [ur[j_]])[0]
+                            if pr_ is not None and config.UNIT_ROUTE_FAMOUS:
+                                from .famous import matched_lines as _fml
+                                _m, _n = _fml(run_t)
+                                if _n and _m >= max(1, 0.5 * _n):
+                                    pr_ = None        # 名句（与古人原句相同）：不改判，仍按现代文的逐句分数
                             if pr_ is not None:
                                 if os.getenv("UNIT_HMM_DEBUG"):
                                     print("ROUTEDBG", x.index, ur[j_], sp[j_][0], sp[k_ - 1][1], round(pr_, 4),
