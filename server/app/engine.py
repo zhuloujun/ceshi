@@ -1086,6 +1086,7 @@ class Engine:
                 line_end = max(hi, raw.find("\n", lo) if raw.find("\n", lo) >= 0 else len(raw))
                 works = [(a + line_start, b + line_start, k) for a, b, k in structure.work_spans(raw[line_start:line_end])]
             units = []   # (段, 段内起, 段内止, 证据, 原文起, 未经英文标注模型加强的证据)
+            routed_ids, routed_orig = set(), {}
             n_boost = 0
             for x in xs:
                 sp = hybrid.sentence_units(x.text, x.register, 12, 8)
@@ -1135,9 +1136,11 @@ class Engine:
                         if ur[j_] == "zh":
                             j_ += 1
                             continue
-                        k_ = j_
-                        while k_ < len(sp) and ur[k_] == ur[j_]:
-                            k_ += 1
+                        k_ = j_ + 1
+                        if not (config.UNIT_ROUTE_COUPLET_SINGLE and is_couplet(x.text[sp[j_][0]:sp[j_][1]])):
+                            while k_ < len(sp) and ur[k_] == ur[j_] and not (config.UNIT_ROUTE_COUPLET_SINGLE and
+                                                                           is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
+                                k_ += 1
                         run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
                         if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_MIN:
                             if config.UNIT_ROUTE_MODE == 1:
@@ -1153,8 +1156,9 @@ class Engine:
                                 if os.getenv("UNIT_HMM_DEBUG"):
                                     print("ROUTEDBG", x.index, ur[j_], sp[j_][0] + (base0 or 0), sp[k_ - 1][1] + (base0 or 0), round(pr_, 4),
                                           round(lg(pr_) - lg(th[ur[j_]]), 2), flush=True)
+                                rth = config.UNIT_ROUTE_TH if config.UNIT_ROUTE_TH > 0 else th[ur[j_]]
                                 for m_ in range(j_, k_):
-                                    route[m_] = lg(pr_) - lg(th[ur[j_]])
+                                    route[m_] = lg(pr_) - lg(rth)
                         j_ = k_
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
                 thr = float(prof[x.index][0].get("threshold", 0.5)) if x.index in prof else 0.5
@@ -1165,9 +1169,6 @@ class Engine:
                 for ui_, ((a, bnd), p1, p2) in enumerate(zip(sp, c1, tgp)):
                     if fam:
                         e = -6.0
-                    elif ui_ in route:
-                        e = route[ui_]
-                        boosted = False
                     else:
                         xs_ = []
                         al = (config.UNIT_HMM_ALPHA_EN if (x.register == "en" and config.UNIT_HMM_ALPHA_EN >= 0)
@@ -1190,7 +1191,20 @@ class Engine:
                             n_boost += 1
                             e0 = e
                             e = lg(p2) - lg(th["en"])
+                        if ui_ in route:
+                            routed_orig[len(units)] = e
+                            routed_ids.add(len(units))
+                            e = route[ui_]
+                            boosted = False
                     units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
+            # 分流改判只在本自然段别处已有 AI 证据时生效：整段都像人写时（真人诗文集），不因个别短句被专用模型看高而改判
+            # （2026-11-19 R2：当代真人旧体诗夹在现代文里，专用 + 通用分类器平均分 0.95–0.97）
+            if routed_ids and config.UNIT_ROUTE_NEED_CONTEXT:
+                ctx = any(u[3] > 0 for k, u in enumerate(units) if k not in routed_ids)
+                if not ctx:
+                    for k in routed_ids:
+                        u = units[k]
+                        units[k] = (u[0], u[1], u[2], routed_orig[k], u[4], routed_orig[k])
             if len(units) < config.UNIT_HMM_MIN_UNITS:
                 if os.getenv("UNIT_HMM_DEBUG"):
                     print("HMMDBG", blk, "skip units", len(units), flush=True)

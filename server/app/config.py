@@ -363,6 +363,9 @@ UNIT_HMM_REG_SWITCH = float(os.getenv("UNIT_HMM_REG_SWITCH", "0.5"))     # 其�
 UNIT_REG_ROUTE = _int("UNIT_REG_ROUTE", 0)   # 现代文段里的散曲 / 对联 / 文言句按自己的文体打分
 UNIT_ROUTE_MODE = _int("UNIT_ROUTE_MODE", 1)   # 1：专用分类器 + 通用中文分类器取平均；0：只用专用分类器
 UNIT_ROUTE_FAMOUS = _int("UNIT_ROUTE_FAMOUS", 1)   # 与古人原句相同的名句不改判
+UNIT_ROUTE_TH = float(os.getenv("UNIT_ROUTE_TH", "0") or 0)   # 分流句块的阈值（0 = 用该文体的逐句阈值）
+UNIT_ROUTE_NEED_CONTEXT = _int("UNIT_ROUTE_NEED_CONTEXT", 0)   # 本段别处须已有 AI 证据
+UNIT_ROUTE_COUPLET_SINGLE = _int("UNIT_ROUTE_COUPLET_SINGLE", 0)   # 对联逐副打分
 UNIT_ROUTE_MIN = _int("UNIT_ROUTE_MIN", 16)   # 合块后至少多少汉字才改用该文体模型
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
 # 英文逐句判断（2026-11-19 用户 cs1118：11 段 20–129 词的短英文首尾相接、没有换行，整块分类器 0.93，逐句却全判人写）：
