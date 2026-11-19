@@ -1199,7 +1199,18 @@ class Engine:
                     units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
             # 分流改判只在本自然段别处已有 AI 证据时生效：整段都像人写时（真人诗文集），不因个别短句被专用模型看高而改判
             # （2026-11-19 R2：当代真人旧体诗夹在现代文里，专用 + 通用分类器平均分 0.95–0.97）
-            if routed_ids and config.UNIT_ROUTE_NEED_CONTEXT:
+            if routed_ids and config.UNIT_ROUTE_NEED_CONTEXT >= 2:
+                # 2：只看紧邻的非分流句（前后各 W 句）；真人段落里夹一句被专用模型看高的文言（cs1118“笙簧畏潮湿”）不改判
+                W = config.UNIT_ROUTE_NEED_CONTEXT - 1
+                keep = set()
+                for k in routed_ids:
+                    nb = [j for j in range(k - W - 1, k + W + 2) if 0 <= j < len(units) and j != k and j not in routed_ids]
+                    if any(units[j][3] > 0 for j in nb):
+                        keep.add(k)
+                for k in routed_ids - keep:
+                    u = units[k]
+                    units[k] = (u[0], u[1], u[2], routed_orig[k], u[4], routed_orig[k])
+            elif routed_ids and config.UNIT_ROUTE_NEED_CONTEXT:
                 ctx = any(u[3] > 0 for k, u in enumerate(units) if k not in routed_ids)
                 if not ctx:
                     for k in routed_ids:
