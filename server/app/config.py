@@ -366,6 +366,7 @@ UNIT_ROUTE_FAMOUS = _int("UNIT_ROUTE_FAMOUS", 1)   # 与古人原句相同的名
 UNIT_ROUTE_TH = float(os.getenv("UNIT_ROUTE_TH", "0") or 0)   # 分流句块的阈值（0 = 用该文体的逐句阈值）
 UNIT_ROUTE_NEED_CONTEXT = _int("UNIT_ROUTE_NEED_CONTEXT", 0)   # 本段别处须已有 AI 证据
 UNIT_ROUTE_COUPLET_SINGLE = _int("UNIT_ROUTE_COUPLET_SINGLE", 0)   # 对联逐副打分
+UNIT_ROUTE_MAX = _int("UNIT_ROUTE_MAX", 0)   # 1：分流只可加强 AI 证据，不削弱原现代文判断
 UNIT_ROUTE_MIN = _int("UNIT_ROUTE_MIN", 16)   # 合块后至少多少汉字才改用该文体模型
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
 # 英文逐句判断（2026-11-19 用户 cs1118：11 段 20–129 词的短英文首尾相接、没有换行，整块分类器 0.93，逐句却全判人写）：
