@@ -1151,7 +1151,7 @@ class Engine:
                                     pr_ = None        # 名句（与古人原句相同）：不改判，仍按现代文的逐句分数
                             if pr_ is not None:
                                 if os.getenv("UNIT_HMM_DEBUG"):
-                                    print("ROUTEDBG", x.index, ur[j_], sp[j_][0], sp[k_ - 1][1], round(pr_, 4),
+                                    print("ROUTEDBG", x.index, ur[j_], sp[j_][0] + (base0 or 0), sp[k_ - 1][1] + (base0 or 0), round(pr_, 4),
                                           round(lg(pr_) - lg(th[ur[j_]]), 2), flush=True)
                                 for m_ in range(j_, k_):
                                     route[m_] = lg(pr_) - lg(th[ur[j_]])
