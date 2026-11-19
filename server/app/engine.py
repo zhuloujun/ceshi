@@ -1188,6 +1188,18 @@ class Engine:
                     gain = self._coh_gain(raw, u[4], u[4] + (u[2] - u[1])) if u[4] is not None else None
                     f = 1.0 if gain is None else min(config.UNIT_HMM_COH_MAX, max(config.UNIT_HMM_COH_MIN, gain / config.UNIT_HMM_COH))
                     sw_cost.append(config.UNIT_HMM_SWITCH * f)
+            if config.UNIT_HMM_LANG_SWITCH < 1 or config.UNIT_HMM_REG_SWITCH < 1:
+                # 文体 / 语种切换处换作者的代价减小（2026-11-19 cs1118：AI 诗词、真人散文、AI 英文首尾相接，
+                # 中间 103 字真人散文本身分数接近阈值，被前后两段 AI 拉成 AI）
+                base_c = sw_cost if isinstance(sw_cost, list) else [sw_cost] * (len(groups) - 1)
+                sw_cost = []
+                for gi, c in enumerate(base_c):
+                    r0, r1 = units[groups[gi][-1]][0].register, units[groups[gi + 1][0]][0].register
+                    if (r0 == "en") != (r1 == "en"):
+                        c *= config.UNIT_HMM_LANG_SWITCH
+                    elif r0 != r1:
+                        c *= config.UNIT_HMM_REG_SWITCH
+                    sw_cost.append(c)
             gpath = hybrid.viterbi(gev, sw_cost, 1.0)
             path = [0] * len(units)
             for g, st in zip(groups, gpath):
