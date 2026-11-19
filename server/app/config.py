@@ -360,6 +360,14 @@ UNIT_HMM_REG_SNAP_COH = float(os.getenv("UNIT_HMM_REG_SNAP_COH", "0.5") or 0)   
 UNIT_HMM_SWITCH = float(os.getenv("UNIT_HMM_SWITCH", "0.5") or 0.5)
 UNIT_HMM_LANG_SWITCH = float(os.getenv("UNIT_HMM_LANG_SWITCH", "0"))   # 中外文切换处换作者代价的倍数
 UNIT_HMM_REG_SWITCH = float(os.getenv("UNIT_HMM_REG_SWITCH", "0.5"))     # 其他文体切换处换作者代价的倍数
+UNIT_REG_ROUTE = _int("UNIT_REG_ROUTE", 1)   # 现代文段里的散曲 / 对联 / 文言句按自己的文体打分
+UNIT_ROUTE_MODE = _int("UNIT_ROUTE_MODE", 1)   # 1：专用分类器 + 通用中文分类器取平均；0：只用专用分类器
+UNIT_ROUTE_FAMOUS = _int("UNIT_ROUTE_FAMOUS", 1)   # 与古人原句相同的名句不改判
+UNIT_ROUTE_TH = float(os.getenv("UNIT_ROUTE_TH", "0.6") or 0)   # 分流句块的阈值（0 = 用该文体的逐句阈值）
+UNIT_ROUTE_NEED_CONTEXT = _int("UNIT_ROUTE_NEED_CONTEXT", 3)   # 1：本段别处须已有 AI 证据；k>=2：前后各 k-1 句内须有 AI 证据
+UNIT_ROUTE_COUPLET_SINGLE = _int("UNIT_ROUTE_COUPLET_SINGLE", 1)   # 对联逐副打分
+UNIT_ROUTE_MAX = _int("UNIT_ROUTE_MAX", 1)   # 1：分流只可加强 AI 证据，不削弱原现代文判断
+UNIT_ROUTE_MIN = _int("UNIT_ROUTE_MIN", 16)   # 合块后至少多少汉字才改用该文体模型
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
 # 英文逐句判断（2026-11-19 用户 cs1118：11 段 20–129 词的短英文首尾相接、没有换行，整块分类器 0.93，逐句却全判人写）：
 # EN_UNIT_WIN>0 时每个英文句子单元再取前后各 EN_UNIT_WIN 个单元组成的窗口用英文分类器打分，与单句分数按 EN_UNIT_WIN_W 混合

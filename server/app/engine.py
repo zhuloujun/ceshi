@@ -1086,6 +1086,7 @@ class Engine:
                 line_end = max(hi, raw.find("\n", lo) if raw.find("\n", lo) >= 0 else len(raw))
                 works = [(a + line_start, b + line_start, k) for a, b, k in structure.work_spans(raw[line_start:line_end])]
             units = []   # (段, 段内起, 段内止, 证据, 原文起, 未经英文标注模型加强的证据)
+            routed_ids, routed_orig = set(), {}
             n_boost = 0
             for x in xs:
                 sp = hybrid.sentence_units(x.text, x.register, 12, 8)
@@ -1116,13 +1117,56 @@ class Engine:
                 # 但逐句用合议分时 239 字被改判为 AI）
                 tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
                 tgp = tg.span_probs(x.text, sp) if (tg and tg.ready) else [None] * len(sp)
+                # 现代文段落里夹着的散曲、对联、文言句子：按句子自己的文体，用对应文体的分类器和阈值打分
+                # （2026-11-19 cs1119：一整段不分行，AI 散曲 / 对联夹在真人现代文中间，被现代文模型逐句判为人写，证据 −4.3；
+                # 同样的 AI 散曲单独成段时文言模型给 +2.3）。连续同文体的句子合成一块打分，结果更稳。
+                route = {}
+                if config.UNIT_REG_ROUTE and x.register == "zh" and x.index not in memo:
+                    from .segmenter import is_couplet
+                    def _ur(t_):
+                        if len(re.findall(r"[\u4e00-\u9fff]", t_)) < 8:
+                            return "zh"
+                        r_ = detect_register(t_, _vote=False)
+                        if r_ == "zh" and ("；" in t_ or ";" in t_) and is_couplet(t_):
+                            r_ = "zh_poetry"
+                        return r_ if r_ in ("zh_classical", "zh_poetry") and r_ in th else "zh"
+                    ur = [_ur(x.text[a_:b_]) for a_, b_ in sp]
+                    j_ = 0
+                    while j_ < len(sp):
+                        if ur[j_] == "zh":
+                            j_ += 1
+                            continue
+                        k_ = j_ + 1
+                        if not (config.UNIT_ROUTE_COUPLET_SINGLE and is_couplet(x.text[sp[j_][0]:sp[j_][1]])):
+                            while k_ < len(sp) and ur[k_] == ur[j_] and not (config.UNIT_ROUTE_COUPLET_SINGLE and
+                                                                           is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
+                                k_ += 1
+                        run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
+                        if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_MIN:
+                            if config.UNIT_ROUTE_MODE == 1:
+                                pr_ = self._hybrid_unit_scores([run_t], ur[j_])[0]   # 专用分类器与通用中文分类器各半
+                            else:
+                                pr_ = self.classify([run_t], [ur[j_]])[0]
+                            if pr_ is not None and config.UNIT_ROUTE_FAMOUS:
+                                from .famous import matched_lines as _fml
+                                _m, _n = _fml(run_t)
+                                if _n and _m >= max(1, 0.5 * _n):
+                                    pr_ = None        # 名句（与古人原句相同）：不改判，仍按现代文的逐句分数
+                            if pr_ is not None:
+                                if os.getenv("UNIT_HMM_DEBUG"):
+                                    print("ROUTEDBG", x.index, ur[j_], sp[j_][0] + (base0 or 0), sp[k_ - 1][1] + (base0 or 0), round(pr_, 4),
+                                          round(lg(pr_) - lg(th[ur[j_]]), 2), flush=True)
+                                rth = config.UNIT_ROUTE_TH if config.UNIT_ROUTE_TH > 0 else th[ur[j_]]
+                                for m_ in range(j_, k_):
+                                    route[m_] = lg(pr_) - lg(rth)
+                        j_ = k_
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
                 thr = float(prof[x.index][0].get("threshold", 0.5)) if x.index in prof else 0.5
                 pr = smoothed.get(x.index)
                 b = 1.0 if (x.counted and x.index not in human_work and
                             ((pr is not None and pr >= thr) or x.index in doc_ai)) else 0.0
                 base = rpos.get(x.index)
-                for (a, bnd), p1, p2 in zip(sp, c1, tgp):
+                for ui_, ((a, bnd), p1, p2) in enumerate(zip(sp, c1, tgp)):
                     if fam:
                         e = -6.0
                     else:
@@ -1147,7 +1191,31 @@ class Engine:
                             n_boost += 1
                             e0 = e
                             e = lg(p2) - lg(th["en"])
+                        if ui_ in route:
+                            routed_orig[len(units)] = e
+                            routed_ids.add(len(units))
+                            e = max(e, route[ui_]) if config.UNIT_ROUTE_MAX else route[ui_]
+                            boosted = False
                     units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
+            # 分流改判只在本自然段别处已有 AI 证据时生效：整段都像人写时（真人诗文集），不因个别短句被专用模型看高而改判
+            # （2026-11-19 R2：当代真人旧体诗夹在现代文里，专用 + 通用分类器平均分 0.95–0.97）
+            if routed_ids and config.UNIT_ROUTE_NEED_CONTEXT >= 2:
+                # 2：只看紧邻的非分流句（前后各 W 句）；真人段落里夹一句被专用模型看高的文言（cs1118“笙簧畏潮湿”）不改判
+                W = config.UNIT_ROUTE_NEED_CONTEXT - 1
+                keep = set()
+                for k in routed_ids:
+                    nb = [j for j in range(k - W - 1, k + W + 2) if 0 <= j < len(units) and j != k and j not in routed_ids]
+                    if any(units[j][3] > 0 for j in nb):
+                        keep.add(k)
+                for k in routed_ids - keep:
+                    u = units[k]
+                    units[k] = (u[0], u[1], u[2], routed_orig[k], u[4], routed_orig[k])
+            elif routed_ids and config.UNIT_ROUTE_NEED_CONTEXT:
+                ctx = any(u[3] > 0 for k, u in enumerate(units) if k not in routed_ids)
+                if not ctx:
+                    for k in routed_ids:
+                        u = units[k]
+                        units[k] = (u[0], u[1], u[2], routed_orig[k], u[4], routed_orig[k])
             if len(units) < config.UNIT_HMM_MIN_UNITS:
                 if os.getenv("UNIT_HMM_DEBUG"):
                     print("HMMDBG", blk, "skip units", len(units), flush=True)
