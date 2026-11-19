@@ -358,6 +358,8 @@ UNIT_HMM_SURE_EN = float(os.getenv("UNIT_HMM_SURE_EN", "0.95") or 1)   # 英文�
 UNIT_HMM_REG_SNAP = int(os.getenv("UNIT_HMM_REG_SNAP", "150") or 0)
 UNIT_HMM_REG_SNAP_COH = float(os.getenv("UNIT_HMM_REG_SNAP_COH", "0.5") or 0)   # 且接缝处语意衔接度（nats / 词元）≥ 此值
 UNIT_HMM_SWITCH = float(os.getenv("UNIT_HMM_SWITCH", "0.5") or 0.5)
+UNIT_HMM_LANG_SWITCH = float(os.getenv("UNIT_HMM_LANG_SWITCH", "1"))   # 中外文切换处换作者代价的倍数
+UNIT_HMM_REG_SWITCH = float(os.getenv("UNIT_HMM_REG_SWITCH", "1"))     # 其他文体切换处换作者代价的倍数
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
 # 英文逐句判断（2026-11-19 用户 cs1118：11 段 20–129 词的短英文首尾相接、没有换行，整块分类器 0.93，逐句却全判人写）：
 # EN_UNIT_WIN>0 时每个英文句子单元再取前后各 EN_UNIT_WIN 个单元组成的窗口用英文分类器打分，与单句分数按 EN_UNIT_WIN_W 混合
