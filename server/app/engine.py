@@ -1142,6 +1142,9 @@ class Engine:
                         if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_MIN:
                             pr_ = self.classify([run_t], [ur[j_]])[0]
                             if pr_ is not None:
+                                if os.getenv("UNIT_HMM_DEBUG"):
+                                    print("ROUTEDBG", x.index, ur[j_], sp[j_][0], sp[k_ - 1][1], round(pr_, 4),
+                                          round(lg(pr_) - lg(th[ur[j_]]), 2), flush=True)
                                 for m_ in range(j_, k_):
                                     route[m_] = lg(pr_) - lg(th[ur[j_]])
                         j_ = k_
