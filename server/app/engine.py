@@ -1194,7 +1194,7 @@ class Engine:
                         if ui_ in route:
                             routed_orig[len(units)] = e
                             routed_ids.add(len(units))
-                            e = route[ui_]
+                            e = max(e, route[ui_]) if config.UNIT_ROUTE_MAX else route[ui_]
                             boosted = False
                     units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
             # 分流改判只在本自然段别处已有 AI 证据时生效：整段都像人写时（真人诗文集），不因个别短句被专用模型看高而改判
