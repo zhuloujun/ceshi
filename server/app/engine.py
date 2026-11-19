@@ -1116,15 +1116,47 @@ class Engine:
                 # 但逐句用合议分时 239 字被改判为 AI）
                 tg = {"en": self.tag_en, "zh": self.tag_zh, "zh_classical": self.tag_zc, "zh_poetry": self.tag_zp}.get(x.register)
                 tgp = tg.span_probs(x.text, sp) if (tg and tg.ready) else [None] * len(sp)
+                # 现代文段落里夹着的散曲、对联、文言句子：按句子自己的文体，用对应文体的分类器和阈值打分
+                # （2026-11-19 cs1119：一整段不分行，AI 散曲 / 对联夹在真人现代文中间，被现代文模型逐句判为人写，证据 −4.3；
+                # 同样的 AI 散曲单独成段时文言模型给 +2.3）。连续同文体的句子合成一块打分，结果更稳。
+                route = {}
+                if config.UNIT_REG_ROUTE and x.register == "zh" and x.index not in memo:
+                    from .segmenter import is_couplet
+                    def _ur(t_):
+                        if len(re.findall(r"[\u4e00-\u9fff]", t_)) < 8:
+                            return "zh"
+                        r_ = detect_register(t_, _vote=False)
+                        if r_ == "zh" and ("；" in t_ or ";" in t_) and is_couplet(t_):
+                            r_ = "zh_poetry"
+                        return r_ if r_ in ("zh_classical", "zh_poetry") and r_ in th else "zh"
+                    ur = [_ur(x.text[a_:b_]) for a_, b_ in sp]
+                    j_ = 0
+                    while j_ < len(sp):
+                        if ur[j_] == "zh":
+                            j_ += 1
+                            continue
+                        k_ = j_
+                        while k_ < len(sp) and ur[k_] == ur[j_]:
+                            k_ += 1
+                        run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
+                        if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_MIN:
+                            pr_ = self.classify([run_t], [ur[j_]])[0]
+                            if pr_ is not None:
+                                for m_ in range(j_, k_):
+                                    route[m_] = lg(pr_) - lg(th[ur[j_]])
+                        j_ = k_
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
                 thr = float(prof[x.index][0].get("threshold", 0.5)) if x.index in prof else 0.5
                 pr = smoothed.get(x.index)
                 b = 1.0 if (x.counted and x.index not in human_work and
                             ((pr is not None and pr >= thr) or x.index in doc_ai)) else 0.0
                 base = rpos.get(x.index)
-                for (a, bnd), p1, p2 in zip(sp, c1, tgp):
+                for ui_, ((a, bnd), p1, p2) in enumerate(zip(sp, c1, tgp)):
                     if fam:
                         e = -6.0
+                    elif ui_ in route:
+                        e = route[ui_]
+                        boosted = False
                     else:
                         xs_ = []
                         al = (config.UNIT_HMM_ALPHA_EN if (x.register == "en" and config.UNIT_HMM_ALPHA_EN >= 0)
