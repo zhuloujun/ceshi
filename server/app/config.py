@@ -369,6 +369,7 @@ UNIT_ROUTE_COUPLET_SINGLE = _int("UNIT_ROUTE_COUPLET_SINGLE", 1)   # 对联逐�
 UNIT_ROUTE_MAX = _int("UNIT_ROUTE_MAX", 1)   # 1：分流只可加强 AI 证据，不削弱原现代文判断
 UNIT_ROUTE_MIN = _int("UNIT_ROUTE_MIN", 16)   # 合块后至少多少汉字才改用该文体模型
 UNIT_ROUTE_STYLE_TH = float(os.getenv("UNIT_ROUTE_STYLE_TH", "0") or 0)   # >0：规则判为现代文、但文体模型（regstyle）古典概率≥此值的句子也分流
+UNIT_ROUTE_STYLE_MIN = _int("UNIT_ROUTE_STYLE_MIN", 0)   # 文体模型分流的句块至少多少汉字（0 = 同 UNIT_ROUTE_MIN）
 UNIT_ROUTE_STYLE_REG = os.getenv("UNIT_ROUTE_STYLE_REG", "zh_classical")   # 上述句子改用哪个文体的模型
 UNIT_ROUTE_SURE_P = float(os.getenv("UNIT_ROUTE_SURE_P", "0") or 0)   # >0：分流句块分数≥此值且足够长时，不要求前后文已有 AI 证据
 UNIT_ROUTE_SURE_LEN = _int("UNIT_ROUTE_SURE_LEN", 30)   # 上述“足够长”的汉字数

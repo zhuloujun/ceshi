@@ -1134,8 +1134,12 @@ class Engine:
                             cp_ = classical_prob(t_)
                             if cp_ is not None and cp_ >= config.UNIT_ROUTE_STYLE_TH:
                                 r_ = config.UNIT_ROUTE_STYLE_REG
+                                style_ids.add(len(ur_acc))
                         return r_ if r_ in ("zh_classical", "zh_poetry") and r_ in th else "zh"
-                    ur = [_ur(x.text[a_:b_]) for a_, b_ in sp]
+                    style_ids, ur_acc = set(), []
+                    for a_, b_ in sp:
+                        ur_acc.append(_ur(x.text[a_:b_]))
+                    ur = ur_acc
                     j_ = 0
                     while j_ < len(sp):
                         if ur[j_] == "zh":
@@ -1147,7 +1151,10 @@ class Engine:
                                                                            is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
                                 k_ += 1
                         run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
-                        if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_MIN:
+                        min_ = config.UNIT_ROUTE_MIN
+                        if config.UNIT_ROUTE_STYLE_MIN and all(m_ in style_ids for m_ in range(j_, k_)):
+                            min_ = max(min_, config.UNIT_ROUTE_STYLE_MIN)   # 全由文体模型分流的句块：要求更长
+                        if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= min_:
                             if config.UNIT_ROUTE_MODE == 1:
                                 pr_ = self._hybrid_unit_scores([run_t], ur[j_])[0]   # 专用分类器与通用中文分类器各半
                             else:
