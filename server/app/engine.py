@@ -1120,7 +1120,7 @@ class Engine:
                 # 现代文段落里夹着的散曲、对联、文言句子：按句子自己的文体，用对应文体的分类器和阈值打分
                 # （2026-11-19 cs1119：一整段不分行，AI 散曲 / 对联夹在真人现代文中间，被现代文模型逐句判为人写，证据 −4.3；
                 # 同样的 AI 散曲单独成段时文言模型给 +2.3）。连续同文体的句子合成一块打分，结果更稳。
-                route = {}
+                route, route_sure = {}, set()
                 if config.UNIT_REG_ROUTE and x.register == "zh" and x.index not in memo:
                     from .segmenter import is_couplet
                     def _ur(t_):
@@ -1129,6 +1129,11 @@ class Engine:
                         r_ = detect_register(t_, _vote=False)
                         if r_ == "zh" and ("；" in t_ or ";" in t_) and is_couplet(t_):
                             r_ = "zh_poetry"
+                        if r_ == "zh" and config.UNIT_ROUTE_STYLE_TH > 0 and config.UNIT_ROUTE_STYLE_REG in th:
+                            from .regstyle import classical_prob
+                            cp_ = classical_prob(t_)
+                            if cp_ is not None and cp_ >= config.UNIT_ROUTE_STYLE_TH:
+                                r_ = config.UNIT_ROUTE_STYLE_REG
                         return r_ if r_ in ("zh_classical", "zh_poetry") and r_ in th else "zh"
                     ur = [_ur(x.text[a_:b_]) for a_, b_ in sp]
                     j_ = 0
@@ -1157,8 +1162,12 @@ class Engine:
                                     print("ROUTEDBG", x.index, ur[j_], sp[j_][0] + (base0 or 0), sp[k_ - 1][1] + (base0 or 0), round(pr_, 4),
                                           round(lg(pr_) - lg(th[ur[j_]]), 2), flush=True)
                                 rth = config.UNIT_ROUTE_TH if config.UNIT_ROUTE_TH > 0 else th[ur[j_]]
+                                sure_ = (config.UNIT_ROUTE_SURE_P > 0 and pr_ >= config.UNIT_ROUTE_SURE_P and
+                                         len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_SURE_LEN)
                                 for m_ in range(j_, k_):
                                     route[m_] = lg(pr_) - lg(rth)
+                                    if sure_:
+                                        route_sure.add(m_)
                         j_ = k_
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
                 thr = float(prof[x.index][0].get("threshold", 0.5)) if x.index in prof else 0.5
@@ -1193,7 +1202,8 @@ class Engine:
                             e = lg(p2) - lg(th["en"])
                         if ui_ in route:
                             routed_orig[len(units)] = e
-                            routed_ids.add(len(units))
+                            if ui_ not in route_sure:      # 很肯定且足够长的分流句块不受“前后文须有 AI 证据”限制
+                                routed_ids.add(len(units))
                             e = max(e, route[ui_]) if config.UNIT_ROUTE_MAX else route[ui_]
                             boosted = False
                     units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
