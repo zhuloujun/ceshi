@@ -113,6 +113,14 @@ if USER_DOCS:   # 用户提供的已标注文档（只放在这个私有 Kaggle 
     open("/tmp/user_docs.jsonl", "wb").write(lzma.decompress(raw))
     print("用户文档段落", sum(1 for _ in open("/tmp/user_docs.jsonl", encoding="utf-8")), flush=True)
     cmd += ["--user-docs", "/tmp/user_docs.jsonl"]
+ARGS = list(ARGS)
+if "--warm-from" in ARGS:   # 从已发布的模型继续训练（低学习率微调），而不是从头训练
+    _i = ARGS.index("--warm-from"); _wt = ARGS[_i + 1]; del ARGS[_i:_i + 2]
+    sh("wget", "-q", "-O", "/tmp/warm.tar.gz", f"https://github.com/{{REPO}}/releases/download/{{_wt}}/{{name}}.tar.gz")
+    os.makedirs("/tmp/warm", exist_ok=True)
+    sh("tar", "xzf", "/tmp/warm.tar.gz", "-C", "/tmp/warm")
+    cmd += ["--base", f"/tmp/warm/{{name}}"]
+    print("从", _wt, "继续训练", flush=True)
 sh(sys.executable, "-u", *cmd, *ARGS, cwd="/tmp/ceshi/server")
 with tarfile.open(f"/kaggle/working/{{name}}.tar.gz", "w:gz") as t:
     t.add(f"/tmp/{{name}}", arcname=name)
