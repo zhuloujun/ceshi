@@ -368,11 +368,11 @@ UNIT_ROUTE_NEED_CONTEXT = _int("UNIT_ROUTE_NEED_CONTEXT", 3)   # 1：本段别�
 UNIT_ROUTE_COUPLET_SINGLE = _int("UNIT_ROUTE_COUPLET_SINGLE", 1)   # 对联逐副打分
 UNIT_ROUTE_MAX = _int("UNIT_ROUTE_MAX", 1)   # 1：分流只可加强 AI 证据，不削弱原现代文判断
 UNIT_ROUTE_MIN = _int("UNIT_ROUTE_MIN", 16)   # 合块后至少多少汉字才改用该文体模型
-UNIT_ROUTE_STYLE_TH = float(os.getenv("UNIT_ROUTE_STYLE_TH", "0") or 0)   # >0：规则判为现代文、但文体模型（regstyle）古典概率≥此值的句子也分流
-UNIT_ROUTE_STYLE_MIN = _int("UNIT_ROUTE_STYLE_MIN", 0)   # 文体模型分流的句块至少多少汉字（0 = 同 UNIT_ROUTE_MIN）
+UNIT_ROUTE_STYLE_TH = float(os.getenv("UNIT_ROUTE_STYLE_TH", "0.8") or 0)   # >0：规则判为现代文、但文体模型（regstyle）古典概率≥此值的句子也分流
+UNIT_ROUTE_STYLE_MIN = _int("UNIT_ROUTE_STYLE_MIN", 24)   # 文体模型分流的句块至少多少汉字（0 = 同 UNIT_ROUTE_MIN）
 UNIT_ROUTE_STYLE_REG = os.getenv("UNIT_ROUTE_STYLE_REG", "zh_classical")   # 上述句子改用哪个文体的模型
-UNIT_ROUTE_SURE_P = float(os.getenv("UNIT_ROUTE_SURE_P", "0") or 0)   # >0：分流句块分数≥此值且足够长时，不要求前后文已有 AI 证据
-UNIT_ROUTE_SURE_LEN = _int("UNIT_ROUTE_SURE_LEN", 30)   # 上述“足够长”的汉字数
+UNIT_ROUTE_SURE_P = float(os.getenv("UNIT_ROUTE_SURE_P", "0.9") or 0)   # >0：分流句块分数≥此值且足够长时，不要求前后文已有 AI 证据
+UNIT_ROUTE_SURE_LEN = _int("UNIT_ROUTE_SURE_LEN", 40)   # 上述“足够长”的汉字数
 UNIT_HMM_ALPHA = float(os.getenv("UNIT_HMM_ALPHA", "0.3") or 0.3)   # 分类器所占权重（其余给句级标注模型）
 # 英文逐句判断（2026-11-19 用户 cs1118：11 段 20–129 词的短英文首尾相接、没有换行，整块分类器 0.93，逐句却全判人写）：
 # EN_UNIT_WIN>0 时每个英文句子单元再取前后各 EN_UNIT_WIN 个单元组成的窗口用英文分类器打分，与单句分数按 EN_UNIT_WIN_W 混合
