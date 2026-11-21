@@ -1206,10 +1206,13 @@ class Engine:
                                     for m_ in range(j_, k_):
                                         v_ = lg(pr_) - lg(rth)
                                         if m_ in route and route[m_] >= v_:
+                                            if sure_ and not fam_mode_:
+                                                route_sure.add(m_)
                                             continue
                                         route[m_] = v_
                                         route_sure.discard(m_)
-                                        if sure_:
+                                        # 合块打分（UNIT_ROUTE_FAMILY_CTX）：合出来的块一律要求前后文有 AI 证据，不享受“很肯定”豁免
+                                        if sure_ and not (fam_mode_ and config.UNIT_ROUTE_FAMILY_CTX):
                                             route_sure.add(m_)
                             j_ = k_
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
