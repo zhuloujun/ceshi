@@ -1142,68 +1142,76 @@ class Engine:
                     style_ids, ur_acc, cps_ = set(), [], {}
                     for a_, b_ in sp:
                         ur_acc.append(_ur(x.text[a_:b_]))
-                    ur = ur_acc
                     def _cpl(t_):
                         # 合块模式下只把带分号的上下联当对联逐副打分；排比式的散曲句（“旧布袍，残书箱，三尺桌儿靠东墙”）不算
-                        return is_couplet(t_) and (not config.UNIT_ROUTE_MERGE_FAMILY or "；" in t_ or ";" in t_)
-                    j_ = 0
-                    while j_ < len(sp):
-                        if ur[j_] == "zh":
-                            j_ += 1
-                            continue
-                        k_ = j_ + 1
-                        if not (config.UNIT_ROUTE_COUPLET_SINGLE and _cpl(x.text[sp[j_][0]:sp[j_][1]])):
-                            if config.UNIT_ROUTE_MERGE_FAMILY:
-                                # 文言、诗词两类句子连在一起时合成一块（2026-11-21 cs1119：一段 70 字的 AI 散曲被逐句分别判成
-                                # 文言 / 现代文 / 诗词，每块都不足 24 字，没有一块交给专用模型）；夹在中间的极短句（<8 字）一并并入
-                                def _fam(m_):
-                                    if ur[m_] != "zh":
-                                        return True
-                                    nxt_ = m_ + 1 < len(sp) and ur[m_ + 1] != "zh"
-                                    return nxt_ and (len(re.findall(r"[\u4e00-\u9fff]", x.text[sp[m_][0]:sp[m_][1]])) < 8
-                                                     or cps_.get(m_, 0.0) >= config.UNIT_ROUTE_BRIDGE_CP)
-                                while k_ < len(sp) and _fam(k_) and not (config.UNIT_ROUTE_COUPLET_SINGLE and
-                                                                        _cpl(x.text[sp[k_][0]:sp[k_][1]])):
-                                    k_ += 1
-                                cnt_ = {}
-                                for m_ in range(j_, k_):
-                                    if ur[m_] != "zh":
-                                        cnt_[ur[m_]] = cnt_.get(ur[m_], 0) + (sp[m_][1] - sp[m_][0])
-                                rg_ = max(cnt_, key=cnt_.get)
-                                for m_ in range(j_, k_):
-                                    ur[m_] = rg_
-                            else:
-                                while k_ < len(sp) and ur[k_] == ur[j_] and not (config.UNIT_ROUTE_COUPLET_SINGLE and
-                                                                               _cpl(x.text[sp[k_][0]:sp[k_][1]])):
-                                    k_ += 1
-                        run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
-                        if os.getenv("UNIT_HMM_DEBUG"):
-                            print("RUNDBG", x.index, j_, k_, sp[j_][0] + (base0 or 0), len(re.findall(r"[\u4e00-\u9fff]", run_t)), ur[j_], flush=True)
-                        min_ = config.UNIT_ROUTE_MIN
-                        if config.UNIT_ROUTE_STYLE_MIN and all(m_ in style_ids for m_ in range(j_, k_)):
-                            min_ = max(min_, config.UNIT_ROUTE_STYLE_MIN)   # 全由文体模型分流的句块：要求更长
-                        if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= min_:
-                            if config.UNIT_ROUTE_MODE == 1:
-                                pr_ = self._hybrid_unit_scores([run_t], ur[j_])[0]   # 专用分类器与通用中文分类器各半
-                            else:
-                                pr_ = self.classify([run_t], [ur[j_]])[0]
-                            if pr_ is not None and config.UNIT_ROUTE_FAMOUS:
-                                from .famous import matched_lines as _fml
-                                _m, _n = _fml(run_t)
-                                if _n and _m >= max(1, 0.5 * _n):
-                                    pr_ = None        # 名句（与古人原句相同）：不改判，仍按现代文的逐句分数
-                            if pr_ is not None:
-                                if os.getenv("UNIT_HMM_DEBUG"):
-                                    print("ROUTEDBG", x.index, ur[j_], sp[j_][0] + (base0 or 0), sp[k_ - 1][1] + (base0 or 0), round(pr_, 4),
-                                          round(lg(pr_) - lg(th[ur[j_]]), 2), flush=True)
-                                rth = config.UNIT_ROUTE_TH if config.UNIT_ROUTE_TH > 0 else th[ur[j_]]
-                                sure_ = (config.UNIT_ROUTE_SURE_P > 0 and pr_ >= config.UNIT_ROUTE_SURE_P and
-                                         len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_SURE_LEN)
-                                for m_ in range(j_, k_):
-                                    route[m_] = lg(pr_) - lg(rth)
-                                    if sure_:
-                                        route_sure.add(m_)
-                        j_ = k_
+                        return is_couplet(t_) and (not fam_mode_ or "；" in t_ or ";" in t_)
+                    passes_ = [(False, list(ur_acc))]
+                    if config.UNIT_ROUTE_MERGE_FAMILY:
+                        # 合块后每句取“原分块”与“合块”两种打分中较高的一个：合块只补上原来没有交给专用模型的句子，不冲淡原来的分数
+                        passes_ = ([(True, list(ur_acc))] + (passes_ if config.UNIT_ROUTE_FAMILY_MAX else []))
+                    for fam_mode_, ur in passes_:
+                        j_ = 0
+                        while j_ < len(sp):
+                            if ur[j_] == "zh":
+                                j_ += 1
+                                continue
+                            k_ = j_ + 1
+                            if not (config.UNIT_ROUTE_COUPLET_SINGLE and _cpl(x.text[sp[j_][0]:sp[j_][1]])):
+                                if fam_mode_:
+                                    # 文言、诗词两类句子连在一起时合成一块（2026-11-21 cs1119：一段 70 字的 AI 散曲被逐句分别判成
+                                    # 文言 / 现代文 / 诗词，每块都不足 24 字，没有一块交给专用模型）；夹在中间的极短句（<8 字）一并并入
+                                    def _fam(m_):
+                                        if ur[m_] != "zh":
+                                            return True
+                                        nxt_ = m_ + 1 < len(sp) and ur[m_ + 1] != "zh"
+                                        return nxt_ and (len(re.findall(r"[\u4e00-\u9fff]", x.text[sp[m_][0]:sp[m_][1]])) < 8
+                                                         or cps_.get(m_, 0.0) >= config.UNIT_ROUTE_BRIDGE_CP)
+                                    while k_ < len(sp) and _fam(k_) and not (config.UNIT_ROUTE_COUPLET_SINGLE and
+                                                                            _cpl(x.text[sp[k_][0]:sp[k_][1]])):
+                                        k_ += 1
+                                    cnt_ = {}
+                                    for m_ in range(j_, k_):
+                                        if ur[m_] != "zh":
+                                            cnt_[ur[m_]] = cnt_.get(ur[m_], 0) + (sp[m_][1] - sp[m_][0])
+                                    rg_ = max(cnt_, key=cnt_.get)
+                                    for m_ in range(j_, k_):
+                                        ur[m_] = rg_
+                                else:
+                                    while k_ < len(sp) and ur[k_] == ur[j_] and not (config.UNIT_ROUTE_COUPLET_SINGLE and
+                                                                                   _cpl(x.text[sp[k_][0]:sp[k_][1]])):
+                                        k_ += 1
+                            run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
+                            if os.getenv("UNIT_HMM_DEBUG"):
+                                print("RUNDBG", x.index, j_, k_, sp[j_][0] + (base0 or 0), len(re.findall(r"[\u4e00-\u9fff]", run_t)), ur[j_], flush=True)
+                            min_ = config.UNIT_ROUTE_MIN
+                            if config.UNIT_ROUTE_STYLE_MIN and all(m_ in style_ids for m_ in range(j_, k_)):
+                                min_ = max(min_, config.UNIT_ROUTE_STYLE_MIN)   # 全由文体模型分流的句块：要求更长
+                            if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= min_:
+                                if config.UNIT_ROUTE_MODE == 1:
+                                    pr_ = self._hybrid_unit_scores([run_t], ur[j_])[0]   # 专用分类器与通用中文分类器各半
+                                else:
+                                    pr_ = self.classify([run_t], [ur[j_]])[0]
+                                if pr_ is not None and config.UNIT_ROUTE_FAMOUS:
+                                    from .famous import matched_lines as _fml
+                                    _m, _n = _fml(run_t)
+                                    if _n and _m >= max(1, 0.5 * _n):
+                                        pr_ = None        # 名句（与古人原句相同）：不改判，仍按现代文的逐句分数
+                                if pr_ is not None:
+                                    if os.getenv("UNIT_HMM_DEBUG"):
+                                        print("ROUTEDBG", x.index, ur[j_], sp[j_][0] + (base0 or 0), sp[k_ - 1][1] + (base0 or 0), round(pr_, 4),
+                                              round(lg(pr_) - lg(th[ur[j_]]), 2), flush=True)
+                                    rth = config.UNIT_ROUTE_TH if config.UNIT_ROUTE_TH > 0 else th[ur[j_]]
+                                    sure_ = (config.UNIT_ROUTE_SURE_P > 0 and pr_ >= config.UNIT_ROUTE_SURE_P and
+                                             len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_SURE_LEN)
+                                    for m_ in range(j_, k_):
+                                        v_ = lg(pr_) - lg(rth)
+                                        if m_ in route and route[m_] >= v_:
+                                            continue
+                                        route[m_] = v_
+                                        route_sure.discard(m_)
+                                        if sure_:
+                                            route_sure.add(m_)
+                            j_ = k_
                 fam = x.index in memo or any(w in n for n in x.notes for w in famous_words)
                 thr = float(prof[x.index][0].get("threshold", 0.5)) if x.index in prof else 0.5
                 pr = smoothed.get(x.index)
