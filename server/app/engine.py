@@ -1205,7 +1205,10 @@ class Engine:
                                              len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= config.UNIT_ROUTE_SURE_LEN)
                                     for m_ in range(j_, k_):
                                         v_ = lg(pr_) - lg(rth)
-                                        if m_ in route and route[m_] >= v_:
+                                        # UNIT_ROUTE_FAMILY_MAX=2：原分块自己够长、已有专用模型分数的句子一律用原分数，合块只补空缺
+                                        # （2026-11-21 mx2：真人文言句与相邻 AI 词合块后整块 0.99，真人句被带成 AI）
+                                        fill_ = config.UNIT_ROUTE_FAMILY_MAX == 2 and not fam_mode_ and m_ in route
+                                        if m_ in route and route[m_] >= v_ and not fill_:
                                             if sure_ and not fam_mode_:
                                                 route_sure.add(m_)
                                             continue
