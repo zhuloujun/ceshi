@@ -1149,9 +1149,26 @@ class Engine:
                             continue
                         k_ = j_ + 1
                         if not (config.UNIT_ROUTE_COUPLET_SINGLE and is_couplet(x.text[sp[j_][0]:sp[j_][1]])):
-                            while k_ < len(sp) and ur[k_] == ur[j_] and not (config.UNIT_ROUTE_COUPLET_SINGLE and
-                                                                           is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
-                                k_ += 1
+                            if config.UNIT_ROUTE_MERGE_FAMILY:
+                                # 文言、诗词两类句子连在一起时合成一块（2026-11-21 cs1119：一段 70 字的 AI 散曲被逐句分别判成
+                                # 文言 / 现代文 / 诗词，每块都不足 24 字，没有一块交给专用模型）；夹在中间的极短句（<8 字）一并并入
+                                def _fam(m_):
+                                    return ur[m_] != "zh" or (len(re.findall(r"[\u4e00-\u9fff]", x.text[sp[m_][0]:sp[m_][1]])) < 8
+                                                              and m_ + 1 < len(sp) and ur[m_ + 1] != "zh")
+                                while k_ < len(sp) and _fam(k_) and not (config.UNIT_ROUTE_COUPLET_SINGLE and
+                                                                        is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
+                                    k_ += 1
+                                cnt_ = {}
+                                for m_ in range(j_, k_):
+                                    if ur[m_] != "zh":
+                                        cnt_[ur[m_]] = cnt_.get(ur[m_], 0) + (sp[m_][1] - sp[m_][0])
+                                rg_ = max(cnt_, key=cnt_.get)
+                                for m_ in range(j_, k_):
+                                    ur[m_] = rg_
+                            else:
+                                while k_ < len(sp) and ur[k_] == ur[j_] and not (config.UNIT_ROUTE_COUPLET_SINGLE and
+                                                                               is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
+                                    k_ += 1
                         run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
                         min_ = config.UNIT_ROUTE_MIN
                         if config.UNIT_ROUTE_STYLE_MIN and all(m_ in style_ids for m_ in range(j_, k_)):
