@@ -107,9 +107,9 @@
   <section class="results-zone hidden" id="resultsZone">
     <div class="summary-row">
       <div class="summary-card"><span class="summary-num" id="sumRate">—</span><span class="summary-label">AI 率（按字数）</span></div>
-      <div class="summary-card"><span class="summary-num" id="sumUpper">—</span><span class="summary-label">含“可能 AI”的上限</span></div>
+      <div class="summary-card"><span class="summary-num" id="sumUpper">—</span><span class="summary-label">含存疑部分的上限</span></div>
       <div class="summary-card"><span class="summary-num" id="sumHigh">—</span><span class="summary-label">其中高度疑似</span></div>
-      <div class="summary-card"><span class="summary-num" id="sumMean">—</span><span class="summary-label">平均 AI 概率</span></div>
+      <div class="summary-card tech-only"><span class="summary-num" id="sumMean">—</span><span class="summary-label">平均分类器分数</span></div>
       <div class="summary-card"><span class="summary-num" id="sumFlagged">—</span><span class="summary-label">疑似段落 / 计入段落</span></div>
       <div class="summary-card"><span class="summary-num" id="sumExcluded">—</span><span class="summary-label">未计入字数</span></div>
       <button id="exportBtn" class="export-btn"><span class="export-ico" aria-hidden="true">⤓</span>导出报告 (PDF)</button>
@@ -123,7 +123,7 @@
       <span class="legend-item"><i class="dot dot-high"></i>高度疑似</span>
       <span class="legend-item"><i class="dot dot-mid"></i>中度疑似</span>
       <span class="legend-item"><i class="dot dot-light"></i>轻度疑似</span>
-      <span class="legend-item"><i class="dot dot-low"></i>未达阈值</span>
+      <span class="legend-item"><i class="dot dot-low"></i>未见明显 AI 特征</span>
       <span class="legend-item"><i class="dot dot-none"></i>未计入</span>
       <label class="legend-item filter"><input type="checkbox" id="onlyFlagged"> 只看疑似段落</label>
       <label class="legend-item filter admin-only" title="各检测模型的分数、判定阈值、已知误差等（默认不显示，导出的 PDF 也随之包含或不包含）"><input type="checkbox" id="showTech"> 显示技术细节</label>

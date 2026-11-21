@@ -525,6 +525,50 @@ def is_en_verse(text: str) -> bool:
     return punct >= 0.5 or lower >= 0.3
 
 
+
+# ---- 用户端报告措辞（2026-11-22 用户反馈）----
+# 报告里同时出现“AI 概率 0.0%”和“疑似 AI”、“AI 概率 68.4%”和“未达阈值”，读者会觉得自相矛盾：
+# 那个百分比是整段分类器的原始分数，而结论来自逐句判断、整篇判断等后续步骤。知网、维普、Turnitin、GPTZero 的报告
+# 都不出现“阈值”“置信度”之类技术词。所以用户端每段只给“AI 内容占比”（本段计入 AI 率的字数 / 本段字数，
+# 与总 AI 率口径一致），结论文字去掉“阈值”“低置信”等说法；原始分数仍在 prob 字段，只在“技术细节”中显示。
+def _user_label(label: str, level: str, near: bool) -> str:
+    l = label or ""
+    if near and not l:
+        l = "存疑（建议人工复核，不计入 AI 率）"
+    l = l.replace("可能 AI（低置信·", "存疑（").replace("可能 AI（低置信，未计入主 AI 率）", "存疑（建议人工复核，不计入 AI 率）")
+    l = l.replace("可能 AI（低置信）", "存疑（建议人工复核）")
+    l = l.replace("，按更严门槛未计入）", "，建议人工复核，不计入 AI 率）").replace("，未计入）", "，建议人工复核，不计入 AI 率）")
+    l = l.replace("未达阈值", "未见明显 AI 特征")
+    if not l and level == "low":
+        l = "未见明显 AI 特征"
+    return l
+
+
+_USER_TEXT = [("单看得分未过阈值", "单看不明显"), ("单看过了阈值", "单看像 AI"), ("整篇中位得分达到阈值", "整篇多数段落带有 AI 特征"),
+              ("AI 概率接近阈值", "处于存疑区间"), ("综合分数却未过阈值", "综合判断不够明显"), ("整段未过阈值", "整段看不明显"),
+              ("各自用对应的模型和阈值判断", "各自用对应的模型判断"), ("“可能 AI（低置信）”", "“存疑”"), ("可能 AI（低置信）", "存疑"),
+              ("“含可能 AI 的上限”", "“含存疑部分的上限”"), ("过线文字", "像 AI 的文字"), ("阈值", "判定标准"), ("低置信", "存疑")]
+
+
+def _user_text(t: str) -> str:
+    for a, b in _USER_TEXT:
+        t = t.replace(a, b)
+    return t
+
+
+def _user_view(seg_out: list) -> None:
+    for g in seg_out:
+        if g.get("prob") is None:
+            g["ai_share"] = None
+        elif g.get("ai_chars") is not None:
+            g["ai_share"] = round(min(1.0, g["ai_chars"] / max(1, g.get("chars") or 1)), 4)
+        else:
+            g["ai_share"] = 1.0 if g.get("level") in ("high", "mid", "light") else 0.0
+        g["label"] = _user_label(g.get("label") or "", g.get("level") or "", bool(g.get("near_threshold")))
+        g["label"] = _user_text(g["label"])
+        if g.get("notes"):
+            g["notes"] = [_user_text(n) if isinstance(n, str) else n for n in g["notes"]]
+
 class Engine:
     def __init__(self):
         self.lm = LMScorer() if config.ENABLE_LM else None
@@ -2572,7 +2616,7 @@ class Engine:
                 "calibrated": bool(main_cal.get("calibrated")),
                 "calibration_note": main_cal.get("note"),
                 "calibration_features": (main_cal.get("lr") or {}).get("features"),
-                "reliability_notes": notes,
+                "reliability_notes": [_user_text(n) if isinstance(n, str) else n for n in notes],
                 "refcheck": refcheck,
                 "methods": {
                     "fastdetect": bool(self.lm and self.lm.ready),
@@ -2588,7 +2632,7 @@ class Engine:
                 },
                 "elapsed_sec": round(time.time() - t_start, 1),
             },
-            "segments": seg_out,
+            "segments": (_user_view(seg_out) or seg_out),
             "works": works_summary(seg_out),
             "collection": collection,
         }
