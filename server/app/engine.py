@@ -1186,6 +1186,8 @@ class Engine:
                             min_ = config.UNIT_ROUTE_MIN
                             if config.UNIT_ROUTE_STYLE_MIN and all(m_ in style_ids for m_ in range(j_, k_)):
                                 min_ = max(min_, config.UNIT_ROUTE_STYLE_MIN)   # 全由文体模型分流的句块：要求更长
+                            if fam_mode_ and config.UNIT_ROUTE_FAMILY_MIN:
+                                min_ = max(min_, config.UNIT_ROUTE_FAMILY_MIN)  # 合块须足够长（2026-11-21 mx2：35 字的拼接块跨真人/AI 边界）
                             if len(re.findall(r"[\u4e00-\u9fff]", run_t)) >= min_:
                                 if config.UNIT_ROUTE_MODE == 1:
                                     pr_ = self._hybrid_unit_scores([run_t], ur[j_])[0]   # 专用分类器与通用中文分类器各半
