@@ -1132,6 +1132,8 @@ class Engine:
                         if r_ == "zh" and config.UNIT_ROUTE_STYLE_TH > 0 and config.UNIT_ROUTE_STYLE_REG in th:
                             from .regstyle import classical_prob
                             cp_ = classical_prob(t_)
+                            if os.getenv("UNIT_HMM_DEBUG"):
+                                print("STYLEDBG", x.index, len(ur_acc), len(t_), None if cp_ is None else round(cp_, 3), flush=True)
                             if cp_ is not None and cp_ >= config.UNIT_ROUTE_STYLE_TH:
                                 r_ = config.UNIT_ROUTE_STYLE_REG
                                 style_ids.add(len(ur_acc))
@@ -1213,6 +1215,9 @@ class Engine:
                                 routed_ids.add(len(units))
                             e = max(e, route[ui_]) if config.UNIT_ROUTE_MAX else route[ui_]
                             boosted = False
+                    if os.getenv("UNIT_HMM_DEBUG") and x.register == "zh":
+                        print("UNITDBG", x.index, ui_, (base or 0) + a, bnd - a, ur[ui_] if (route is not None and 'ur' in dir() and ui_ < len(ur)) else "-",
+                              None if p1 is None else round(p1, 3), None if p2 is None else round(p2, 3), round(e, 2), flush=True)
                     units.append((x, a, bnd, e, None if base is None else base + a, e0 if (not fam and boosted) else e))
             # 分流改判只在本自然段别处已有 AI 证据时生效：整段都像人写时（真人诗文集），不因个别短句被专用模型看高而改判
             # （2026-11-19 R2：当代真人旧体诗夹在现代文里，专用 + 通用分类器平均分 0.95–0.97）
