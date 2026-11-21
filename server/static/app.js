@@ -374,20 +374,17 @@ function workLevel(w){
   if(!w.counted) return 'none';
   return w.ai_rate >= 0.5 ? 'high' : w.ai_rate > 0 ? 'light' : 'low';
 }
-const WORKS_NOTE = 'AI 率 ；' +
-  '平均 AI 概率，' +
-  '段落颜色按是否计入 AI 率显示，数字是该段单独的分数。';
+const WORKS_NOTE = 'AI 率：该篇被判为疑似 AI 的文字所占比例。段落颜色和数字都按是否计入 AI 率显示（数字是该段计入 AI 率的字数占比）。';
 
 function renderWorks(works){
   const box = $('worksBox');
   if(!works || works.length < 2){ box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false;
   box.innerHTML = `<h3 class="works-title">分篇结果（按标题分开的每篇作品）</h3>
-    <table class="works-table"><thead><tr><th>作品</th><th>文体</th><th>字数</th><th>AI 率</th><th>平均 AI 概率</th><th>结论</th></tr></thead><tbody>` +
+    <table class="works-table"><thead><tr><th>作品</th><th>文体</th><th>字数</th><th>AI 率</th><th>结论</th></tr></thead><tbody>` +
     works.map(w=>`<tr class="work-${workLevel(w)}"><td>${escapeHtml(w.title)}</td>
       <td>${w.registers.map(r=>REG_NAME[r]||r).join('、')}</td><td>${w.chars}</td>
       <td>${w.ai_rate==null ? '—' : pct(w.ai_rate)}</td>
-      <td>${w.mean_prob==null ? '—' : pct(w.mean_prob) + (w.counted ? '' : '（参考）')}</td>
       <td>${escapeHtml(w.verdict)}</td></tr>`).join('') + '</tbody></table>' +
     `<p class="works-note">${WORKS_NOTE}</p>`;
 }
@@ -399,7 +396,7 @@ function renderResult(res){
   $('sumRate').title = s.low_rate_caution ? '低于 20% 的结果误判可能性较高，仅作提示' : '';
   $('sumMean').textContent = pct(s.mean_prob);
   $('sumUpper').textContent = s.ai_rate_upper == null ? '—' : pct(s.ai_rate_upper);
-  $('sumUpper').title = 'AI 率 + 标为“可能 AI（低置信）”的文字。这部分 AI 概率略低于判定阈值：其中有 AI 文字，也有被误判的真人文字，请逐段复核。';
+  $('sumUpper').title = 'AI 率 + 标为“存疑”的文字。存疑部分里有 AI 文字，也有真人文字，请逐段复核。';
   $('sumHigh').textContent = pct(s.high_rate);
   const L = s.segments_by_level || {};
   const flagged = (L.high||0) + (L.mid||0) + (L.light||0);
@@ -491,15 +488,13 @@ function renderResult(res){
       : seg.kind === 'reference_only' ? `<span class="para-tag">仅供参考 · 不计入${seg.ref_prob!=null ? ' · 参考值 '+pct(seg.ref_prob) : ''}</span>`
       : (seg.notes && seg.notes.length) ? `<span class="para-tag">${escapeHtml(seg.notes.join('；'))}</span>` : '';
     div.innerHTML = `
-      <div class="para-badge" ${seg.prob==null && seg.ref_prob!=null ? 'title="参考值：该段不计入 AI 率" style="opacity:.55;border-style:dashed"'
-        : seg.by_work ? 'title="单段分数未过阈值，按整篇判断计入 AI 率（颜色表示计入）"'
-        : (seg.near_threshold && seg.prob!=null && seg.prob >= seg.threshold) ? 'title="单段分数过了阈值，但按整篇判断未计入 AI 率（颜色表示未计入）"' : ''}>${seg.prob!=null ? Math.round(seg.prob*100) : seg.ref_prob!=null ? Math.round(seg.ref_prob*100) : '—'}${seg.by_work ? '<small style="display:block;font-size:10px;line-height:1">整篇</small>' : (seg.near_threshold && seg.prob!=null && seg.prob >= seg.threshold) ? '<small style="display:block;font-size:10px;line-height:1">未计入</small>' : ''}</div>
+      <div class="para-badge" title="本段计入 AI 率的字数占比">${seg.ai_share!=null ? Math.round(seg.ai_share*100) : '—'}<small class="tech-only" style="display:block;font-size:10px;line-height:1">${seg.prob!=null ? '分数 '+Math.round(seg.prob*100) : seg.ref_prob!=null ? '参考 '+Math.round(seg.ref_prob*100) : ''}</small></div>
       <div class="para-body">
         <div class="para-text">${textHtml}</div>
         <div class="para-tags">
           ${seg.label ? `<span class="para-tag strong">${seg.label}</span>` : ''}
-          ${seg.near_threshold ? '<span class="para-tag" title="AI 概率略低于判定阈值：计入“含可能 AI 的上限”，不计入主 AI 率。测试中这一档里 AI 与真人文字都有，请复核">可能 AI（低置信）</span>' : ''}
-          ${seg.by_work ? '<span class="para-tag" title="本段略低于阈值，但同一篇作品的大部分段落已判为疑似 AI，按整篇判断计入">整篇判断</span>' : ''}
+          ${seg.near_threshold && !(seg.label||'').startsWith('存疑') ? '<span class="para-tag" title="计入“含存疑部分的上限”，不计入 AI 率，请复核">存疑</span>' : ''}
+          ${seg.by_work ? '<span class="para-tag" title="本段单看不明显，但同一篇作品的大部分段落已判为疑似 AI，按整篇判断计入">整篇判断</span>' : ''}
           ${seg.memorized ? '<span class="para-tag" title="语言模型几乎能逐字复现、而分类器判为人写：多半是公开名篇，已不采信语言模型信号">疑似名篇原文</span>' : ''}
           ${seg.short ? '<span class="para-tag" title="篇幅短，结果波动较大">篇幅短</span>' : ''}
           ${kindTag}<span class="tech-only">${sig}</span>
