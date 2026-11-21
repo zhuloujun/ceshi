@@ -368,6 +368,7 @@ UNIT_ROUTE_NEED_CONTEXT = _int("UNIT_ROUTE_NEED_CONTEXT", 3)   # 1：本段别�
 UNIT_ROUTE_COUPLET_SINGLE = _int("UNIT_ROUTE_COUPLET_SINGLE", 1)   # 对联逐副打分
 UNIT_ROUTE_MAX = _int("UNIT_ROUTE_MAX", 1)   # 1：分流只可加强 AI 证据，不削弱原现代文判断
 UNIT_ROUTE_MERGE_FAMILY = _int("UNIT_ROUTE_MERGE_FAMILY", 0)   # 1：相邻的文言句、诗词句合成一块交给专用模型
+UNIT_ROUTE_BRIDGE_CP = float(os.getenv("UNIT_ROUTE_BRIDGE_CP", "0.5") or 0)   # 合块时，文体模型古典概率≥此值的现代文句若后面紧接文言/诗词句，也并入
 UNIT_ROUTE_MIN = _int("UNIT_ROUTE_MIN", 16)   # 合块后至少多少汉字才改用该文体模型
 UNIT_ROUTE_STYLE_TH = float(os.getenv("UNIT_ROUTE_STYLE_TH", "0.8") or 0)   # >0：规则判为现代文、但文体模型（regstyle）古典概率≥此值的句子也分流
 UNIT_ROUTE_STYLE_MIN = _int("UNIT_ROUTE_STYLE_MIN", 24)   # 文体模型分流的句块至少多少汉字（0 = 同 UNIT_ROUTE_MIN）

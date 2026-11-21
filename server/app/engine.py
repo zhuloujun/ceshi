@@ -1132,13 +1132,14 @@ class Engine:
                         if r_ == "zh" and config.UNIT_ROUTE_STYLE_TH > 0 and config.UNIT_ROUTE_STYLE_REG in th:
                             from .regstyle import classical_prob
                             cp_ = classical_prob(t_)
+                            cps_[len(ur_acc)] = cp_ or 0.0
                             if os.getenv("UNIT_HMM_DEBUG"):
                                 print("STYLEDBG", x.index, len(ur_acc), len(t_), None if cp_ is None else round(cp_, 3), flush=True)
                             if cp_ is not None and cp_ >= config.UNIT_ROUTE_STYLE_TH:
                                 r_ = config.UNIT_ROUTE_STYLE_REG
                                 style_ids.add(len(ur_acc))
                         return r_ if r_ in ("zh_classical", "zh_poetry") and r_ in th else "zh"
-                    style_ids, ur_acc = set(), []
+                    style_ids, ur_acc, cps_ = set(), [], {}
                     for a_, b_ in sp:
                         ur_acc.append(_ur(x.text[a_:b_]))
                     ur = ur_acc
@@ -1153,8 +1154,11 @@ class Engine:
                                 # 文言、诗词两类句子连在一起时合成一块（2026-11-21 cs1119：一段 70 字的 AI 散曲被逐句分别判成
                                 # 文言 / 现代文 / 诗词，每块都不足 24 字，没有一块交给专用模型）；夹在中间的极短句（<8 字）一并并入
                                 def _fam(m_):
-                                    return ur[m_] != "zh" or (len(re.findall(r"[\u4e00-\u9fff]", x.text[sp[m_][0]:sp[m_][1]])) < 8
-                                                              and m_ + 1 < len(sp) and ur[m_ + 1] != "zh")
+                                    if ur[m_] != "zh":
+                                        return True
+                                    nxt_ = m_ + 1 < len(sp) and ur[m_ + 1] != "zh"
+                                    return nxt_ and (len(re.findall(r"[\u4e00-\u9fff]", x.text[sp[m_][0]:sp[m_][1]])) < 8
+                                                     or cps_.get(m_, 0.0) >= config.UNIT_ROUTE_BRIDGE_CP)
                                 while k_ < len(sp) and _fam(k_) and not (config.UNIT_ROUTE_COUPLET_SINGLE and
                                                                         is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
                                     k_ += 1
@@ -1170,6 +1174,8 @@ class Engine:
                                                                                is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
                                     k_ += 1
                         run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
+                        if os.getenv("UNIT_HMM_DEBUG"):
+                            print("RUNDBG", x.index, j_, k_, sp[j_][0] + (base0 or 0), len(re.findall(r"[\u4e00-\u9fff]", run_t)), ur[j_], flush=True)
                         min_ = config.UNIT_ROUTE_MIN
                         if config.UNIT_ROUTE_STYLE_MIN and all(m_ in style_ids for m_ in range(j_, k_)):
                             min_ = max(min_, config.UNIT_ROUTE_STYLE_MIN)   # 全由文体模型分流的句块：要求更长
