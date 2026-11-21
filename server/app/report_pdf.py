@@ -71,7 +71,7 @@ EN = {
     "疑似公开名篇原文": "likely published classics", "仅供参考的文体": "reference-only registers",
     "提示": "Notes", "如何解读与复核": "How to read and verify this report", "分篇结果": "Results by work",
     "#": "#", "作品": "Work", "字数": "Chars", "结论": "Verdict", "分段明细": "Paragraph details",
-    "AI 概率": "AI probability", "参考值": "reference value", "技术附录": "Technical appendix",
+    "AI 概率": "AI probability", "AI 内容占比": "AI share", "含存疑部分的上限": "Upper bound incl. uncertain", "平均分类器分数": "Mean classifier score", "分数": "score", "存疑": "Uncertain", "未见明显 AI 特征": "No clear AI signs", "存疑（建议人工复核，不计入 AI 率）": "Uncertain (review advised; not counted)", "参考值": "reference value", "技术附录": "Technical appendix",
     "已知误差（本工具在独立测试集上的实测）": "Known error rates (measured on held-out test sets)",
     "测试集（未参与训练和校准）": "Test set (not used for training or calibration)", "AI 检出率": "AI detection rate",
     "人写误判率（95% 上限）": "Human false-positive rate (95% upper bound)",
@@ -165,14 +165,14 @@ def seg_tag(seg) -> str:
         return _("引文为主，不计入")
     if k == "reference_only":
         return _("仅供参考，不计入")
-    return seg.get("label") or (_("可能 AI（低置信，未计入主 AI 率）") if seg.get("near_threshold") else _("未达阈值"))
+    return seg.get("label") or (_("存疑（建议人工复核，不计入 AI 率）") if seg.get("near_threshold") else _("未见明显 AI 特征"))
 
 
 def bar(summary, width):
     """AI 率分级色条：高度 / 中度 / 轻度 / 接近阈值 / 其余。"""
     parts = [(_("高度疑似"), summary.get("high_rate") or 0, C_HIGH), (_("中度疑似"), summary.get("mid_rate") or 0, C_MID),
              (_("轻度疑似"), summary.get("light_rate") or 0, C_LIGHT),
-             (_("可能 AI（低置信，未计入主 AI 率）"), summary.get("near_threshold_rate") or 0, C_NEAR)]
+             (_("存疑（建议人工复核，不计入 AI 率）"), summary.get("near_threshold_rate") or 0, C_NEAR)]
     rest = max(0.0, 1 - sum(p for _n, p, _c in parts))
     d = Drawing(width, 34)
     x, h = 0.0, 12
@@ -230,8 +230,8 @@ def _build(payload: dict) -> bytes:
     left = [big, Paragraph(f"{_('AI 率')} · {verdict}", S["bigsub"])]
     stats = [
         [_("总字数"), f"{s.get('total_chars', '—')}", _("计入字数"), f"{s.get('counted_chars', '—')}"],
-        [_("未计入（参考文献 / 引文等）"), f"{s.get('excluded_chars', '—')}", _("平均 AI 概率"), pct(s.get("mean_prob"))],
-        [_("含“可能 AI”的上限"), pct(s.get("ai_rate_upper")), "", ""],
+        [_("未计入（参考文献 / 引文等）"), f"{s.get('excluded_chars', '—')}", _("含存疑部分的上限"), pct(s.get("ai_rate_upper"))],
+        *([[_("平均分类器分数"), pct(s.get("mean_prob")), "", ""]] if detail else []),
         *([[_("判定阈值"), pct(s.get("threshold")), _("校准"), _("已校准") if s.get("calibrated") else _("未校准")]] if detail else []),
         [_("检测模式"), _("快速（抽样）") if s.get("mode") == "fast" else _("完整"),
          _("文体"), (", " if en else "、").join(f"{_reg(k)} {v} {_('字') if en else '字'}"
@@ -311,18 +311,22 @@ def _build(payload: dict) -> bytes:
     # ---- 分段明细 ----
     story.append(Paragraph(_("分段明细"), S["h2"]))
     legend = "　".join(f'<font color="{LEVEL_COLOR[k].hexval().replace("0x", "#")}">■</font> {_(n)}' for k, n in
-                      (("high", "高度疑似"), ("mid", "中度疑似"), ("light", "轻度疑似"), ("near", "可能 AI（低置信）"),
-                       ("low", "未达阈值"), ("none", "不计入")))
+                      (("high", "高度疑似"), ("mid", "中度疑似"), ("light", "轻度疑似"), ("near", "存疑"),
+                       ("low", "未见明显 AI 特征"), ("none", "不计入")))
     story += [Paragraph(legend, S["small"]), Spacer(1, 4)]
     for seg in segs:
         lv = seg_level(seg)
         c = LEVEL_COLOR[lv].hexval().replace("0x", "#")
-        prob = (pct(seg.get("prob")) if seg.get("prob") is not None else
-                (f"{pct(seg.get('ref_prob'))} (reference value)" if en else f"{pct(seg.get('ref_prob'))}（参考值）")
-                if seg.get("ref_prob") is not None else "—")
+        # 用户端只给“AI 内容占比”（本段计入 AI 率的字数占比，与总 AI 率同一口径）；分类器原始分数只在技术细节里给
+        share = seg.get("ai_share")
+        prob = pct(share) if share is not None else "—"
+        if detail and seg.get("prob") is not None:
+            prob += f'（{_("分数")} {pct(seg.get("prob"))}）'
+        elif detail and seg.get("ref_prob") is not None:
+            prob += (f" (reference {pct(seg.get('ref_prob'))})" if en else f"（参考值 {pct(seg.get('ref_prob'))}）")
         no = f'Paragraph {seg.get("index", 0) + 1}' if en else f'第 {seg.get("index", 0) + 1} 段'
         head = (f'<font color="{c}">■</font> <b>{no}</b>　'
-                f'{esc(_reg(seg.get("register") or "zh"))} · {seg.get("chars", "")} {_("字")} · {_("AI 概率")} '
+                f'{esc(_reg(seg.get("register") or "zh"))} · {seg.get("chars", "")} {_("字")} · {_("AI 内容占比")} '
                 f'<font color="{c}">{prob}</font>　<font backColor="{c}" color="#ffffff"> {esc_t(seg_tag(seg))} </font>')
         sty = ParagraphStyle("seg", parent=S["body"], backColor=colors.HexColor(TINT[lv]), borderPadding=(4, 6, 4, 6),
                              borderColor=LEVEL_COLOR[lv], borderWidth=0, leftIndent=2)
