@@ -372,6 +372,7 @@ UNIT_ROUTE_BRIDGE_CP = float(os.getenv("UNIT_ROUTE_BRIDGE_CP", "0.5") or 0)   # 
 UNIT_ROUTE_FAMILY_MAX = _int("UNIT_ROUTE_FAMILY_MAX", 1)   # 1：合块分数与原分块分数取较高者；2：原分块有分数时用原分数，合块只补空缺
 UNIT_ROUTE_FAMILY_CTX = _int("UNIT_ROUTE_FAMILY_CTX", 0)     # 1：合块打分不享受“很肯定”豁免，须前后文有 AI 证据
 UNIT_ROUTE_FAMILY_MIN = _int("UNIT_ROUTE_FAMILY_MIN", 0)     # 合块打分的最少汉字数
+UNIT_ROUTE_FAMILY_KEEP_P = float(os.getenv("UNIT_ROUTE_FAMILY_KEEP_P", "0"))   # 原分块分数低于此值时保留原分数
 UNIT_ROUTE_MIN = _int("UNIT_ROUTE_MIN", 16)   # 合块后至少多少汉字才改用该文体模型
 UNIT_ROUTE_STYLE_TH = float(os.getenv("UNIT_ROUTE_STYLE_TH", "0.8") or 0)   # >0：规则判为现代文、但文体模型（regstyle）古典概率≥此值的句子也分流
 UNIT_ROUTE_STYLE_MIN = _int("UNIT_ROUTE_STYLE_MIN", 24)   # 文体模型分流的句块至少多少汉字（0 = 同 UNIT_ROUTE_MIN）
