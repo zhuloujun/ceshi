@@ -1143,13 +1143,16 @@ class Engine:
                     for a_, b_ in sp:
                         ur_acc.append(_ur(x.text[a_:b_]))
                     ur = ur_acc
+                    def _cpl(t_):
+                        # 合块模式下只把带分号的上下联当对联逐副打分；排比式的散曲句（“旧布袍，残书箱，三尺桌儿靠东墙”）不算
+                        return is_couplet(t_) and (not config.UNIT_ROUTE_MERGE_FAMILY or "；" in t_ or ";" in t_)
                     j_ = 0
                     while j_ < len(sp):
                         if ur[j_] == "zh":
                             j_ += 1
                             continue
                         k_ = j_ + 1
-                        if not (config.UNIT_ROUTE_COUPLET_SINGLE and is_couplet(x.text[sp[j_][0]:sp[j_][1]])):
+                        if not (config.UNIT_ROUTE_COUPLET_SINGLE and _cpl(x.text[sp[j_][0]:sp[j_][1]])):
                             if config.UNIT_ROUTE_MERGE_FAMILY:
                                 # 文言、诗词两类句子连在一起时合成一块（2026-11-21 cs1119：一段 70 字的 AI 散曲被逐句分别判成
                                 # 文言 / 现代文 / 诗词，每块都不足 24 字，没有一块交给专用模型）；夹在中间的极短句（<8 字）一并并入
@@ -1160,7 +1163,7 @@ class Engine:
                                     return nxt_ and (len(re.findall(r"[\u4e00-\u9fff]", x.text[sp[m_][0]:sp[m_][1]])) < 8
                                                      or cps_.get(m_, 0.0) >= config.UNIT_ROUTE_BRIDGE_CP)
                                 while k_ < len(sp) and _fam(k_) and not (config.UNIT_ROUTE_COUPLET_SINGLE and
-                                                                        is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
+                                                                        _cpl(x.text[sp[k_][0]:sp[k_][1]])):
                                     k_ += 1
                                 cnt_ = {}
                                 for m_ in range(j_, k_):
@@ -1171,7 +1174,7 @@ class Engine:
                                     ur[m_] = rg_
                             else:
                                 while k_ < len(sp) and ur[k_] == ur[j_] and not (config.UNIT_ROUTE_COUPLET_SINGLE and
-                                                                               is_couplet(x.text[sp[k_][0]:sp[k_][1]])):
+                                                                               _cpl(x.text[sp[k_][0]:sp[k_][1]])):
                                     k_ += 1
                         run_t = x.text[sp[j_][0]:sp[k_ - 1][1]]
                         if os.getenv("UNIT_HMM_DEBUG"):
