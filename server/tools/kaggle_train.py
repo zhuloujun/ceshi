@@ -147,6 +147,8 @@ def main():
     ap.add_argument("--repo", default=os.getenv("GITHUB_REPOSITORY", "zhuloujun/ceshi"))
     ap.add_argument("--args", default="")
     ap.add_argument("--max-hours", type=float, default=5.5)
+    ap.add_argument("--attach", action="store_true",
+                    help="不推送新版本，只等待并下载 Kaggle 上这个脚本当前（或刚跑完的）版本的结果（上次排队太久、GitHub 端先超时时用）")
     ap.add_argument("--user-docs-b64", default=os.getenv("USER_DOCS_B64", "") or _event_input("user_docs"),
                     help="base64(xz(jsonl))：用户提供的已标注文档段落 {text, y, register, doc}，只写进私有 Kaggle 脚本")
     a = ap.parse_args()
@@ -181,8 +183,8 @@ def main():
 
     # 推送新版本：失败（常见原因是 Kaggle 同时运行的 GPU 会话已满）就每 5 分钟重试，最多 1 小时。
     # 必须确认推送成功：否则下面查到的是上一个版本的"complete"状态，会把上一次训练的结果当成这次的。
-    pushed = False
-    for attempt in range(int(os.getenv("KAGGLE_PUSH_TRIES", "13"))):
+    pushed = a.attach
+    for attempt in range(0 if a.attach else int(os.getenv("KAGGLE_PUSH_TRIES", "13"))):
         extra = ["--accelerator", "NvidiaTeslaT4"] if attempt % 2 == 0 else []
         code, out = kaggle("kernels", "push", "-p", str(d), *extra, check=False)
         print(out, flush=True)
@@ -193,8 +195,8 @@ def main():
         time.sleep(300)
     if not pushed:
         raise SystemExit("::error::Kaggle 推送一直失败（见上面的输出），没有开始训练")
-    t0, last, seen_active = time.time(), "", False
-    time.sleep(60)
+    t0, last, seen_active, t_run = time.time(), "", a.attach, None
+    time.sleep(5 if a.attach else 60)
     while True:
         _, st = kaggle("kernels", "status", ref, check=False)
         s = st.lower()
@@ -203,12 +205,17 @@ def main():
             last = s
         if "running" in s or "queued" in s:
             seen_active = True
+        if "running" in s and t_run is None:
+            t_run = time.time()
         if seen_active and ("complete" in s or "error" in s or "cancel" in s):
             break
         if not seen_active and time.time() - t0 > 1800:
             raise SystemExit("::error::推送后 30 分钟仍未开始运行，可能拿到的是旧版本状态")
+        # 排队时间不算训练时间：Kaggle 免费 GPU 周末常排队数小时。GitHub 端到 max_hours 就先退出，
+        # Kaggle 上的训练会继续跑完，之后用 --attach 再运行一次即可取回结果。
         if time.time() - t0 > a.max_hours * 3600:
-            raise SystemExit("Kaggle 训练超时")
+            raise SystemExit("::error::GitHub 端等待超时（" + ("已运行" if t_run else "仍在排队") +
+                             "）。Kaggle 上的训练不受影响，跑完后用 attach=true 重新运行本工作流取回模型")
         time.sleep(60)
 
     outdir = d / "out"

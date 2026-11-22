@@ -13,6 +13,9 @@ on:
       args:
         description: "传给训练脚本的额外参数（可留空）"
         default: ""
+      attach:
+        description: "true = 不重新训练，只取回 Kaggle 上刚跑完（或正在跑）的那次训练结果"
+        default: "false"
       user_docs:
         description: "可选：base64(xz(jsonl)) 或 enc:<加密文件地址>#<密钥>，用户提供的已标注文档段落（只写进私有 Kaggle 脚本，不进仓库、不进日志）"
         default: ""
@@ -46,7 +49,7 @@ jobs:
         run: |
           _AT="${{ secrets.ADMIN_TOKEN || secrets.HF_ADMIN_TOKEN }}"; _CK=$(printf %s corpus-v1 | openssl dgst -sha256 -hmac "$_AT" | awk '{print $NF}'); echo "::add-mask::$_CK"; unset _AT
           export CORPUS_SPEC="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/data-1020/pub_corpus.enc#$_CK"; unset _CK   # Kaggle 上还原加密的真人语料
-          python -u server/tools/kaggle_train.py --lang "${{ github.event.inputs.kind }}" --sha "$GITHUB_SHA" --args "${{ github.event.inputs.args }}"
+          python -u server/tools/kaggle_train.py --lang "${{ github.event.inputs.kind }}" --sha "$GITHUB_SHA" --args "${{ github.event.inputs.args }}" $([ "${{ github.event.inputs.attach }}" = "true" ] && echo --attach)
           N="${{ github.event.inputs.kind }}-classifier"
           mkdir -p /tmp/x && tar xzf $N.tar.gz -C /tmp/x
           python3 -c "import json,sys;r=json.load(open('/tmp/x/'+sys.argv[1]+'/training_result.json'));print('::notice title=训练结果::'+json.dumps(r,ensure_ascii=False)[:6000])" $N
