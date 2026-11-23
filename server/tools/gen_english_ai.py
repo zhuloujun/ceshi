@@ -41,6 +41,9 @@ PROVIDERS = {
                                   for m in ("ernie-5.1", "ernie-5.0", "ernie-x1.1-preview", "ernie-4.5-turbo-32k", "ernie-x1-turbo-32k", "ernie-4.5-turbo-128k",
                                             "ernie-4.0-turbo-8k", "ernie-3.5-8k", "ernie-speed-128k",
                                             "ernie-speed-8k", "ernie-lite-8k")]),
+    # 智谱 GLM：没有单独的智谱密钥，借用千帆（文心同一个密钥）上托管的 GLM 模型；生成的文本单独记为 zhipu
+    "zhipu": ("WENXIN_API_KEY", [("https://qianfan.baidubce.com/v2/chat/completions", m)
+                                 for m in ("glm-5.3", "glm-5.3-flash", "glm-5.1", "glm-5", "glm-4.6", "glm-4.5")]),
     "qwen": ("DASHSCOPE_API_KEY", [("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", m)
                                    for m in ("qwen-plus", "qwen-max", "qwen3-max", "qwen-turbo", "qwen-plus-latest")]),
     # 豆包（火山方舟）：模型名带日期版本，依次尝试；也可以在 Secrets 里设 DOUBAO_MODEL（如推理接入点 ep-xxxx）
