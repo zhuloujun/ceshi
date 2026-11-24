@@ -27,4 +27,11 @@ jobs:
             else bad=$((bad+1)); echo "::warning title=$t::$(head -c 200 /tmp/e)"; fi
           done < .github/retag/map.txt
           echo "::notice title=标签::已更新 $ok 个，失败 $bad 个"
+          # 删除标签会让对应的 Release 变成草稿：按名称找回草稿，重新挂到新标签并发布
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --paginate -q '.[]|select(.draft)|"\(.id) \(.tag_name)"' > /tmp/drafts || true
+          while read id t; do
+            grep -q "^$t " .github/retag/map.txt || continue
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/$id" -f tag_name="$t" -F draft=false >/dev/null && echo "republished $t" || { bad=$((bad+1)); echo "::warning title=release $t::republish failed"; }
+          done < /tmp/drafts
+          echo "::notice title=发布::草稿 $(wc -l < /tmp/drafts) 个，失败累计 $bad"
           [ "$bad" = 0 ]
