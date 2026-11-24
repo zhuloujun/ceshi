@@ -430,18 +430,18 @@
    "calibrated": true,
    "signals": {
     "fastdetect": {
-     "center": -0.3182963229320965,
-     "scale": 1.2176748460873608,
+     "center": -0.31857554749489236,
+     "scale": 1.2176267714125655,
      "direction": 1
     },
     "binoculars": {
-     "center": 1.0180566231515586,
-     "scale": 0.08597177787935353,
+     "center": 1.0180792296659344,
+     "scale": 0.08597322756976847,
      "direction": -1
     },
     "classifier": {
-     "center": 0.500515108811669,
-     "scale": 0.27173654688936655,
+     "center": 0.5009080981835723,
+     "scale": 0.24968164316575217,
      "direction": 1
     }
    },
@@ -450,18 +450,18 @@
     "binoculars": 0.25,
     "classifier": 0.4
    },
-   "threshold": 0.8481,
-   "note": "内置默认校准（诗词）：只用诗词分类器；最差情况 AUROC 0.6536。当代人写误判 3.0%、唐宋名篇误判 2.2%，诗词计入 AI 率。",
+   "threshold": 0.8737,
+   "note": "内置默认校准（诗词）：只用诗词分类器；最差情况 AUROC 0.6703。当代人写误判 2.7%、唐宋名篇误判 2.2%，诗词计入 AI 率。",
    "lr": {
     "w": [
-     2.8164214189472054
+     3.007698267503036
     ],
-    "b": -0.2896840707767017,
+    "b": -0.22575356156171028,
     "mean": [
-     0.8182788848177082
+     0.6379309640558611
     ],
     "std": [
-     6.412703722558175
+     6.240796210201704
     ],
     "features": [
      "logit_classifier"
@@ -471,7 +471,7 @@
    "models": {
     "observer": "Qwen/Qwen2.5-0.5B",
     "performer": "Qwen/Qwen2.5-0.5B-Instruct",
-    "classifier": "poetry-classifier-v26"
+    "classifier": "poetry-classifier-v52"
    },
    "source": "ChangAn 当代旧体诗词（人写）+ DeepSeek / 豆包 / GPT-4.1 生成诗词；诗词专用分类器（ChangAn 训练集微调）",
    "profile": "zh_poetry"
