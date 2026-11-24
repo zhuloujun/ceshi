@@ -14,7 +14,7 @@ runs:
         AT: ${{ inputs.admin_token }}
       run: |
         L=$(ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/gen_en/pl_*.jsonl \
-              server/tools/data/human_cl/*.jsonl server/tools/data/eval_en_user_docs.jsonl server/tools/data/eval_zh_user_docs.jsonl server/tools/data/ai_user_*.txt server/tools/data/zh_doc_check.json 2>/dev/null)
+              server/tools/data/human_cl/*.jsonl server/tools/data/eval_en_user_docs.jsonl server/tools/data/eval_zh_user_docs.jsonl server/tools/data/ai_user_*.txt server/tools/data/zh_doc_check.json server/tools/data/gen_en/us_chatgpt_gemini.jsonl server/tools/data/gen_zh/ai_chatgpt_gemini.jsonl 2>/dev/null)
         D=$(cat $L | sha256sum | awk '{print $1}')
         if [ "$D" = "$(cat /tmp/corpus.digest 2>/dev/null)" ]; then echo "真人语料没有变化"; exit 0; fi
         [ -n "$AT" ] || { echo "::error::缺少 ADMIN_TOKEN，无法保存新的真人语料"; exit 1; }

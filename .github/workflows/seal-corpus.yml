@@ -27,7 +27,7 @@ jobs:
           [ -n "$AT" ] || { echo "::error::缺少 ADMIN_TOKEN"; exit 1; }
           ls server/tools/data/gen_zh/human_*.jsonl server/tools/data/gen_en/*_human.jsonl server/tools/data/gen_en/pl_*.jsonl \
              server/tools/data/human_cl/*.jsonl server/tools/data/eval_en_user_docs.jsonl server/tools/data/eval_zh_user_docs.jsonl \
-             server/tools/data/ai_user_*.txt server/tools/data/zh_doc_check.json > /tmp/list
+             server/tools/data/ai_user_*.txt server/tools/data/zh_doc_check.json server/tools/data/gen_en/us_chatgpt_gemini.jsonl server/tools/data/gen_zh/ai_chatgpt_gemini.jsonl > /tmp/list
           wc -l /tmp/list; cat /tmp/list
           tar cJf /tmp/pub_corpus.tar.xz -T /tmp/list
           K=$(printf '%s' corpus-v1 | openssl dgst -sha256 -hmac "$AT" | awk '{print $NF}'); echo "::add-mask::$K"
