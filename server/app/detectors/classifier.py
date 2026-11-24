@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 import logging
 import re
 import threading
@@ -16,6 +17,9 @@ log = logging.getLogger("classifier")
 
 _AI_WORDS = re.compile(r"(^|[^a-z])(ai|machine|gpt|chatgpt|generated|fake|llm|aigc|robot)([^a-z]|$)", re.I)
 _HUMAN_WORDS = re.compile(r"(human|real|人类|人工)", re.I)
+
+
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 
 class Classifier:
@@ -40,6 +44,12 @@ class Classifier:
                  if ens.exists() else [self.model_name])
         self.tok = AutoTokenizer.from_pretrained(names[0])
         self.models = [AutoModelForSequenceClassification.from_pretrained(n).eval() for n in names]
+        self.short_solo = 0
+        if ens.exists():
+            self.short_solo = int(json.loads(ens.read_text("utf-8")).get("short_solo", 0) or 0)
+            env = os.getenv("POETRY_SHORT_SOLO" if "poetry" in str(self.model_name).lower() else "CLASSICAL_SHORT_SOLO", "")
+            if env.strip().isdigit():
+                self.short_solo = int(env)
         self.model = self.models[0]
         self.labels = {int(k): str(v) for k, v in self.model.config.id2label.items()}
         self.ai_index = self._resolve_ai_index()
@@ -70,12 +80,20 @@ class Classifier:
                 enc = self.tok(texts[i:i + batch_size], truncation=True, max_length=self.max_tokens,
                                padding=True, return_tensors="pt")
                 models = getattr(self, "models", None) or [self.model]
-                lo = None
+                xs = []
                 for m in models:
                     p = torch.softmax(m(**enc).logits.float(), dim=-1)[:, self.ai_index].clamp(1e-6, 1 - 1e-6)
-                    x = torch.log(p) - torch.log1p(-p)
-                    lo = x if lo is None else lo + x
-                out.extend(torch.sigmoid(lo / len(models)).tolist())
+                    xs.append(torch.log(p) - torch.log1p(-p))
+                lo = sum(xs) / len(xs)
+                # 多版本合议的"短文本只用第一个成员"（2026-11-24）：新训练的诗词模型对 15–30 字的单副对联、
+                # 短绝句明显没有旧版 v26 有把握（对照实验：只换校准不换模型，结果与线上完全一致），
+                # 合议后这些短篇被拉到阈值以下。短于 short_solo 个汉字的文本只用第一个成员（旧版）打分。
+                n_solo = getattr(self, "short_solo", 0)
+                if n_solo and len(xs) > 1:
+                    batch = texts[i:i + batch_size]
+                    short = torch.tensor([len(_CJK_RE.findall(t)) < n_solo for t in batch])
+                    lo = torch.where(short, xs[0], lo)
+                out.extend(torch.sigmoid(lo).tolist())
         return out
 
 
