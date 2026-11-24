@@ -122,7 +122,7 @@ def detect(text, tok):
             "segments": [{"block": s.get("block"), "register": s.get("register"), "chars": s.get("chars"),
                           "counted": s.get("kind") == "body", "kind": s.get("kind"), "prob": s.get("prob"),
                           "level": s.get("level"), "threshold": s.get("threshold"),
-                          "classifier": (s.get("raw") or {}).get("classifier"), "raw": s.get("raw"), "head": (s.get("text") or "")[:30]}
+                          "classifier": (s.get("raw") or {}).get("classifier"), "raw": s.get("raw")}
                          for s in res.get("segments", [])]}
 
 

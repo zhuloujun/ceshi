@@ -40,6 +40,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/tools/data/zh_doc_check.json server/tools/data/gen_zh || true
+          git add server/tools/data/gen_zh || true
           git commit -m "zh doc check results [skip ci]" || exit 0
           git pull --rebase origin main && git push origin HEAD:main
