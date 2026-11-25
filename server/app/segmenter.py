@@ -1505,6 +1505,91 @@ def split_script_switches(text: str):
     return text, n_split
 
 
+# 简体 / 繁体切换（2026-11-25 cs1123：AI 写的简体宋词后面直接接真人繁体骈文，没有换行，并成一块 400 多字的“文言引文”，
+# AI 词被真人骈文冲淡、整块排除）。只有简体才有的常用字、只有繁体才有的常用字各约 400 个（由 OpenCC 字表按常用度选出）。
+_SIMP_ONLY = frozenset('与业丛东丝两个临为举义乌乐乡书乱争亲从众会传伤伫体侣侧倾儿兰关兴内写军农况凄凉减凤凭刘别剑剧动劳势华卢卧却历压参双发变叠号叹听启吴咏响唤啸团园围国图圆圣场坠堕墙壮声壶处复头妆娇孙学宁宝宫对寻寿将尔尘尝尽层岁岂岛岭峰师带并床庐应开异弃张弥弹强归当径忆忧怀态怅怜总恋恶悬惊惯懒戏战户执扫扬抚抛护报拟拥挥换携摇数斋断无旧时晓暂机杂条来杨枫栏树栖样桥梦楼横欢残气汉汤没沧泪泽洒浅浊浑浓涛渊渐渔温湿满滨潇潜灭灯灵炉点烂烛烟热爱牵犹独环琼瑶电画痴盏盘禅离积称穷窥笔笺笼箫篱红纤约纪纱纵纷纸细终经结绕绝绪续绮绵绿缕编缘网罗罢羡群肠脉脱腾艳节苍苏荆荡荣药莲莺萦萧萨虚虽蛮蛰蝉补袅见观觅视觉触计认记许论访识诉词译试诗话语误说诸读谁调谈谢负贤费贺赋赏赖赠踪车轩转轮轻载辉辞边达过还远连迟迹遗遥邻鉴钟钱铁银销锁错锦镇镜长门闭问闲间闻阁阑阳阴阵阶际陈随隐难雾静韵顶须顾频题颜风飘飞饮馀马驰驱驻骚鬓鱼鸟鸡鸣鸥鸦鸪鸿鹤鹧鹰黄齐龙')
+_TRAD_ONLY = frozenset('並亂佇併來侶個側傳傷傾儘兒內兩別劇劉劍動勞勢卻厤參叢吳問啓啟喚嘆嘗嘯噁噹嚐囌國圍園圓圖團執報場塵墜墮墻壓壯壺壽夢妝嫋嬌孫學宮寧寫寶將尋對層峯島嵗嶺師帶廬張強彆彈彌徑從復悵悽惡愛態慣憂憐憑憶應懶懷懸戀戰戲戶拋掃揚換揮搖撫擁擬攜數斷時暫曆曉書會東條棄棲楊楓業榮樂樓樣樹橋機橫欄歎歡歲歷歸殘氣沒況涼淒淚淵淺減渾湯溫溼滄滅滿漁漢漸潛澤濁濃濕濤濱瀟瀰灑為烏無煙熱燈燭爐爛爭爲爾牀牆牽猶獨瑤環瓊甦甯畫異畵當疊癡發盞盡盤盧盪眾禪稱積窮窺筆箇箋節簫籠籬糰紀約紅紗紙紛細終結絕絲絶經綠網綺綿緑緒緣編縈縱縴縷總繞續纖罷羅羣羨義聖聞聲聽脈脫腸臥臨與興舉舊艷荊華菸葯蒼蓮蔘蕩蕭薩藥蘇蘭處虛號蟄蟬蠻衆裊補複覆見覓視親覺觀觸計記訪許訴詞詠試詩話認語誤說説誰調談論諸謝識譯護讀變豈豔負費賀賞賢賦賴贈跡蹟蹤車軍軒載輕輝輪轉辭農連過達遙遠遲遺還邊鄉鄰鈡銀銷錢錦錯鍾鎖鎭鎮鏡鐘鐵鑑鑒長門閉開閑閒間閣闌關陣陰陳陽階際隨隱雖雙雜雞離難電霧靈靜韻響頂須頭頻題顏顔顧風飄飛飲餘馬馳駐騰騷驅驚體髮鬚鬢魚鳥鳳鳴鴉鴣鴻鶯鶴鷄鷓鷗鷹黃點齊齋龍𡻕')
+
+
+def split_tradsimp_switches(text: str, min_run: int | None = None, min_line: int = 80, group: int = 24):
+    """同一段里简体、繁体成块交替时，在切换处断开（通常是不同来源的文字拼在一起）。逐句凑约 24 字一组，
+    组内简体专用字、繁体专用字各数一数：一方 ≥ 2 个且占 ≥ 80% 才算该字体，否则跟随前一组；每块都 ≥ min_run 字才断开。
+    返回 (文本, 断开的处数)。"""
+    min_run = min_run or config.SPLIT_TRADSIMP_MIN
+    lines = (text or "").split("\n")
+    n_split = 0
+    for li, line in enumerate(lines):
+        if len(_CJK.findall(line)) < min_line:
+            continue
+        if not (any(c in _TRAD_ONLY for c in line) and any(c in _SIMP_ONLY for c in line)):
+            continue
+        sents = [s for s in _ZH_SENT.split(line) if s]
+        sents = [x for s in sents for x in re.split(r"(?<=[，,])", s) if x] if len(sents) < 3 else sents
+        groups, cur = [], ""
+        for s in sents:
+            cur += s
+            if len(_CJK.findall(cur)) >= group:
+                groups.append(cur); cur = ""
+        if cur:
+            if groups:
+                groups[-1] += cur
+            else:
+                groups.append(cur)
+        if len(groups) < 2:
+            continue
+        runs = []
+        for g in groups:
+            ns = sum(c in _SIMP_ONLY for c in g); nt = sum(c in _TRAD_ONLY for c in g)
+            k = "S" if ns >= 2 and ns >= 4 * nt else "T" if nt >= 2 and nt >= 4 * ns else "?"
+            if runs and (k == "?" or k == runs[-1][0]):
+                runs[-1][1] += g
+            elif not runs and k == "?":
+                runs.append(["?", g])
+            elif runs and runs[-1][0] == "?":
+                runs[-1] = [k, runs[-1][1] + g]
+            else:
+                runs.append([k, g])
+        size = lambda r: len(_CJK.findall(r[1]))
+        merged = []
+        for r in runs:
+            if merged and (size(r) < min_run or merged[-1][0] == r[0]):
+                merged[-1][1] += r[1]
+            else:
+                merged.append(list(r))
+        if len(merged) >= 2 and size(merged[0]) < min_run:
+            merged[1][1] = merged[0][1] + merged[1][1]
+            merged.pop(0)
+        if len(merged) >= 2 and all(size(r) >= min_run for r in merged):
+            # 组是按约 24 字凑的，切点可能落在组中间：在切点前后各一组的范围内逐句（逗号）挪动，
+            # 取“前面属前一种字体、后面属后一种字体”的专用字最多的位置
+            for k in range(len(merged) - 1):
+                a, b = merged[k], merged[k + 1]
+                ka, kb = a[0], b[0]
+                if "?" in (ka, kb):
+                    continue
+                win = a[1][-60:] + b[1][:60]
+                pieces = [x for x in re.split(r"(?<=[，,。！？!?；;])", win) if x]
+                base = len(a[1]) - len(a[1][-60:])
+                ia = _SIMP_ONLY if ka == "S" else _TRAD_ONLY
+                ib = _SIMP_ONLY if kb == "S" else _TRAD_ONLY
+                best, pos, acc = None, None, 0
+                for j in range(len(pieces) + 1):
+                    if j:
+                        acc += len(pieces[j - 1])
+                    left, right = win[:acc], win[acc:]
+                    sc = sum(c in ia for c in left) - sum(c in ib for c in left) \
+                        + sum(c in ib for c in right) - sum(c in ia for c in right)
+                    if best is None or sc > best:
+                        best, pos = sc, acc
+                whole = a[1] + b[1]
+                cut = base + pos
+                a[1], b[1] = whole[:cut], whole[cut:]
+            if all(size(r) >= min_run for r in merged):
+                lines[li] = "\n\n".join(r[1].strip() for r in merged)
+                n_split += len(merged) - 1
+    return "\n".join(lines), n_split
+
+
 def _rhyme_pieces(line: str, min_piece: int = 16):
     """按组投票才认出是诗词 / 文言的一段（见 _vote_register：几首作品首尾相接），在换韵处断开，每首单独判断
     （2026-11-16 cs1116：AI 骈句 + 两首真人散曲 + AI 骈句 + AI 词并成 350 字一块，整块判成 AI，两首真人散曲被连带误判）。

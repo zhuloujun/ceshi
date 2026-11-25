@@ -19,7 +19,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_couplet_runs, split_work_spans, split_famous_spans, detect_register, is_couplet_run, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_tradsimp_switches, split_couplet_runs, split_work_spans, split_famous_spans, detect_register, is_couplet_run, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -1493,8 +1493,11 @@ class Engine:
                 text, n_fam = split_famous_spans(text)
                 text, n_wk = split_work_spans(text)
                 text, n_cp = split_couplet_runs(text)
+                n_ts = 0
+                if config.SPLIT_TRADSIMP_MIN > 0:
+                    text, n_ts = split_tradsimp_switches(text)
                 text, n_reg = split_register_switches(text)
-                n_reg += n_fam + n_wk + n_cp
+                n_reg += n_fam + n_wk + n_cp + n_ts
                 n_scr += n_reg
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 参考文献核查要联网查询，和模型打分同时进行（见 app/refcheck.py）
