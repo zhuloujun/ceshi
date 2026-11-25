@@ -1765,7 +1765,9 @@ class Engine:
         if config.SMOOTH_UP_ONLY:
             for i, v in list(smoothed.items()):
                 raw = combos[i]["prob"] if i in combos else None
-                if v is not None and raw is not None and raw > v:
+                # 只撤销“把本已过阈值的段落拉到阈值以下”的平滑；没过阈值的段落照旧平滑（否则会被拉进“接近阈值”区间，
+                # 连带触发整篇判断：2026-11-25 回归 mxzh_03 真人词 67→73 分，被整篇判断计入）
+                if v is not None and raw is not None and raw > v and raw >= float(prof[i][0].get("threshold", 0.5)):
                     smoothed[i] = raw
 
         # 3) 整篇一致性（参考 Turnitin / 知网按“整篇作品”给结论的做法）：AI 文章通常整篇一次生成。
