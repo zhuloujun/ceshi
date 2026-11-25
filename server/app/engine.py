@@ -1759,6 +1759,14 @@ class Engine:
                 else:
                     run.append(i)
 
+        # 2b) 只往上平滑（2026-11-25）：现有 19 个测试集里，平滑把分数拉到阈值以下的文字 AI 约 3200 字、真人仅 20 字
+        #     （多是不同作品首尾相接、AI 小令被旁边真人散曲拉低，如 cs1120“谁将玉笛”自身 94 分被拉到 67 分）
+        if config.SMOOTH_UP_ONLY:
+            for i, v in list(smoothed.items()):
+                raw = combos[i]["prob"] if i in combos else None
+                if v is not None and raw is not None and raw > v:
+                    smoothed[i] = raw
+
         # 3) 整篇一致性（参考 Turnitin / 知网按“整篇作品”给结论的做法）：AI 文章通常整篇一次生成。
         #    同一篇作品（同一标题下、同一文体）里，已判为疑似 AI 的文字占多数时，
         #    本篇中“接近阈值”的段落也按轻度疑似计入，并注明原因。只会把接近阈值的段落往上拉，

@@ -214,6 +214,8 @@ USER_SAMPLE_MAX_WEIGHT = float(os.getenv("USER_SAMPLE_MAX_WEIGHT", "8") or 8)   
 FAST_MODE_MAX_SEGMENTS = _int("FAST_MODE_MAX_SEGMENTS", 60)  # 快速模式下语言模型最多检测多少段
 # 相邻段落平滑强度（0 = 不平滑，0.3 = 本段 70% + 相邻段 30%）
 SMOOTHING = float(os.getenv("SMOOTHING", "0.3") or 0.3)
+# 只允许平滑把分数往上拉、不往下拉（engine 2b）；2026-11-25 试验
+SMOOTH_UP_ONLY = _bool("SMOOTH_UP_ONLY", False)
 # 中文作品整篇判断：同一篇（≥3 段现代汉语正文）MPU 中文分类器得分的中位数（按字数加权）达到此值时，
 # 本篇未过阈值的段落按"轻度疑似（整篇判断）"计入。验证（2026-10，线上服务实测）：77 篇知乎真人长回答中
 # 未被判为 AI 的最高 0.79；DeepSeek / 文心 24 篇中文论文全部 ≥ 0.99，Kimi k3 6 篇里 5 篇 0.89–0.99，Claude 论文 0.90。
