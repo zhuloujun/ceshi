@@ -409,6 +409,7 @@ HYBRID_CL_HUMAN_MEAN = float(os.getenv("HYBRID_CL_HUMAN_MEAN", "0.35") or 0.35)
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
 # 同一段里简体、繁体成块交替时在切换处断开（segmenter.split_tradsimp_switches）；0 = 关闭。2026-11-25 试验
 SPLIT_TRADSIMP_MIN = _int("SPLIT_TRADSIMP_MIN", 0)
+SPLIT_TRADSIMP_CL = _bool("SPLIT_TRADSIMP_CL", True)
 # 同一段里夹着完整的词 / 近体诗：整首单独成段，不从作品中间切开（见 segmenter.split_work_spans）
 SPLIT_WORKS = _bool("SPLIT_WORKS", True)
 # 2026-11-15 cs1115：一段里首尾相接的几首律诗（全是 5 / 7 字句）不再并成一块——并起来超过 8 句就各自成段

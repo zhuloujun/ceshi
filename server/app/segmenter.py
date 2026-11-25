@@ -1584,7 +1584,18 @@ def split_tradsimp_switches(text: str, min_run: int | None = None, min_line: int
                 whole = a[1] + b[1]
                 cut = base + pos
                 a[1], b[1] = whole[:cut], whole[cut:]
-            if all(size(r) >= min_run for r in merged):
+            if config.SPLIT_TRADSIMP_CL:
+                # 只在切点两边都是文言 / 诗词时断开（现代文里的繁体段落多是引文或港台文字，断开反而打乱后面的人机切分；
+                # 2026-11-25 回归：mxzh_01 断开后 55 字 AI 段并入真人段而漏判）
+                cl = ("zh_classical", "zh_poetry")
+                kept = [merged[0]]
+                for r in merged[1:]:
+                    if detect_register(kept[-1][1][-80:]) in cl and detect_register(r[1][:80]) in cl:
+                        kept.append(r)
+                    else:
+                        kept[-1] = [kept[-1][0], kept[-1][1] + r[1]]
+                merged = kept
+            if len(merged) >= 2 and all(size(r) >= min_run for r in merged):
                 lines[li] = "\n\n".join(r[1].strip() for r in merged)
                 n_split += len(merged) - 1
     return "\n".join(lines), n_split
