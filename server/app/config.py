@@ -214,6 +214,8 @@ USER_SAMPLE_MAX_WEIGHT = float(os.getenv("USER_SAMPLE_MAX_WEIGHT", "8") or 8)   
 FAST_MODE_MAX_SEGMENTS = _int("FAST_MODE_MAX_SEGMENTS", 60)  # 快速模式下语言模型最多检测多少段
 # 相邻段落平滑强度（0 = 不平滑，0.3 = 本段 70% + 相邻段 30%）
 SMOOTHING = float(os.getenv("SMOOTHING", "0.3") or 0.3)
+# 只允许平滑把分数往上拉、不往下拉（engine 2b）；2026-11-25 试验
+SMOOTH_UP_ONLY = _bool("SMOOTH_UP_ONLY", False)
 # 中文作品整篇判断：同一篇（≥3 段现代汉语正文）MPU 中文分类器得分的中位数（按字数加权）达到此值时，
 # 本篇未过阈值的段落按"轻度疑似（整篇判断）"计入。验证（2026-10，线上服务实测）：77 篇知乎真人长回答中
 # 未被判为 AI 的最高 0.79；DeepSeek / 文心 24 篇中文论文全部 ≥ 0.99，Kimi k3 6 篇里 5 篇 0.89–0.99，Claude 论文 0.90。
@@ -405,6 +407,9 @@ HYBRID_CL_SWITCH_COST = float(os.getenv("HYBRID_CL_SWITCH_COST", "2.0") or 2.0)
 HYBRID_CL_HUMAN_MEAN = float(os.getenv("HYBRID_CL_HUMAN_MEAN", "0.35") or 0.35)
 # 一整段没有换行、现代汉语 / 文言 / 诗词首尾相接时，在文体切换处断开（segmenter.split_register_switches）；2026-11-06 试验
 SPLIT_REGISTER = _bool("SPLIT_REGISTER", True)
+# 同一段里简体、繁体成块交替时在切换处断开（segmenter.split_tradsimp_switches）；0 = 关闭。2026-11-25 试验
+SPLIT_TRADSIMP_MIN = _int("SPLIT_TRADSIMP_MIN", 0)
+SPLIT_TRADSIMP_CL = _bool("SPLIT_TRADSIMP_CL", True)
 # 同一段里夹着完整的词 / 近体诗：整首单独成段，不从作品中间切开（见 segmenter.split_work_spans）
 SPLIT_WORKS = _bool("SPLIT_WORKS", True)
 # 2026-11-15 cs1115：一段里首尾相接的几首律诗（全是 5 / 7 字句）不再并成一块——并起来超过 8 句就各自成段

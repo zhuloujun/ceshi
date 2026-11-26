@@ -19,7 +19,7 @@ from .detectors import stylometry
 from .famous import is_famous_verse
 from .detectors.classifier import Classifier, make_english_classifier
 from .detectors.lm_scorer import LMScorer
-from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_couplet_runs, split_work_spans, split_famous_spans, detect_register, is_couplet_run, is_english_paper, min_chars, normalize_classical, normalize_english,
+from .segmenter import (Segment, REGISTER_NAMES, unwrap_hard_wraps, deobfuscate, split_inline_labels, split_script_switches, split_register_switches, split_tradsimp_switches, split_couplet_runs, split_work_spans, split_famous_spans, detect_register, is_couplet_run, is_english_paper, min_chars, normalize_classical, normalize_english,
                         is_couplet, is_list_item, segment_text, strip_list_mark)
 
 log = logging.getLogger("engine")
@@ -1493,8 +1493,11 @@ class Engine:
                 text, n_fam = split_famous_spans(text)
                 text, n_wk = split_work_spans(text)
                 text, n_cp = split_couplet_runs(text)
+                n_ts = 0
+                if config.SPLIT_TRADSIMP_MIN > 0:
+                    text, n_ts = split_tradsimp_switches(text)
                 text, n_reg = split_register_switches(text)
-                n_reg += n_fam + n_wk + n_cp
+                n_reg += n_fam + n_wk + n_cp + n_ts
                 n_scr += n_reg
         segs = segment_text(text, exclude_references, flag_quotations, genre)
         # 参考文献核查要联网查询，和模型打分同时进行（见 app/refcheck.py）
@@ -1756,6 +1759,17 @@ class Engine:
                 else:
                     run.append(i)
 
+        # 2b) 只往上平滑（2026-11-25）：现有 19 个测试集里，平滑把分数拉到阈值以下的文字 AI 约 3200 字、真人仅 20 字
+        #     （多是不同作品首尾相接、AI 小令被旁边真人散曲拉低，如 cs1120“谁将玉笛”自身 94 分被拉到 67 分）
+        smoothed_w = dict(smoothed)   # 整篇一致性（3）仍按原来的双向平滑判断，避免只往上平滑后连带把接近阈值的真人段拉进来
+        if config.SMOOTH_UP_ONLY:
+            for i, v in list(smoothed.items()):
+                raw = combos[i]["prob"] if i in combos else None
+                # 只撤销“把本已过阈值的段落拉到阈值以下”的平滑；没过阈值的段落照旧平滑（否则会被拉进“接近阈值”区间，
+                # 连带触发整篇判断：2026-11-25 回归 mxzh_03 真人词 67→73 分，被整篇判断计入）
+                if v is not None and raw is not None and raw > v and raw >= float(prof[i][0].get("threshold", 0.5)):
+                    smoothed[i] = raw
+
         # 3) 整篇一致性（参考 Turnitin / 知网按“整篇作品”给结论的做法）：AI 文章通常整篇一次生成。
         #    同一篇作品（同一标题下、同一文体）里，已判为疑似 AI 的文字占多数时，
         #    本篇中“接近阈值”的段落也按轻度疑似计入，并注明原因。只会把接近阈值的段落往上拉，
@@ -1765,9 +1779,10 @@ class Engine:
             if len(idxs) < 3:
                 continue
             thr_g = {i: float(prof[i][0].get("threshold", 0.5)) for i in idxs}
-            tot = sum(len(segs_by_idx[i].text) for i in idxs if smoothed.get(i) is not None)
+            sw = smoothed_w if config.SMOOTH_UP_ONLY else smoothed
+            tot = sum(len(segs_by_idx[i].text) for i in idxs if sw.get(i) is not None)
             hit = sum(len(segs_by_idx[i].text) for i in idxs
-                      if smoothed.get(i) is not None and smoothed[i] >= thr_g[i])
+                      if sw.get(i) is not None and sw[i] >= thr_g[i])
             if tot and hit >= config.WORK_MAJORITY * tot:
                 work_ai.update(i for i in idxs if smoothed.get(i) is not None
                                and thr_g[i] - scoring.NEAR_MARGIN <= smoothed[i] < thr_g[i])
