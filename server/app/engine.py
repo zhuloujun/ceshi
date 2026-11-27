@@ -884,6 +884,22 @@ class Engine:
                 continue
             head = s.title if (s.title and s.text.startswith(s.title)) else ""
             text = s.text[len(head):]
+            carve = self._poetry_edge_carve(s, text) if config.POETRY_EDGE_CARVE else None
+            if carve:
+                n_split += 1
+                for k, (a, b, st, mean) in enumerate(carve):
+                    piece = text[a:b]
+                    lead = len(piece) - len(piece.lstrip())
+                    if k == 0 and head:
+                        piece, lead = head + piece, 0
+                    sub = Segment(index=0, text=piece.strip(), start=s.start + len(head) * (k > 0) + a + lead, kind=s.kind,
+                                  notes=list(s.notes) + ["人机混写切分：这几句与前后文明显不同，单独判断"],
+                                  register=s.register, block=next_block, title=head if k == 0 else "")
+                    sub.orig_block = s.block
+                    sub.hybrid = {"state": st, "mean": mean}
+                    next_block += 1
+                    out.append(sub)
+                continue
             if hybrid.size_of(text, s.register) < (2 * cfg["min_en"] if s.register == "en" else 2 * cfg["min_zh"]):
                 out.append(s)
                 continue
@@ -945,6 +961,46 @@ class Engine:
         for k, x in enumerate(out):
             x.index = k
         return out, n_split
+
+    def _poetry_edge_carve(self, s, text):
+        """诗词段首 / 段尾连续几句两种诗词模型都很肯定是人写、其余部分像 AI 时，返回 [(起, 止, 状态, 平均分)]，否则 None。"""
+        from . import hybrid
+        if s.register != "zh_poetry" or s.kind != "body" or not (self.tag_zp and self.tag_zp.ready):
+            return None
+        spans = hybrid.sentence_units(text, "zh_poetry", 12, 8)
+        if len(spans) < 3:
+            return None
+        tx = [text[a:b] for a, b in spans]
+        cl = self.classify(tx, ["zh_poetry"] * len(tx))
+        tg = self.tag_zp.span_probs(text, spans)
+        ok = [c is not None and g is not None and c < config.POETRY_EDGE_CL and g < config.POETRY_EDGE_TG
+              for c, g in zip(cl, tg)]
+        cjk = lambda t_: len(re.findall(r"[一-鿿]", t_))
+        best = None
+        for side in ("head", "tail"):
+            k = 0
+            idx = range(len(spans)) if side == "head" else range(len(spans) - 1, -1, -1)
+            for i in idx:
+                if not ok[i]:
+                    break
+                k += 1
+            if k == 0 or k >= len(spans):
+                continue
+            part = list(range(k)) if side == "head" else list(range(len(spans) - k, len(spans)))
+            rest = [i for i in range(len(spans)) if i not in part]
+            n_part = sum(cjk(tx[i]) for i in part)
+            rest_cl = [cl[i] for i in rest if cl[i] is not None]
+            if n_part < config.POETRY_EDGE_MIN or not rest_cl or sum(rest_cl) / len(rest_cl) < config.POETRY_EDGE_REST:
+                continue
+            if best is None or n_part > best[0]:
+                best = (n_part, side, part, rest)
+        if not best:
+            return None
+        _, side, part, rest = best
+        mean = lambda ids: round(sum(cl[i] for i in ids if cl[i] is not None) / max(1, sum(cl[i] is not None for i in ids)), 4)
+        pa = (spans[part[0]][0], spans[part[-1]][1], 0, mean(part))
+        ra = (spans[rest[0]][0], spans[rest[-1]][1], 1, mean(rest))
+        return [pa, ra] if side == "head" else [ra, pa]
 
     def _coh_gain(self, text, a, b, ctx_chars=160, n_tok=24):
         """这一句开头 n_tok 个词元：有前文时比没有前文时平均每词元少多少惊奇度（nats）。大 = 与前文衔接紧密。"""

@@ -263,6 +263,13 @@ SOURCE_VERIFY_MIN_CHARS = _int("SOURCE_VERIFY_MIN_CHARS", 20)
 QUOTE_UNCITED_MIN_CHARS = int(os.getenv("QUOTE_UNCITED_MIN_CHARS", "40") or 40)
 # 无引用痕迹的文言 / 诗词“引文”也做人机混写切分：名篇原文与 AI 仿作首尾相接时，整段当引文会把 AI 部分一起排除
 HYBRID_SPLIT_UNCITED = _bool("HYBRID_SPLIT_UNCITED", True)
+# 诗词段首 / 段尾连续几句“诗词分类器与诗词句级模型都很肯定是人写”时，把这几句单独切开判断（2026-11-27 cs1127：
+# AI 散曲后面紧接 104 字真人文言游记，整段按诗词判为 AI）。只切段首 / 段尾、且两种模型都很低，避免把 AI 诗词拆碎
+POETRY_EDGE_CARVE = _bool("POETRY_EDGE_CARVE", False)
+POETRY_EDGE_CL = float(os.getenv("POETRY_EDGE_CL", "0.03"))   # 诗词分类器单句分数上限
+POETRY_EDGE_TG = float(os.getenv("POETRY_EDGE_TG", "0.2"))    # 诗词句级模型单句分数上限
+POETRY_EDGE_MIN = _int("POETRY_EDGE_MIN", 40)                 # 切出部分至少多少汉字
+POETRY_EDGE_REST = float(os.getenv("POETRY_EDGE_REST", "0.5"))  # 余下部分诗词分类器平均分至少多少（像 AI 才切）
 # 几副对联首尾相接按对联（诗词）处理（segmenter.is_couplet_run）
 COUPLET_RUN = _bool("COUPLET_RUN", True)
 # 分行的现代诗整首按一段判断（segmenter._free_verse_lines）
