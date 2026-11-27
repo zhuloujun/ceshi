@@ -270,6 +270,8 @@ POETRY_EDGE_CL = float(os.getenv("POETRY_EDGE_CL", "0.03"))   # 诗词分类器�
 POETRY_EDGE_TG = float(os.getenv("POETRY_EDGE_TG", "0.2"))    # 诗词句级模型单句分数上限
 POETRY_EDGE_MIN = _int("POETRY_EDGE_MIN", 40)                 # 切出部分至少多少汉字
 POETRY_EDGE_REST = float(os.getenv("POETRY_EDGE_REST", "0.5"))  # 余下部分诗词分类器平均分至少多少（像 AI 才切）
+POETRY_EDGE_ADJ_TG = float(os.getenv("POETRY_EDGE_ADJ_TG", "0.9"))  # 切口另一侧紧邻的一句：句级模型至少多少（确实像 AI 才切）
+POETRY_EDGE_ADJ_CL = float(os.getenv("POETRY_EDGE_ADJ_CL", "0.5"))  # 同上，诗词分类器至少多少
 # 几副对联首尾相接按对联（诗词）处理（segmenter.is_couplet_run）
 COUPLET_RUN = _bool("COUPLET_RUN", True)
 # 分行的现代诗整首按一段判断（segmenter._free_verse_lines）

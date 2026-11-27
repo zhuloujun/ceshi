@@ -992,6 +992,10 @@ class Engine:
             rest_cl = [cl[i] for i in rest if cl[i] is not None]
             if n_part < config.POETRY_EDGE_MIN or not rest_cl or sum(rest_cl) / len(rest_cl) < config.POETRY_EDGE_REST:
                 continue
+            adj = rest[0] if side == "head" else rest[-1]
+            # 切口另一侧紧邻的一句须确实像 AI（2026-11-27 E6：cs1116 段首真人散曲切开后，紧接的真人小令被单独判为 AI）
+            if (tg[adj] is None or tg[adj] < config.POETRY_EDGE_ADJ_TG or cl[adj] is None or cl[adj] < config.POETRY_EDGE_ADJ_CL):
+                continue
             if best is None or n_part > best[0]:
                 best = (n_part, side, part, rest)
         if not best:
