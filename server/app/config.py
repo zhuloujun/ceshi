@@ -112,7 +112,7 @@ ZH2_CLASSIFIER_ID = os.getenv("ZH2_CLASSIFIER_ID", "chinese-classifier-own1")
 # own1 只有 75 段），但对旧白话小说、历算古文、诗词赏析等真人文字也有约 9% 打到 1.00，单独用必然误判（v9–v11 均因此未采用）。
 # 只在它 ≥ ZH3_AGREE、同时 own1（zh2）≥ ZH3_ZH2_MIN、MPU 分类器（cls）≥ ZH3_CLS_MIN 三个模型一致时才计入：
 # 与商用检测器多模型合议的做法一致。12 个测试集逐段模拟：AI 检出 13,767 → 17,105 字，真人新增 1 段 124 字（带【原文】标记的古文引文）。
-ZH3_CLASSIFIER_ID = os.getenv("ZH3_CLASSIFIER_ID", "chinese-classifier-v16")
+ZH3_CLASSIFIER_ID = os.getenv("ZH3_CLASSIFIER_ID", "chinese-classifier-v17")
 ZH3_AGREE = float(os.getenv("ZH3_AGREE", "1") or 1)   # 三模型一致补检：已停用，改为下面的合议打分
 ZH3_ZH2_MIN = float(os.getenv("ZH3_ZH2_MIN", "0.7") or 0.7)
 ZH3_CLS_MIN = float(os.getenv("ZH3_CLS_MIN", "0.8") or 0.8)
