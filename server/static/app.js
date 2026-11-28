@@ -73,6 +73,16 @@ async function refreshHealth(){
       parts.push(health.calibration.calibrated ? '已校准' : '未校准（结果仅作相对参考）');
     }
     if(!health.key_signing_configured && health.requires_key) parts.push('⚠ 管理员尚未设置 ADMIN_TOKEN');
+    // 各模型、校准的明细只对管理员显示；普通用户只看到服务是否可用（2026-11-28 用户要求：用户端不显示技术细节）
+    let isAdm = false;
+    try{ isAdm = !!localStorage.getItem('shendu_admin'); }catch(e){}
+    if(!isAdm){
+      const ds = [lm, cl, health.classifier_en, health.classifier_en2, health.classifier_zh2, health.classifier_poetry, health.classifier_classical]
+        .filter(d => d && d.enabled);
+      parts.length = 0;
+      parts.push(ds.some(d => !d.ready && d.error) ? '部分检测功能暂时不可用' :
+                 (health.loading || ds.some(d => !d.ready)) ? '检测服务启动中，请稍候…' : '检测服务就绪');
+    }
     statusLine.textContent = parts.join(' · ');
     statusLine.classList.toggle('warn', !!(health.loading || (lm.enabled && !lm.ready) || (cl.enabled && !cl.ready)));
     if(health.loading) setTimeout(refreshHealth, 5000);
