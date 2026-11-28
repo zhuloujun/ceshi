@@ -434,9 +434,9 @@ TAGGER_ZC_MODEL = os.getenv("TAGGER_ZC_MODEL", "")   # 文言句级标注模型
 TAGGER_ZP_MODEL = os.getenv("TAGGER_ZP_MODEL", "")   # 诗词句级标注模型
 # 部署 / 离线验收按这里的 Release 名下载句级标注模型（空 = 不用）
 TAGGER_ZH_ID = os.getenv("TAGGER_ZH_ID", "chinese-tagger-v1")
-TAGGER_EN_ID = os.getenv("TAGGER_EN_ID", "english-tagger-v3")
+TAGGER_EN_ID = os.getenv("TAGGER_EN_ID", "english-tagger-v7")
 TAGGER_ZC_ID = os.getenv("TAGGER_ZC_ID", "classical-tagger-v2")
-TAGGER_ZP_ID = os.getenv("TAGGER_ZP_ID", "poetry-tagger-v3")
+TAGGER_ZP_ID = os.getenv("TAGGER_ZP_ID", "poetry-tagger-v5")
 # 诗词句级模型只用于“几副对联首尾相接”的段落（2026-11-13 mx：全面启用时对联切得准，但律诗、宋词切错，cs1111 AI 检出 90.1% → 85.3%）
 TAGGER_ZP_COUPLET_ONLY = _bool("TAGGER_ZP_COUPLET_ONLY", True)
 HYBRID_SWITCH_COST = float(os.getenv("HYBRID_SWITCH_COST", "1.0") or 1.0)   # 每换一次作者的代价（对数似然）
